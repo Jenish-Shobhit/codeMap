@@ -7,3 +7,5 @@ pub mod util;
 pub mod herdr;
 pub mod git;
 pub mod store;
+pub mod lang;
+pub mod index;
