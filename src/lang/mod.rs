@@ -254,7 +254,11 @@ fn text<'a>(node: Node, src: &'a str) -> &'a str {
 /// Clean a type expression down to its base name: `Foo<T>` -> `Foo`,
 /// `&mut crate::x::Foo` -> `Foo`.
 fn base_type_name(s: &str) -> String {
-    let s = s.trim().trim_start_matches('&').trim_start_matches("mut ").trim();
+    let s = s
+        .trim()
+        .trim_start_matches('&')
+        .trim_start_matches("mut ")
+        .trim();
     let s = s.split('<').next().unwrap_or(s);
     let s = s.rsplit("::").next().unwrap_or(s);
     let s = s.trim_start_matches('*');
@@ -338,7 +342,8 @@ pub fn extract_tree(lang: Lang, src: &str, tree: &Tree) -> FileSymbols {
             }
             // Go `type X struct/interface` decides the kind from the type node.
             let go_type = if lang == Lang::Go && kind == SymKind::Struct {
-                node.child_by_field_name("type").map(|t| t.kind().to_string())
+                node.child_by_field_name("type")
+                    .map(|t| t.kind().to_string())
             } else {
                 None
             };
@@ -359,7 +364,11 @@ pub fn extract_tree(lang: Lang, src: &str, tree: &Tree) -> FileSymbols {
                 // long expressions -> their last identifier.
                 let t = t.trim();
                 if t.len() > 60 || t.contains('\n') || t.contains('(') {
-                    t.rsplit(['.', ':', ')']).find(|p| !p.is_empty()).unwrap_or("").trim().to_string()
+                    t.rsplit(['.', ':', ')'])
+                        .find(|p| !p.is_empty())
+                        .unwrap_or("")
+                        .trim()
+                        .to_string()
                 } else {
                     t.to_string()
                 }
@@ -403,7 +412,10 @@ pub fn extract_tree(lang: Lang, src: &str, tree: &Tree) -> FileSymbols {
             }
         }
         if kind == SymKind::Method && container.is_none() {
-            container = d.recv.clone().or_else(|| parent.map(|p| symbols[p].name.clone()));
+            container = d
+                .recv
+                .clone()
+                .or_else(|| parent.map(|p| symbols[p].name.clone()));
         }
         if let Some(t) = &d.is_go_type {
             kind = match t.as_str() {
@@ -502,7 +514,16 @@ def helper():
 "#;
         let fs = extract(Lang::Python, src);
         let quals: Vec<String> = fs.symbols.iter().map(Symbol::qual).collect();
-        assert_eq!(quals, vec!["Service", "Service.__init__", "Service.current", "main", "helper"]);
+        assert_eq!(
+            quals,
+            vec![
+                "Service",
+                "Service.__init__",
+                "Service.current",
+                "main",
+                "helper"
+            ]
+        );
         assert_eq!(fs.symbols[1].kind, SymKind::Method);
         assert_eq!(fs.symbols[3].start_line, 12);
         assert_eq!(fs.symbols[3].end_line, 15);
@@ -514,14 +535,22 @@ def helper():
             .collect();
         assert_eq!(
             main_calls,
-            vec![("Service", None), ("HerdrClient", None), ("current", Some("svc")), ("helper", None)]
+            vec![
+                ("Service", None),
+                ("HerdrClient", None),
+                ("current", Some("svc")),
+                ("helper", None)
+            ]
         );
         assert_eq!(fs.imports.len(), 3);
         assert_eq!(fs.imports[1].module, "api");
         assert_eq!(fs.imports[1].level, 1);
         assert_eq!(
             fs.imports[1].names,
-            vec![("HerdrClient".to_string(), None), ("HerdrError".to_string(), Some("Err".to_string()))]
+            vec![
+                ("HerdrClient".to_string(), None),
+                ("HerdrError".to_string(), Some("Err".to_string()))
+            ]
         );
         assert_eq!(fs.imports[2].names[0].0, "model");
         assert_eq!(fs.top_level(), vec![0, 3, 4]);
@@ -553,7 +582,16 @@ trait Show { fn show(&self); }
         let quals: Vec<String> = fs.symbols.iter().map(Symbol::qual).collect();
         assert_eq!(
             quals,
-            vec!["Store", "Store", "Store.new", "Store.load", "Store.count", "helper", "Show", "Show.show"]
+            vec![
+                "Store",
+                "Store",
+                "Store.new",
+                "Store.load",
+                "Store.count",
+                "helper",
+                "Show",
+                "Show.show"
+            ]
         );
         assert_eq!(fs.symbols[1].kind, SymKind::Impl);
         let helper_calls: Vec<(&str, Option<&str>)> = fs
@@ -562,7 +600,10 @@ trait Show { fn show(&self); }
             .filter(|c| c.caller == Some(5))
             .map(|c| (c.name.as_str(), c.receiver.as_deref()))
             .collect();
-        assert_eq!(helper_calls, vec![("new", Some("Store")), ("parse", None), ("load", Some("s"))]);
+        assert_eq!(
+            helper_calls,
+            vec![("new", Some("Store")), ("parse", None), ("load", Some("s"))]
+        );
         let modules: Vec<&str> = fs.imports.iter().map(|i| i.module.as_str()).collect();
         assert!(modules.contains(&"crate::git"));
         assert!(modules.contains(&"crate::git::diff::parse"));
@@ -583,10 +624,23 @@ interface Shape { area(): number }
 "#;
         let fs = extract(Lang::TypeScript, ts);
         let quals: Vec<String> = fs.symbols.iter().map(Symbol::qual).collect();
-        assert_eq!(quals, vec!["Board", "Board.render", "Board.draw", "make", "top", "Shape"]);
+        assert_eq!(
+            quals,
+            vec![
+                "Board",
+                "Board.render",
+                "Board.draw",
+                "make",
+                "top",
+                "Shape"
+            ]
+        );
         assert_eq!(fs.imports[0].module, "./api");
         assert_eq!(fs.imports[1].alias.as_deref(), Some("util"));
-        assert!(fs.calls.iter().any(|c| c.name == "Board" && c.caller == Some(3)));
+        assert!(fs
+            .calls
+            .iter()
+            .any(|c| c.name == "Board" && c.caller == Some(3)));
 
         let go = r#"package main
 
@@ -604,7 +658,10 @@ func main() { s := &Server{}; s.Start(); fmt.Println("hi") }
 "#;
         let fs = extract(Lang::Go, go);
         let quals: Vec<String> = fs.symbols.iter().map(Symbol::qual).collect();
-        assert_eq!(quals, vec!["Server", "Runner", "Server.Start", "Server.loop", "main"]);
+        assert_eq!(
+            quals,
+            vec!["Server", "Runner", "Server.Start", "Server.loop", "main"]
+        );
         assert_eq!(fs.symbols[1].kind, SymKind::Interface);
         assert_eq!(fs.imports.len(), 2);
         assert_eq!(fs.imports[1].alias.as_deref(), Some("h"));

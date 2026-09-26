@@ -32,12 +32,18 @@ use serde_json::{json, Value};
 fn live_socket() -> Option<String> {
     let sock = std::env::var("CODEMORPH_LIVE_SOCKET").ok()?;
     let home = std::env::var("HOME").unwrap_or_default();
-    assert!(sock.contains("/cmtest-"), "refusing {sock}: not an isolated cmtest-* socket");
+    assert!(
+        sock.contains("/cmtest-"),
+        "refusing {sock}: not an isolated cmtest-* socket"
+    );
     assert!(
         !sock.starts_with(&format!("{home}/.config/herdr")),
         "refusing {sock}: that is under your herdr config"
     );
-    assert!(std::path::Path::new(&sock).exists(), "{sock} does not exist");
+    assert!(
+        std::path::Path::new(&sock).exists(),
+        "{sock} does not exist"
+    );
     Some(sock)
 }
 
@@ -54,7 +60,10 @@ fn next_event(rx: &Receiver<Value>, status: &str) -> Value {
 
 fn read_pane(client: &Client, pane: &str) -> String {
     let r = client
-        .call("pane.read", json!({"pane_id": pane, "source": "recent", "lines": 200}))
+        .call(
+            "pane.read",
+            json!({"pane_id": pane, "source": "recent", "lines": 200}),
+        )
         .unwrap();
     r.pointer("/read/text")
         .and_then(Value::as_str)
@@ -89,7 +98,11 @@ fn run_hook(sock: &str, state: &std::path::Path, event: &Value, ctx: &Value) -> 
         .output()
         .unwrap();
     let dt = t.elapsed();
-    assert!(out.status.success(), "hook failed: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "hook failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     (String::from_utf8_lossy(&out.stdout).trim().to_string(), dt)
 }
 
@@ -118,7 +131,10 @@ fn live_hook_checkpoints_and_comment_delivery() {
     let client = Client::new(&sock);
     let pong = client.ping().unwrap();
     assert_eq!(pong["version"], "0.9.0");
-    println!("live: herdr {} protocol {} at {sock}", pong["version"], pong["protocol"]);
+    println!(
+        "live: herdr {} protocol {} at {sock}",
+        pong["version"], pong["protocol"]
+    );
 
     let repo = repo_with(&[("app.py", "def main():\n    return 1\n")]);
     let state = TempDir::new("live-state");
@@ -126,11 +142,26 @@ fn live_hook_checkpoints_and_comment_delivery() {
 
     // A throwaway workspace whose shell stands in for an agent.
     let ws = client
-        .call("workspace.create", json!({"cwd": repo.path(), "label": "cmtest-agent", "focus": true}))
+        .call(
+            "workspace.create",
+            json!({"cwd": repo.path(), "label": "cmtest-agent", "focus": true}),
+        )
         .unwrap();
-    let ws_id = ws.pointer("/workspace/workspace_id").and_then(Value::as_str).unwrap().to_string();
-    let pane = ws.pointer("/root_pane/pane_id").and_then(Value::as_str).unwrap().to_string();
-    let terminal_id = ws.pointer("/root_pane/terminal_id").and_then(Value::as_str).unwrap().to_string();
+    let ws_id = ws
+        .pointer("/workspace/workspace_id")
+        .and_then(Value::as_str)
+        .unwrap()
+        .to_string();
+    let pane = ws
+        .pointer("/root_pane/pane_id")
+        .and_then(Value::as_str)
+        .unwrap()
+        .to_string();
+    let terminal_id = ws
+        .pointer("/root_pane/terminal_id")
+        .and_then(Value::as_str)
+        .unwrap()
+        .to_string();
     println!("live: workspace {ws_id}, dummy agent pane {pane} ({terminal_id})");
 
     let events = client
@@ -149,14 +180,24 @@ fn live_hook_checkpoints_and_comment_delivery() {
     report("working");
     let ev = next_event(&events, "working");
     let (out, t_start) = run_hook(&sock, state.path(), &ev, &context_for(&client, &pane));
-    assert!(out.starts_with(&format!("start {terminal_id}-claude turn 1")), "{out}");
+    assert!(
+        out.starts_with(&format!("start {terminal_id}-claude turn 1")),
+        "{out}"
+    );
     // The "agent" edits during its turn.
-    write(repo.path(), "app.py", "def main():\n    return helper()\n\ndef helper():\n    return 2\n");
+    write(
+        repo.path(),
+        "app.py",
+        "def main():\n    return helper()\n\ndef helper():\n    return 2\n",
+    );
     write(repo.path(), "notes.md", "turn notes\n");
     report("idle");
     let ev = next_event(&events, "idle");
     let (out, t_end) = run_hook(&sock, state.path(), &ev, &context_for(&client, &pane));
-    assert!(out.starts_with(&format!("end {terminal_id}-claude turn 1")), "{out}");
+    assert!(
+        out.starts_with(&format!("end {terminal_id}-claude turn 1")),
+        "{out}"
+    );
     println!(
         "live: hook start {:.0} ms, end {:.0} ms",
         t_start.as_secs_f64() * 1000.0,
@@ -170,7 +211,10 @@ fn live_hook_checkpoints_and_comment_delivery() {
     let info = codemorph::git::discover(repo.path()).unwrap();
     let diff = store
         .shadow(&info)
-        .diff(&turn.start.as_ref().unwrap().tree, &turn.end.as_ref().unwrap().tree)
+        .diff(
+            &turn.start.as_ref().unwrap().tree,
+            &turn.end.as_ref().unwrap().tree,
+        )
         .unwrap();
     let paths: Vec<&str> = diff.iter().map(|d| d.path.as_str()).collect();
     assert_eq!(paths, vec!["app.py", "notes.md"]);
@@ -197,7 +241,9 @@ fn live_hook_checkpoints_and_comment_delivery() {
         assert!(st.success());
     }
     std::fs::copy(&example, &dummy).expect("examples/echo_agent");
-    client.send_text(&pane, &format!("{}\r", dummy.display())).unwrap();
+    client
+        .send_text(&pane, &format!("{}\r", dummy.display()))
+        .unwrap();
     std::thread::sleep(Duration::from_millis(500));
     let ctx: PluginContext = serde_json::from_value(context_for(&client, &pane)).unwrap();
     let ctx_json = serde_json::to_string(&ctx).unwrap();
@@ -226,18 +272,34 @@ fn live_hook_checkpoints_and_comment_delivery() {
     // A comment on the first hunk, then P.
     let from = ui.len();
     ui.send(b"c");
-    ui.wait_for("comment on app.py", from, Duration::from_secs(5)).expect("comment prompt");
+    ui.wait_for("comment on app.py", from, Duration::from_secs(5))
+        .expect("comment prompt");
     ui.send(b"helper() needs a docstring\r");
-    ui.wait_for("draft  1 comment", 0, Duration::from_secs(5)).expect("draft");
+    ui.wait_for("draft  1 comment", 0, Duration::from_secs(5))
+        .expect("draft");
     ui.send(b"P");
-    let status = ui.wait_exit(Duration::from_secs(10)).expect("P closes the popup");
+    let status = ui
+        .wait_exit(Duration::from_secs(10))
+        .expect("P closes the popup");
     assert!(status.success());
     let text = wait_pane_text(&client, &pane, "agent got:");
-    assert!(text.contains("agent got:"), "the dummy agent received input:\n{text}");
+    assert!(
+        text.contains("agent got:"),
+        "the dummy agent received input:\n{text}"
+    );
     let text = wait_pane_text(&client, &pane, "helper() needs a docstring");
-    assert!(text.contains("Review comments from codeMorph:"), "pane shows:\n{text}");
-    assert!(text.contains("app.py:1-") || text.contains("app.py:"), "pane shows:\n{text}");
-    assert!(text.contains("helper() needs a docstring"), "pane shows:\n{text}");
+    assert!(
+        text.contains("Review comments from codeMorph:"),
+        "pane shows:\n{text}"
+    );
+    assert!(
+        text.contains("app.py:1-") || text.contains("app.py:"),
+        "pane shows:\n{text}"
+    );
+    assert!(
+        text.contains("helper() needs a docstring"),
+        "pane shows:\n{text}"
+    );
     println!("live: P typed the draft into {pane}");
 
     // --- S: submit with agent.prompt ----------------------------------------
@@ -264,7 +326,10 @@ fn live_hook_checkpoints_and_comment_delivery() {
     }];
     app.send_draft(true).expect("agent.prompt accepted");
     let text = wait_pane_text(&client, &pane, "rename helper to compute");
-    assert!(text.contains("app.py:4-5 — rename helper to compute"), "pane shows:\n{text}");
+    assert!(
+        text.contains("app.py:4-5 — rename helper to compute"),
+        "pane shows:\n{text}"
+    );
     println!("live: S submitted the draft with agent.prompt");
 
     // A blocked agent refuses a submit; the draft stays.
@@ -295,7 +360,9 @@ fn live_hook_checkpoints_and_comment_delivery() {
 
     // Clean up the throwaway workspace; the repository is untouched.
     client.send_text(&pane, "\x04").ok();
-    client.call("workspace.close", json!({"workspace_id": ws_id})).unwrap();
+    client
+        .call("workspace.close", json!({"workspace_id": ws_id}))
+        .unwrap();
     std::fs::remove_file(repo.path().join("notes.md")).unwrap();
     write(repo.path(), "app.py", "def main():\n    return 1\n");
     let after = fingerprint(repo.path());

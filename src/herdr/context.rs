@@ -202,6 +202,8 @@ mod tests {
         let json = r#"{"event":"pane.agent_status_changed","data":{"pane_id":"w2:p1","workspace_id":"w2","agent_status":"idle"}}"#;
         let ev = parse_status_event(json).unwrap();
         assert!(is_settled(&ev.agent_status));
-        assert!(parse_status_event(r#"{"event":"pane.focused","data":{"pane_id":"w1:p1"}}"#).is_none());
+        assert!(
+            parse_status_event(r#"{"event":"pane.focused","data":{"pane_id":"w1:p1"}}"#).is_none()
+        );
     }
 }

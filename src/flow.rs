@@ -88,7 +88,12 @@ impl FlowChart {
                         walk(body, m);
                         walk(orelse, m);
                     }
-                    Flow::Try { body, handlers, orelse, finally } => {
+                    Flow::Try {
+                        body,
+                        handlers,
+                        orelse,
+                        finally,
+                    } => {
                         *m.entry("try").or_default() += 1;
                         walk(body, m);
                         for (_, h) in handlers {
@@ -132,7 +137,10 @@ fn line_of(n: Node) -> u32 {
 
 /// One-line text of a node: whitespace collapsed, cut to MAX_LINE.
 fn one_line(n: Node, src: &str) -> String {
-    let t: String = text(n, src).split_whitespace().collect::<Vec<_>>().join(" ");
+    let t: String = text(n, src)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
     util::truncate(&t, MAX_LINE)
 }
 
@@ -235,7 +243,9 @@ fn merge_stmts(items: Vec<Flow>) -> Vec<Flow> {
     let mut out: Vec<Flow> = Vec::new();
     for item in items {
         match (out.last_mut(), item) {
-            (Some(Flow::Stmts(prev)), Flow::Stmts(lines)) if prev.len() + lines.len() <= MAX_BOX_LINES => {
+            (Some(Flow::Stmts(prev)), Flow::Stmts(lines))
+                if prev.len() + lines.len() <= MAX_BOX_LINES =>
+            {
                 prev.extend(lines);
             }
             (_, item) => out.push(item),
@@ -282,16 +292,27 @@ fn py_stmt(st: Node, src: &str, out: &mut Vec<Flow>) {
         }
         "for_statement" | "while_statement" => {
             let head = if st.kind() == "for_statement" {
-                let left = st.child_by_field_name("left").map(|n| one_line(n, src)).unwrap_or_default();
-                let right = st.child_by_field_name("right").map(|n| one_line(n, src)).unwrap_or_default();
+                let left = st
+                    .child_by_field_name("left")
+                    .map(|n| one_line(n, src))
+                    .unwrap_or_default();
+                let right = st
+                    .child_by_field_name("right")
+                    .map(|n| one_line(n, src))
+                    .unwrap_or_default();
                 format!("for {left} in {right}")
             } else {
                 format!(
                     "while {}",
-                    st.child_by_field_name("condition").map(|n| one_line(n, src)).unwrap_or_default()
+                    st.child_by_field_name("condition")
+                        .map(|n| one_line(n, src))
+                        .unwrap_or_default()
                 )
             };
-            let body = st.child_by_field_name("body").map(|b| py_block(b, src)).unwrap_or_default();
+            let body = st
+                .child_by_field_name("body")
+                .map(|b| py_block(b, src))
+                .unwrap_or_default();
             let orelse = st
                 .child_by_field_name("alternative")
                 .and_then(|e| e.child_by_field_name("body"))
@@ -304,7 +325,10 @@ fn py_stmt(st: Node, src: &str, out: &mut Vec<Flow>) {
             });
         }
         "try_statement" => {
-            let body = st.child_by_field_name("body").map(|b| py_block(b, src)).unwrap_or_default();
+            let body = st
+                .child_by_field_name("body")
+                .map(|b| py_block(b, src))
+                .unwrap_or_default();
             let mut handlers = Vec::new();
             let mut orelse = Vec::new();
             let mut finally = Vec::new();
@@ -315,7 +339,8 @@ fn py_stmt(st: Node, src: &str, out: &mut Vec<Flow>) {
                             Some(v) => format!("except {}", one_line(v, src)),
                             None => {
                                 // older grammars: the first non-block child
-                                let first = named_children(ch).into_iter().find(|c| c.kind() != "block");
+                                let first =
+                                    named_children(ch).into_iter().find(|c| c.kind() != "block");
                                 match first {
                                     Some(v) => format!("except {}", one_line(v, src)),
                                     None => "except".to_string(),
@@ -329,7 +354,10 @@ fn py_stmt(st: Node, src: &str, out: &mut Vec<Flow>) {
                         ));
                     }
                     "else_clause" => {
-                        orelse = ch.child_by_field_name("body").map(|b| py_block(b, src)).unwrap_or_default();
+                        orelse = ch
+                            .child_by_field_name("body")
+                            .map(|b| py_block(b, src))
+                            .unwrap_or_default();
                     }
                     "finally_clause" => {
                         finally = named_children(ch)
@@ -354,13 +382,19 @@ fn py_stmt(st: Node, src: &str, out: &mut Vec<Flow>) {
                 .find(|c| c.kind() == "with_clause")
                 .map(|c| one_line(c, src))
                 .unwrap_or_default();
-            out.push(Flow::Stmts(vec![fl(util::truncate(&format!("with {clause}"), MAX_LINE), line_of(st))]));
+            out.push(Flow::Stmts(vec![fl(
+                util::truncate(&format!("with {clause}"), MAX_LINE),
+                line_of(st),
+            )]));
             if let Some(b) = st.child_by_field_name("body") {
                 out.extend(py_block(b, src));
             }
         }
         "match_statement" => {
-            let subject = st.child_by_field_name("subject").map(|n| one_line(n, src)).unwrap_or_default();
+            let subject = st
+                .child_by_field_name("subject")
+                .map(|n| one_line(n, src))
+                .unwrap_or_default();
             let mut arms = Vec::new();
             if let Some(body) = st.child_by_field_name("body") {
                 for case in named_children(body) {
@@ -372,15 +406,25 @@ fn py_stmt(st: Node, src: &str, out: &mut Vec<Flow>) {
                         .filter(|c| c.kind() == "case_pattern")
                         .map(|c| {
                             let t = one_line(c, src);
-                            if t.is_empty() { "_".to_string() } else { t }
+                            if t.is_empty() {
+                                "_".to_string()
+                            } else {
+                                t
+                            }
                         })
                         .collect();
-                    let guard = case.child_by_field_name("guard").map(|g| format!(" {}", one_line(g, src))).unwrap_or_default();
+                    let guard = case
+                        .child_by_field_name("guard")
+                        .map(|g| format!(" {}", one_line(g, src)))
+                        .unwrap_or_default();
                     let body = case
                         .child_by_field_name("consequence")
                         .map(|b| py_block(b, src))
                         .unwrap_or_default();
-                    arms.push((fl(format!("case {}{guard}", pats.join(", ")), line_of(case)), body));
+                    arms.push((
+                        fl(format!("case {}{guard}", pats.join(", ")), line_of(case)),
+                        body,
+                    ));
                 }
             }
             out.push(Flow::Switch {
@@ -406,10 +450,20 @@ fn py_stmt(st: Node, src: &str, out: &mut Vec<Flow>) {
             } else {
                 st
             };
-            let name = def.child_by_field_name("name").map(|n| text(n, src)).unwrap_or("");
-            let kw = if def.kind() == "class_definition" { "class" } else { "def" };
+            let name = def
+                .child_by_field_name("name")
+                .map(|n| text(n, src))
+                .unwrap_or("");
+            let kw = if def.kind() == "class_definition" {
+                "class"
+            } else {
+                "def"
+            };
             let tail = if kw == "def" { "(…)" } else { "" };
-            out.push(Flow::Stmts(vec![fl(format!("{kw} {name}{tail}"), line_of(st))]));
+            out.push(Flow::Stmts(vec![fl(
+                format!("{kw} {name}{tail}"),
+                line_of(st),
+            )]));
         }
         _ => out.push(Flow::Stmts(stmt_lines(st, src))),
     }
@@ -448,8 +502,14 @@ fn py_alternatives(alts: &[Node], src: &str) -> Vec<Flow> {
 fn rs_is_control(kind: &str) -> bool {
     matches!(
         kind,
-        "if_expression" | "match_expression" | "loop_expression" | "while_expression" | "for_expression"
-            | "return_expression" | "break_expression" | "continue_expression"
+        "if_expression"
+            | "match_expression"
+            | "loop_expression"
+            | "while_expression"
+            | "for_expression"
+            | "return_expression"
+            | "break_expression"
+            | "continue_expression"
     )
 }
 
@@ -461,7 +521,9 @@ fn rs_block(block: Node, src: &str, tail_returns: bool) -> Vec<Flow> {
         .collect();
     let n = children.len();
     for (i, st) in children.into_iter().enumerate() {
-        let is_tail = i + 1 == n && !matches!(st.kind(), "expression_statement" | "let_declaration") && !st.kind().ends_with("_item");
+        let is_tail = i + 1 == n
+            && !matches!(st.kind(), "expression_statement" | "let_declaration")
+            && !st.kind().ends_with("_item");
         match st.kind() {
             "expression_statement" => {
                 let inner = st.named_child(0);
@@ -469,7 +531,9 @@ fn rs_block(block: Node, src: &str, tail_returns: bool) -> Vec<Flow> {
                 // still the block's value: it returns from the function.
                 let tail_value = i + 1 == n && !text(st, src).trim_end().ends_with(';');
                 match inner {
-                    Some(e) if rs_is_control(e.kind()) => rs_expr(e, src, tail_value && tail_returns, &mut out),
+                    Some(e) if rs_is_control(e.kind()) => {
+                        rs_expr(e, src, tail_value && tail_returns, &mut out)
+                    }
                     _ => out.push(Flow::Stmts(stmt_lines(st, src))),
                 }
             }
@@ -479,7 +543,10 @@ fn rs_block(block: Node, src: &str, tail_returns: bool) -> Vec<Flow> {
                 line: fl(one_line(st, src), line_of(st)),
             }),
             k if k.ends_with("_item") => {
-                let name = st.child_by_field_name("name").map(|n| text(n, src)).unwrap_or("");
+                let name = st
+                    .child_by_field_name("name")
+                    .map(|n| text(n, src))
+                    .unwrap_or("");
                 let kw = k.trim_end_matches("_item");
                 out.push(Flow::Stmts(vec![fl(format!("{kw} {name}"), line_of(st))]));
             }
@@ -510,7 +577,10 @@ fn rs_branch_body(n: Node, src: &str, tail_returns: bool) -> Vec<Flow> {
 fn rs_expr(e: Node, src: &str, tail_returns: bool, out: &mut Vec<Flow>) {
     match e.kind() {
         "if_expression" => {
-            let cond = e.child_by_field_name("condition").map(|c| one_line(c, src)).unwrap_or_default();
+            let cond = e
+                .child_by_field_name("condition")
+                .map(|c| one_line(c, src))
+                .unwrap_or_default();
             let yes = e
                 .child_by_field_name("consequence")
                 .map(|b| rs_block(b, src, tail_returns))
@@ -527,14 +597,20 @@ fn rs_expr(e: Node, src: &str, tail_returns: bool, out: &mut Vec<Flow>) {
             });
         }
         "match_expression" => {
-            let value = e.child_by_field_name("value").map(|c| one_line(c, src)).unwrap_or_default();
+            let value = e
+                .child_by_field_name("value")
+                .map(|c| one_line(c, src))
+                .unwrap_or_default();
             let mut arms = Vec::new();
             if let Some(body) = e.child_by_field_name("body") {
                 for arm in named_children(body) {
                     if arm.kind() != "match_arm" {
                         continue;
                     }
-                    let pat = arm.child_by_field_name("pattern").map(|p| one_line(p, src)).unwrap_or_default();
+                    let pat = arm
+                        .child_by_field_name("pattern")
+                        .map(|p| one_line(p, src))
+                        .unwrap_or_default();
                     let body = arm
                         .child_by_field_name("value")
                         .map(|v| rs_branch_body(v, src, tail_returns))
@@ -552,15 +628,24 @@ fn rs_expr(e: Node, src: &str, tail_returns: bool, out: &mut Vec<Flow>) {
                 "loop_expression" => "loop".to_string(),
                 "while_expression" => format!(
                     "while {}",
-                    e.child_by_field_name("condition").map(|c| one_line(c, src)).unwrap_or_default()
+                    e.child_by_field_name("condition")
+                        .map(|c| one_line(c, src))
+                        .unwrap_or_default()
                 ),
                 _ => format!(
                     "for {} in {}",
-                    e.child_by_field_name("pattern").map(|c| one_line(c, src)).unwrap_or_default(),
-                    e.child_by_field_name("value").map(|c| one_line(c, src)).unwrap_or_default()
+                    e.child_by_field_name("pattern")
+                        .map(|c| one_line(c, src))
+                        .unwrap_or_default(),
+                    e.child_by_field_name("value")
+                        .map(|c| one_line(c, src))
+                        .unwrap_or_default()
                 ),
             };
-            let body = e.child_by_field_name("body").map(|b| rs_block(b, src, false)).unwrap_or_default();
+            let body = e
+                .child_by_field_name("body")
+                .map(|b| rs_block(b, src, false))
+                .unwrap_or_default();
             out.push(Flow::Loop {
                 head: fl(util::truncate(&head, MAX_LINE), line_of(e)),
                 body,
@@ -617,8 +702,14 @@ fn js_stmt(st: Node, src: &str, out: &mut Vec<Flow>) {
     match st.kind() {
         "comment" | "empty_statement" => {}
         "if_statement" => {
-            let cond = st.child_by_field_name("condition").map(|c| strip_parens(one_line(c, src))).unwrap_or_default();
-            let yes = st.child_by_field_name("consequence").map(|b| js_block(b, src)).unwrap_or_default();
+            let cond = st
+                .child_by_field_name("condition")
+                .map(|c| strip_parens(one_line(c, src)))
+                .unwrap_or_default();
+            let yes = st
+                .child_by_field_name("consequence")
+                .map(|b| js_block(b, src))
+                .unwrap_or_default();
             let no = st
                 .child_by_field_name("alternative")
                 .and_then(|alt| alt.named_child(0))
@@ -635,7 +726,9 @@ fn js_stmt(st: Node, src: &str, out: &mut Vec<Flow>) {
             let head = if st.kind() == "do_statement" {
                 format!(
                     "do … while {}",
-                    st.child_by_field_name("condition").map(|c| strip_parens(one_line(c, src))).unwrap_or_default()
+                    st.child_by_field_name("condition")
+                        .map(|c| strip_parens(one_line(c, src)))
+                        .unwrap_or_default()
                 )
             } else {
                 head_text(st, body, src)
@@ -647,13 +740,21 @@ fn js_stmt(st: Node, src: &str, out: &mut Vec<Flow>) {
             });
         }
         "try_statement" => {
-            let body = st.child_by_field_name("body").map(|b| js_block(b, src)).unwrap_or_default();
+            let body = st
+                .child_by_field_name("body")
+                .map(|b| js_block(b, src))
+                .unwrap_or_default();
             let mut handlers = Vec::new();
             if let Some(h) = st.child_by_field_name("handler") {
-                let param = h.child_by_field_name("parameter").map(|p| format!(" ({})", one_line(p, src))).unwrap_or_default();
+                let param = h
+                    .child_by_field_name("parameter")
+                    .map(|p| format!(" ({})", one_line(p, src)))
+                    .unwrap_or_default();
                 handlers.push((
                     fl(format!("catch{param}"), line_of(h)),
-                    h.child_by_field_name("body").map(|b| js_block(b, src)).unwrap_or_default(),
+                    h.child_by_field_name("body")
+                        .map(|b| js_block(b, src))
+                        .unwrap_or_default(),
                 ));
             }
             let finally = st
@@ -669,14 +770,19 @@ fn js_stmt(st: Node, src: &str, out: &mut Vec<Flow>) {
             });
         }
         "switch_statement" => {
-            let value = st.child_by_field_name("value").map(|v| strip_parens(one_line(v, src))).unwrap_or_default();
+            let value = st
+                .child_by_field_name("value")
+                .map(|v| strip_parens(one_line(v, src)))
+                .unwrap_or_default();
             let mut arms = Vec::new();
             if let Some(body) = st.child_by_field_name("body") {
                 for case in named_children(body) {
                     let label = match case.kind() {
                         "switch_case" => format!(
                             "case {}",
-                            case.child_by_field_name("value").map(|v| one_line(v, src)).unwrap_or_default()
+                            case.child_by_field_name("value")
+                                .map(|v| one_line(v, src))
+                                .unwrap_or_default()
                         ),
                         "switch_default" => "default".to_string(),
                         _ => continue,
@@ -703,13 +809,23 @@ fn js_stmt(st: Node, src: &str, out: &mut Vec<Flow>) {
             };
             out.push(Flow::End {
                 kind,
-                line: fl(one_line(st, src).trim_end_matches(';').to_string(), line_of(st)),
+                line: fl(
+                    one_line(st, src).trim_end_matches(';').to_string(),
+                    line_of(st),
+                ),
             });
         }
         "statement_block" => out.extend(js_block(st, src)),
         "function_declaration" | "class_declaration" | "generator_function_declaration" => {
-            let name = st.child_by_field_name("name").map(|n| text(n, src)).unwrap_or("");
-            let kw = if st.kind() == "class_declaration" { "class" } else { "function" };
+            let name = st
+                .child_by_field_name("name")
+                .map(|n| text(n, src))
+                .unwrap_or("");
+            let kw = if st.kind() == "class_declaration" {
+                "class"
+            } else {
+                "function"
+            };
             out.push(Flow::Stmts(vec![fl(format!("{kw} {name}"), line_of(st))]));
         }
         _ => out.push(Flow::Stmts(stmt_lines(st, src))),
@@ -738,9 +854,18 @@ fn go_stmt(st: Node, src: &str, out: &mut Vec<Flow>) {
     match st.kind() {
         "comment" | "empty_statement" => {}
         "if_statement" => {
-            let init = st.child_by_field_name("initializer").map(|i| format!("{}; ", one_line(i, src))).unwrap_or_default();
-            let cond = st.child_by_field_name("condition").map(|c| one_line(c, src)).unwrap_or_default();
-            let yes = st.child_by_field_name("consequence").map(|b| go_block(b, src)).unwrap_or_default();
+            let init = st
+                .child_by_field_name("initializer")
+                .map(|i| format!("{}; ", one_line(i, src)))
+                .unwrap_or_default();
+            let cond = st
+                .child_by_field_name("condition")
+                .map(|c| one_line(c, src))
+                .unwrap_or_default();
+            let yes = st
+                .child_by_field_name("consequence")
+                .map(|b| go_block(b, src))
+                .unwrap_or_default();
             let no = st
                 .child_by_field_name("alternative")
                 .map(|a| {
@@ -754,7 +879,10 @@ fn go_stmt(st: Node, src: &str, out: &mut Vec<Flow>) {
                 })
                 .unwrap_or_default();
             out.push(Flow::If {
-                cond: fl(util::truncate(&format!("{init}{cond}"), MAX_LINE), line_of(st)),
+                cond: fl(
+                    util::truncate(&format!("{init}{cond}"), MAX_LINE),
+                    line_of(st),
+                ),
                 yes,
                 no,
             });
@@ -795,7 +923,10 @@ fn go_stmt(st: Node, src: &str, out: &mut Vec<Flow>) {
                         }
                     }
                 }
-                arms.push((fl(util::truncate(&label, MAX_LINE), line_of(case)), merge_stmts(items)));
+                arms.push((
+                    fl(util::truncate(&label, MAX_LINE), line_of(case)),
+                    merge_stmts(items),
+                ));
             }
             out.push(Flow::Switch {
                 head: fl(head, line_of(st)),
@@ -927,7 +1058,12 @@ fn end_prefix(kind: EndKind) -> &'static str {
 }
 
 fn box_blk(title: Option<String>, lines: Vec<FlowLine>, kind: BoxKind, extra_rows: usize) -> Blk {
-    let mut w = lines.iter().map(|l| util::width(&l.text)).max().unwrap_or(0) + 4;
+    let mut w = lines
+        .iter()
+        .map(|l| util::width(&l.text))
+        .max()
+        .unwrap_or(0)
+        + 4;
     if let Some(t) = &title {
         w = w.max(util::width(t) + 6);
     }
@@ -935,7 +1071,11 @@ fn box_blk(title: Option<String>, lines: Vec<FlowLine>, kind: BoxKind, extra_row
     let h = lines.len().max(1) + 2 + extra_rows;
     // Loops take the bus on their first row (the second is the loop-back
     // entry); terminal boxes are entered on their first line.
-    let bus_row = if matches!(kind, BoxKind::Loop | BoxKind::End(_)) { 1 } else { h / 2 };
+    let bus_row = if matches!(kind, BoxKind::Loop | BoxKind::End(_)) {
+        1
+    } else {
+        h / 2
+    };
     let exit = !matches!(kind, BoxKind::End(_));
     Blk {
         w,
@@ -1021,7 +1161,9 @@ fn branch(head: Blk, down: Option<(String, Blk)>, sides: Vec<Side>) -> Blk {
     let head_box = head.boxes[0].clone();
     let bus_row = head_box.bus_row;
     let down = down.filter(|(_, b)| b.h > 0);
-    let spine = head.spine.max(down.as_ref().map(|(_, b)| b.spine).unwrap_or(0));
+    let spine = head
+        .spine
+        .max(down.as_ref().map(|(_, b)| b.spine).unwrap_or(0));
     let head_x = spine - head.spine;
     let mut out = Blk {
         w: 0,
@@ -1036,12 +1178,13 @@ fn branch(head: Blk, down: Option<(String, Blk)>, sides: Vec<Side>) -> Blk {
     out.absorb(head.shift(head_x, 0));
     let mut right_edge = head_right + 1;
     let mut bottom = head_h - 1; // last used row
-    // The fall-through path.
+                                 // The fall-through path.
     let mut down_end: Option<usize> = Some(head_h - 1); // row where the spine path ends
     if let Some((label, d)) = down {
         let dx = spine - d.spine;
         let dy = head_h + 1;
-        out.ops.push(Op::Poly(vec![(spine, head_h - 1), (spine, head_h)]));
+        out.ops
+            .push(Op::Poly(vec![(spine, head_h - 1), (spine, head_h)]));
         out.ops.push(Op::Arrow(spine, head_h, '▼'));
         if !label.is_empty() {
             out.ops.push(Op::Label(spine + 2, head_h, label, false));
@@ -1064,9 +1207,14 @@ fn branch(head: Blk, down: Option<(String, Blk)>, sides: Vec<Side>) -> Blk {
         // A side that ends (return, raise...) needs no merge line, so it can
         // sit right beside the head when it stays above the fall-through.
         let beside = !s.blk.exit && sy + s.blk.h <= head_h + 1;
-        let sx = if beside { head_right + 1 + gap } else { right_edge.max(head_right + 1) + gap };
+        let sx = if beside {
+            head_right + 1 + gap
+        } else {
+            right_edge.max(head_right + 1) + gap
+        };
         let s_bus = sy + sb.bus_row;
-        out.ops.push(Op::Poly(vec![(head_right, bus_row), (sx - 1, s_bus)]));
+        out.ops
+            .push(Op::Poly(vec![(head_right, bus_row), (sx - 1, s_bus)]));
         out.ops.push(Op::Arrow(sx - 1, s_bus, '▶'));
         let mid = head_right + 1 + (sx - 1 - head_right - util::width(&label)) / 2;
         out.ops.push(Op::Label(mid, bus_row, label, true));
@@ -1090,10 +1238,12 @@ fn branch(head: Blk, down: Option<(String, Blk)>, sides: Vec<Side>) -> Blk {
             let spine_i = sx + s.blk.spine;
             spines.push(spine_i);
             // drop from the bus into the side
-            out.ops.push(Op::Poly(vec![(spine_i, bus_row), (spine_i, side_top - 1)]));
+            out.ops
+                .push(Op::Poly(vec![(spine_i, bus_row), (spine_i, side_top - 1)]));
             out.ops.push(Op::Arrow(spine_i, side_top - 1, '▼'));
             if !s.label.is_empty() {
-                out.ops.push(Op::Label(spine_i + 2, bus_row + 1, s.label.clone(), false));
+                out.ops
+                    .push(Op::Label(spine_i + 2, bus_row + 1, s.label.clone(), false));
             }
             let sh = s.blk.h;
             let sw = s.blk.w;
@@ -1122,7 +1272,8 @@ fn branch(head: Blk, down: Option<(String, Blk)>, sides: Vec<Side>) -> Blk {
         }
         // the bus: from the head's right border to the last drop
         let last = *spines.last().unwrap();
-        out.ops.push(Op::Poly(vec![(head_right, bus_row), (last, bus_row)]));
+        out.ops
+            .push(Op::Poly(vec![(head_right, bus_row), (last, bus_row)]));
         let _ = n;
     }
     // Merge surviving paths below everything.
@@ -1187,12 +1338,20 @@ fn lay_one(f: &Flow) -> Blk {
         Flow::Stmts(lines) => box_blk(None, lines.clone(), BoxKind::Stmt, 0),
         Flow::End { kind, line } => {
             let t = format!("{}{}", end_prefix(*kind), line.text);
-            box_blk(None, vec![fl(util::truncate(&t, MAX_LINE), line.line)], BoxKind::End(*kind), 0)
+            box_blk(
+                None,
+                vec![fl(util::truncate(&t, MAX_LINE), line.line)],
+                BoxKind::End(*kind),
+                0,
+            )
         }
         Flow::If { cond, yes, no } => {
             let head = box_blk(
                 None,
-                vec![fl(util::truncate(&format!("◇ {}", cond.text), MAX_LINE), cond.line)],
+                vec![fl(
+                    util::truncate(&format!("◇ {}", cond.text), MAX_LINE),
+                    cond.line,
+                )],
                 BoxKind::Decision,
                 0,
             );
@@ -1201,7 +1360,11 @@ fn lay_one(f: &Flow) -> Blk {
             } else {
                 lay_branch(yes)
             };
-            let down = if no.is_empty() { None } else { Some(("no".to_string(), lay(no))) };
+            let down = if no.is_empty() {
+                None
+            } else {
+                Some(("no".to_string(), lay(no)))
+            };
             let mut b = branch(
                 head,
                 down,
@@ -1220,7 +1383,10 @@ fn lay_one(f: &Flow) -> Blk {
         Flow::Loop { head, body, orelse } => {
             let h = box_blk(
                 None,
-                vec![fl(util::truncate(&format!("↻ {}", head.text), MAX_LINE), head.line)],
+                vec![fl(
+                    util::truncate(&format!("↻ {}", head.text), MAX_LINE),
+                    head.line,
+                )],
                 BoxKind::Loop,
                 1,
             );
@@ -1255,7 +1421,9 @@ fn lay_one(f: &Flow) -> Blk {
             finally,
         } => {
             let (head, down_items): (Blk, Vec<Blk>) = match is_simple(body) {
-                Some(lines) if !lines.is_empty() => (box_blk(Some("try".into()), lines, BoxKind::Try, 0), vec![]),
+                Some(lines) if !lines.is_empty() => {
+                    (box_blk(Some("try".into()), lines, BoxKind::Try, 0), vec![])
+                }
                 _ => (
                     box_blk(None, vec![fl("try".into(), 0)], BoxKind::Try, 0),
                     vec![lay(body)],
@@ -1300,7 +1468,10 @@ fn lay_one(f: &Flow) -> Blk {
         Flow::Switch { head, arms } => {
             let h = box_blk(
                 None,
-                vec![fl(util::truncate(&format!("◇ {}", head.text), MAX_LINE), head.line)],
+                vec![fl(
+                    util::truncate(&format!("◇ {}", head.text), MAX_LINE),
+                    head.line,
+                )],
                 BoxKind::Switch,
                 0,
             );
@@ -1322,7 +1493,12 @@ fn titled(title: Option<String>, items: &[Flow]) -> Blk {
     match is_simple(items) {
         Some(lines) if !lines.is_empty() => box_blk(title, lines, BoxKind::Stmt, 0),
         _ => {
-            let head = box_blk(None, vec![fl(title.unwrap_or_default(), 0)], BoxKind::Stmt, 0);
+            let head = box_blk(
+                None,
+                vec![fl(title.unwrap_or_default(), 0)],
+                BoxKind::Stmt,
+                0,
+            );
             seq(vec![head, lay(items)])
         }
     }
@@ -1330,7 +1506,9 @@ fn titled(title: Option<String>, items: &[Flow]) -> Blk {
 
 fn titled_handler(h: &FlowLine, items: &[Flow]) -> Blk {
     match is_simple(items) {
-        Some(lines) if !lines.is_empty() => box_blk(Some(h.text.clone()), lines, BoxKind::Handler, 0),
+        Some(lines) if !lines.is_empty() => {
+            box_blk(Some(h.text.clone()), lines, BoxKind::Handler, 0)
+        }
         _ => {
             let head = box_blk(None, vec![h.clone()], BoxKind::Handler, 0);
             seq(vec![head, lay(items)])
@@ -1343,7 +1521,12 @@ fn titled_arm(pat: &FlowLine, items: &[Flow]) -> Blk {
         [Flow::Stmts(lines)] => box_blk(Some(pat.text.clone()), lines.clone(), BoxKind::Stmt, 0),
         [Flow::End { kind, line }] => {
             let t = format!("{}{}", end_prefix(*kind), line.text);
-            box_blk(Some(pat.text.clone()), vec![fl(util::truncate(&t, MAX_LINE), line.line)], BoxKind::End(*kind), 0)
+            box_blk(
+                Some(pat.text.clone()),
+                vec![fl(util::truncate(&t, MAX_LINE), line.line)],
+                BoxKind::End(*kind),
+                0,
+            )
         }
         _ => {
             let head = box_blk(None, vec![pat.clone()], BoxKind::Stmt, 0);
@@ -1426,7 +1609,11 @@ impl FlowLayout {
         }
         for (i, b) in self.boxes.iter().enumerate() {
             let sel = selected == Some(i);
-            let line_marks: Vec<Option<char>> = b.lines.iter().map(|l| marks.get(&l.line).copied()).collect();
+            let line_marks: Vec<Option<char>> = b
+                .lines
+                .iter()
+                .map(|l| marks.get(&l.line).copied())
+                .collect();
             let all_added = !line_marks.is_empty() && line_marks.iter().all(|m| *m == Some('A'));
             let tone = if sel {
                 Tone::Text
@@ -1466,7 +1653,13 @@ impl FlowLayout {
                 }
             }
             if let Some(t) = &b.title {
-                c.text(b.x + 2, b.y, &format!(" {} ", util::truncate(t, b.w.saturating_sub(6))), if sel { Tone::Text } else { Tone::Dim }, true);
+                c.text(
+                    b.x + 2,
+                    b.y,
+                    &format!(" {} ", util::truncate(t, b.w.saturating_sub(6))),
+                    if sel { Tone::Text } else { Tone::Dim },
+                    true,
+                );
             }
             for (li, l) in b.lines.iter().enumerate() {
                 let y = b.y + 1 + li;
@@ -1478,9 +1671,22 @@ impl FlowLayout {
                     (None, BoxKind::End(_)) => Tone::Text,
                     (None, _) => Tone::Dim,
                 };
-                c.text_max(b.x + 2, y, &l.text, b.w.saturating_sub(4), if sel { Tone::Text } else { text_tone }, sel);
+                c.text_max(
+                    b.x + 2,
+                    y,
+                    &l.text,
+                    b.w.saturating_sub(4),
+                    if sel { Tone::Text } else { text_tone },
+                    sel,
+                );
                 if let Some(mk) = m {
-                    c.text(0, y, &mk.to_string(), if mk == 'A' { Tone::Add } else { Tone::Mod }, true);
+                    c.text(
+                        0,
+                        y,
+                        &mk.to_string(),
+                        if mk == 'A' { Tone::Add } else { Tone::Mod },
+                        true,
+                    );
                 }
                 if sel {
                     c.band(b.x + 1, b.x + b.w - 2, y, Band::Active);
@@ -1495,7 +1701,8 @@ impl FlowLayout {
                     c.get(x + i, *y).is_some_and(|cell| {
                         !cell.txt
                             && cell.arrow.is_none()
-                            && (cell.mask == 0 || (*on_line && cell.mask & (DOWN | crate::canvas::UP) == 0))
+                            && (cell.mask == 0
+                                || (*on_line && cell.mask & (DOWN | crate::canvas::UP) == 0))
                     })
                 });
                 if clear {

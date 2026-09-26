@@ -15,7 +15,14 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
     let t = app.theme;
     let body = a.body;
     if let Some(err) = &app.flow.error {
-        put(buf, body.x, body.y, err, style(t.modified, t.body), body.width);
+        put(
+            buf,
+            body.x,
+            body.y,
+            err,
+            style(t.modified, t.body),
+            body.width,
+        );
         return;
     }
     let (Some(_chart), Some(layout)) = (&app.flow.chart, &app.flow.layout) else {
@@ -27,14 +34,19 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
         put(buf, body.x, body.y, msg, style(t.muted, t.body), body.width);
         return;
     };
-    let Some(target) = app.flow.target.clone() else { return };
+    let Some(target) = app.flow.target.clone() else {
+        return;
+    };
     let sym = app.flow_symbol().cloned();
     // Header: name, where, called from.
     let mut head = Line::new();
     if let Some(s) = &sym {
         head = head
             .push(format!("{}()", s.qual()), bold(style(t.text, t.body)))
-            .push(format!("  {} · lines {}–{}", target.file, s.start_line, s.end_line), style(t.muted, t.body));
+            .push(
+                format!("  {} · lines {}–{}", target.file, s.start_line, s.end_line),
+                style(t.muted, t.body),
+            );
     }
     let callers = callers_text(app, &target);
     if !callers.is_empty() {
@@ -43,7 +55,12 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
     head.draw(buf, body.x, body.y, body.width);
     // Legend when anything is marked.
     let marks = app.flow_line_marks();
-    let view = Rect::new(body.x, body.y + 2, body.width, body.height.saturating_sub(2));
+    let view = Rect::new(
+        body.x,
+        body.y + 2,
+        body.width,
+        body.height.saturating_sub(2),
+    );
     let selected = (app.flow.focus == Focus::Body).then_some(app.flow.selected);
     let canvas = layout.draw(&marks, selected);
     let mut scroll = app.flow.scroll;
@@ -51,7 +68,12 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
         follow(
             &mut scroll,
             (view.width as usize, view.height as usize),
-            (b.x.saturating_sub(crate::flow::GUTTER), b.y, b.w + crate::flow::GUTTER, b.h),
+            (
+                b.x.saturating_sub(crate::flow::GUTTER),
+                b.y,
+                b.w + crate::flow::GUTTER,
+                b.h,
+            ),
             (canvas.w, canvas.h),
         );
     }
@@ -69,7 +91,10 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
             .push("A", style(t.add, t.body))
             .push(" added  ", style(t.muted, t.body))
             .push("M", style(t.modified, t.body))
-            .push(format!(" changed {}", app.scope_info.noun), style(t.muted, t.body));
+            .push(
+                format!(" changed {}", app.scope_info.noun),
+                style(t.muted, t.body),
+            );
         let w = legend.width() as u16;
         if body.width > w + 2 {
             legend.draw(buf, body.x + body.width - w, body.y + 1, w);
@@ -120,7 +145,10 @@ fn rail(buf: &mut Buffer, area: Rect, app: &App) {
         r.line(Line::new().push("no function selected", style(t.muted, t.rail)));
         return;
     };
-    r.line(Line::new().push(util::truncate_left(&target.file, area.width as usize - 2), style(t.branch, t.rail)));
+    r.line(Line::new().push(
+        util::truncate_left(&target.file, area.width as usize - 2),
+        style(t.branch, t.rail),
+    ));
     let marks = app.marks.symbols.get(&target.file);
     for (i, (idx, qual)) in app.flow_rail_functions().into_iter().enumerate() {
         if r.room() <= 8 {
@@ -129,14 +157,25 @@ fn rail(buf: &mut Buffer, area: Rect, app: &App) {
         }
         let current = idx == target.idx;
         let sel = app.flow.focus == Focus::Rail && app.flow.rail_sel == i;
-        let bg = if sel || (current && app.flow.focus == Focus::Body) { t.active_row } else { t.rail };
+        let bg = if sel || (current && app.flow.focus == Focus::Body) {
+            t.active_row
+        } else {
+            t.rail
+        };
         let mark = marks.and_then(|m| m.get(&idx)).copied();
         let mut line = Line::new().bg(bg).push(
             util::pad(&qual, area.width.saturating_sub(5) as usize),
-            if current { bold(style(t.text, bg)) } else { style(t.text2, bg) },
+            if current {
+                bold(style(t.text, bg))
+            } else {
+                style(t.text2, bg)
+            },
         );
         if let Some(m) = mark {
-            line = line.push(format!(" {m}"), style(if m == 'A' { t.add } else { t.modified }, bg));
+            line = line.push(
+                format!(" {m}"),
+                style(if m == 'A' { t.add } else { t.modified }, bg),
+            );
         }
         r.line(line);
     }
@@ -159,7 +198,12 @@ fn rail(buf: &mut Buffer, area: Rect, app: &App) {
                 .and_then(|f| f.symbols.get(c.to.idx))
                 .map(|s| s.qual())
                 .unwrap_or_default();
-            let stem = c.to.file.rsplit('/').next().unwrap_or(&c.to.file).to_string();
+            let stem =
+                c.to.file
+                    .rsplit('/')
+                    .next()
+                    .unwrap_or(&c.to.file)
+                    .to_string();
             r.line(
                 Line::new()
                     .push(util::pad(&name, 22), style(t.text2, t.rail))

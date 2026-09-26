@@ -48,7 +48,12 @@ pub fn areas(area: Rect, view: View) -> Areas {
             w.saturating_sub(rail_w + if rail_w > 0 { 3 } else { 2 }),
             content_h,
         ),
-        hints: Rect::new(area.x + rail_w + if rail_w > 0 { 2 } else { 1 }, hint_y, w.saturating_sub(rail_w + 2), 1),
+        hints: Rect::new(
+            area.x + rail_w + if rail_w > 0 { 2 } else { 1 },
+            hint_y,
+            w.saturating_sub(rail_w + 2),
+            1,
+        ),
         rail_hints: Rect::new(area.x, hint_y, rail_w, 1),
     }
 }
@@ -63,13 +68,29 @@ pub fn render_buf(buf: &mut Buffer, area: Rect, app: &mut App) {
     let t = app.theme;
     fill(buf, area, t.body);
     if area.width < 20 || area.height < 6 {
-        put(buf, area.x, area.y, "codeMorph: window too small", Style::default().fg(t.muted).bg(t.body), area.width);
+        put(
+            buf,
+            area.x,
+            area.y,
+            "codeMorph: window too small",
+            Style::default().fg(t.muted).bg(t.body),
+            area.width,
+        );
         return;
     }
     let a = areas(area, app.view);
     // Rail surface (including its part of the hint row).
     if a.rail.width > 0 {
-        fill(buf, Rect::new(area.x, area.y + 1, a.rail.width + 1, area.height.saturating_sub(1)), t.rail);
+        fill(
+            buf,
+            Rect::new(
+                area.x,
+                area.y + 1,
+                a.rail.width + 1,
+                area.height.saturating_sub(1),
+            ),
+            t.rail,
+        );
     }
     header(buf, a.header, app);
     match app.view {
@@ -201,7 +222,12 @@ impl<'a> Rail<'a> {
         if self.room() == 0 || self.area.width == 0 {
             return;
         }
-        line.draw(self.buf, self.area.x + 1, self.y, self.area.width.saturating_sub(1));
+        line.draw(
+            self.buf,
+            self.area.x + 1,
+            self.y,
+            self.area.width.saturating_sub(1),
+        );
         self.y += 1;
     }
 
@@ -217,12 +243,24 @@ impl<'a> Rail<'a> {
             return;
         }
         let y = self.area.y + self.area.height - 1;
-        line.draw(self.buf, self.area.x + 1, y, self.area.width.saturating_sub(1));
+        line.draw(
+            self.buf,
+            self.area.x + 1,
+            y,
+            self.area.width.saturating_sub(1),
+        );
     }
 }
 
 /// Blit part of a canvas into `area`, starting at canvas cell `scroll`.
-pub fn blit(buf: &mut Buffer, area: Rect, canvas: &Canvas, scroll: (usize, usize), t: &Theme, bg: Color) {
+pub fn blit(
+    buf: &mut Buffer,
+    area: Rect,
+    canvas: &Canvas,
+    scroll: (usize, usize),
+    t: &Theme,
+    bg: Color,
+) {
     for dy in 0..area.height as usize {
         let cy = scroll.1 + dy;
         if cy >= canvas.h {
@@ -261,7 +299,12 @@ pub fn blit(buf: &mut Buffer, area: Rect, canvas: &Canvas, scroll: (usize, usize
 }
 
 /// Scroll so that the rectangle (x, y, w, h) is visible in a viewport.
-pub fn follow(scroll: &mut (usize, usize), view: (usize, usize), rect: (usize, usize, usize, usize), content: (usize, usize)) {
+pub fn follow(
+    scroll: &mut (usize, usize),
+    view: (usize, usize),
+    rect: (usize, usize, usize, usize),
+    content: (usize, usize),
+) {
     let (vw, vh) = view;
     let (x, y, w, h) = rect;
     if vw == 0 || vh == 0 {
@@ -295,7 +338,14 @@ fn header(buf: &mut Buffer, r: Rect, app: &App) {
         } else {
             style(t.text2, t.body)
         };
-        x = put(buf, x, r.y, &format!(" {name} "), st, r.width.saturating_sub(x - r.x));
+        x = put(
+            buf,
+            x,
+            r.y,
+            &format!(" {name} "),
+            st,
+            r.width.saturating_sub(x - r.x),
+        );
         x += 1;
     }
     // Right side: agent, branch, scope.
@@ -307,7 +357,11 @@ fn header(buf: &mut Buffer, r: Rect, app: &App) {
     } else {
         if let Some(agent) = &app.agent {
             if agent.pane_id.is_some() {
-                let (dot, tone) = if agent.is_working() { ("● ", t.add) } else { ("○ ", t.muted) };
+                let (dot, tone) = if agent.is_working() {
+                    ("● ", t.add)
+                } else {
+                    ("○ ", t.muted)
+                };
                 ctx = ctx.push(dot, style(tone, t.body));
                 ctx = ctx.push(
                     agent.label().unwrap_or_else(|| util::tilde(&app.root)),
@@ -325,7 +379,9 @@ fn header(buf: &mut Buffer, r: Rect, app: &App) {
                 .clone()
                 .or_else(|| repo.head.as_ref().map(|h| h[..7.min(h.len())].to_string()))
                 .unwrap_or_else(|| "no commits".into());
-            ctx = ctx.push("   ", style(t.muted, t.body)).push(b, style(t.branch, t.body));
+            ctx = ctx
+                .push("   ", style(t.muted, t.body))
+                .push(b, style(t.branch, t.body));
         }
         if !app.scope_info.header.is_empty() {
             ctx = ctx
@@ -346,9 +402,17 @@ fn header(buf: &mut Buffer, r: Rect, app: &App) {
 fn view_hints(app: &App) -> Vec<(&'static str, String)> {
     match app.view {
         View::Map => {
-            let mut h = vec![("⏎", "zoom in".to_string()), ("⌫", "zoom out".into()), ("/", "search".into())];
+            let mut h = vec![
+                ("⏎", "zoom in".to_string()),
+                ("⌫", "zoom out".into()),
+                ("/", "search".into()),
+            ];
             if let Some(f) = app.current_function() {
-                if let Some(s) = app.index.symbols(&f.file).and_then(|fs| fs.symbols.get(f.idx)) {
+                if let Some(s) = app
+                    .index
+                    .symbols(&f.file)
+                    .and_then(|fs| fs.symbols.get(f.idx))
+                {
                     h.push(("2", format!("flow of {}", s.name)));
                 }
             }
@@ -377,9 +441,17 @@ fn view_hints(app: &App) -> Vec<(&'static str, String)> {
         ],
         View::History => {
             if app.history.show_diff {
-                vec![("⌫", "commit".to_string()), ("j k", "scroll".into()), ("?", "keys".into())]
+                vec![
+                    ("⌫", "commit".to_string()),
+                    ("j k", "scroll".into()),
+                    ("?", "keys".into()),
+                ]
             } else {
-                vec![("⏎", "diff".to_string()), ("1", "map of this commit".into()), ("?", "keys".into())]
+                vec![
+                    ("⏎", "diff".to_string()),
+                    ("1", "map of this commit".into()),
+                    ("?", "keys".into()),
+                ]
             }
         }
     }
@@ -396,15 +468,36 @@ fn hints_line(buf: &mut Buffer, a: &Areas, app: &App) {
             (View::Changes, _) => "tab files",
             (View::History, _) => "j k commit",
         };
-        put(buf, a.rail_hints.x + 1, a.rail_hints.y, rail_hint, style(t.muted, t.rail), a.rail_hints.width.saturating_sub(1));
+        put(
+            buf,
+            a.rail_hints.x + 1,
+            a.rail_hints.y,
+            rail_hint,
+            style(t.muted, t.rail),
+            a.rail_hints.width.saturating_sub(1),
+        );
     }
     let r = a.hints;
     if let Some(input) = &app.input {
         let (prompt, text, keys) = match &input.kind {
-            InputKind::Search => ("/ ".to_string(), input.text.clone(), "   ↑↓ pick  ⏎ go  ⎋ cancel"),
-            InputKind::Comment { path, start, end, .. } => {
-                let anchor = if end > start { format!("{path}:{start}-{end}") } else { format!("{path}:{start}") };
-                (format!("comment on {anchor} › "), input.text.clone(), "   ⏎ save  ⎋ cancel")
+            InputKind::Search => (
+                "/ ".to_string(),
+                input.text.clone(),
+                "   ↑↓ pick  ⏎ go  ⎋ cancel",
+            ),
+            InputKind::Comment {
+                path, start, end, ..
+            } => {
+                let anchor = if end > start {
+                    format!("{path}:{start}-{end}")
+                } else {
+                    format!("{path}:{start}")
+                };
+                (
+                    format!("comment on {anchor} › "),
+                    input.text.clone(),
+                    "   ⏎ save  ⎋ cancel",
+                )
             }
         };
         let line = Line::new()
@@ -424,7 +517,9 @@ fn hints_line(buf: &mut Buffer, a: &Areas, app: &App) {
         if i > 0 {
             line = line.push("  ", style(t.muted, t.body));
         }
-        line = line.push(k, style(t.text2, t.body)).push(format!(" {v}"), style(t.muted, t.body));
+        line = line
+            .push(k, style(t.text2, t.body))
+            .push(format!(" {v}"), style(t.muted, t.body));
     }
     line.draw(buf, r.x, r.y, r.width);
 }
@@ -437,7 +532,10 @@ pub const KEYS: &[(&str, &[(&str, &str)])] = &[
             ("tab", "move between rail and body"),
             ("/", "search a symbol or file"),
             ("e  y", "edit in $EDITOR at the line, copy path:line"),
-            ("p  T", "pin as a split that follows the agent, open in a tab"),
+            (
+                "p  T",
+                "pin as a split that follows the agent, open in a tab",
+            ),
             ("?  q ⎋", "keys, close"),
         ],
     ),
@@ -470,7 +568,11 @@ pub const KEYS: &[(&str, &[(&str, &str)])] = &[
     ),
     (
         "history",
-        &[("j k", "move between commits"), ("⏎  ⌫", "show the diff, back"), ("1", "map of this commit")],
+        &[
+            ("j k", "move between commits"),
+            ("⏎  ⌫", "show the diff, back"),
+            ("1", "map of this commit"),
+        ],
     ),
 ];
 
@@ -484,7 +586,14 @@ fn help(buf: &mut Buffer, area: Rect, app: &App) {
     let r = Rect::new(x, y, w, h);
     fill(buf, r, t.rail);
     let mut c = Canvas::new(w as usize, h as usize);
-    c.rect(0, 0, w as usize, h as usize, crate::canvas::Tone::Rule, true);
+    c.rect(
+        0,
+        0,
+        w as usize,
+        h as usize,
+        crate::canvas::Tone::Rule,
+        true,
+    );
     c.text(2, 0, " keys ", crate::canvas::Tone::Text, true);
     blit(buf, r, &c, (0, 0), &t, t.rail);
     let mut yy = y + 1;
@@ -499,7 +608,14 @@ fn help(buf: &mut Buffer, area: Rect, app: &App) {
                 break;
             }
             put(buf, x + 3, yy, k, style(t.text, t.rail), 12);
-            put(buf, x + 17, yy, d, style(t.muted, t.rail), w.saturating_sub(19));
+            put(
+                buf,
+                x + 17,
+                yy,
+                d,
+                style(t.muted, t.rail),
+                w.saturating_sub(19),
+            );
             yy += 1;
         }
         yy += 1;

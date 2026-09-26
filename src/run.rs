@@ -114,10 +114,16 @@ pub fn run(opts: Options, trace: Trace) -> io::Result<i32> {
             "codemorph trace: setup {:.1} ms, first paint {:.1} ms, content {} ms\n",
             t_setup.as_secs_f64() * 1000.0,
             first_paint.as_secs_f64() * 1000.0,
-            content_ms.map(|m| format!("{m:.1}")).unwrap_or_else(|| "-".into())
+            content_ms
+                .map(|m| format!("{m:.1}"))
+                .unwrap_or_else(|| "-".into())
         );
         if let Ok(path) = std::env::var("CODEMORPH_TRACE_FILE") {
-            if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+            {
                 let _ = f.write_all(line.as_bytes());
             }
         } else {
@@ -146,7 +152,9 @@ fn follow_events() -> Option<std::sync::mpsc::Receiver<herdr::PluginContext>> {
             if own.as_deref() == Some(pane_id.as_str()) {
                 continue;
             }
-            let Ok(pane) = client.pane_get(&pane_id) else { continue };
+            let Ok(pane) = client.pane_get(&pane_id) else {
+                continue;
+            };
             let s = |k: &str| pane.get(k).and_then(|v| v.as_str()).map(str::to_string);
             let ctx = herdr::PluginContext {
                 focused_pane_id: Some(pane_id),
@@ -166,7 +174,9 @@ fn follow_events() -> Option<std::sync::mpsc::Receiver<herdr::PluginContext>> {
 }
 
 fn retarget(app: &mut App, ctx: herdr::PluginContext) {
-    let Some(cwd) = ctx.focused_pane_cwd.clone() else { return };
+    let Some(cwd) = ctx.focused_pane_cwd.clone() else {
+        return;
+    };
     let new_root = crate::git::discover(std::path::Path::new(&cwd))
         .map(|r| r.root)
         .unwrap_or_else(|_| std::path::PathBuf::from(&cwd));
@@ -281,12 +291,24 @@ fn base64(data: &[u8]) -> String {
     const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::new();
     for chunk in data.chunks(3) {
-        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
         let n = (b[0] as u32) << 16 | (b[1] as u32) << 8 | b[2] as u32;
         out.push(T[(n >> 18) as usize & 63] as char);
         out.push(T[(n >> 12) as usize & 63] as char);
-        out.push(if chunk.len() > 1 { T[(n >> 6) as usize & 63] as char } else { '=' });
-        out.push(if chunk.len() > 2 { T[n as usize & 63] as char } else { '=' });
+        out.push(if chunk.len() > 1 {
+            T[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            T[n as usize & 63] as char
+        } else {
+            '='
+        });
     }
     out
 }

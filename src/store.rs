@@ -393,7 +393,11 @@ impl Shadow {
         let path = self.dir.join("snapshot.lock");
         let deadline = Instant::now() + Duration::from_secs(5);
         loop {
-            match fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+            match fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)
+            {
                 Ok(mut f) => {
                     let _ = writeln!(f, "{}", std::process::id());
                     return Ok(LockGuard { path });
@@ -510,7 +514,10 @@ mod tests {
     #[test]
     fn keys_are_portable() {
         assert_eq!(sanitize("w1:p2"), "w1_p2");
-        assert_eq!(PaneState::key_for(Some("term_abc"), "w1:p1", Some("claude")), "term_abc-claude");
+        assert_eq!(
+            PaneState::key_for(Some("term_abc"), "w1:p1", Some("claude")),
+            "term_abc-claude"
+        );
         assert_eq!(PaneState::key_for(None, "w1:p1", None), "w1_p1-agent");
         let k = Store::repo_key(Path::new("/Users/x/Desktop/paneMorph"));
         assert!(k.starts_with("paneMorph-"));
@@ -519,8 +526,20 @@ mod tests {
     #[test]
     fn comment_format() {
         let comments = vec![
-            Comment { path: "src/api.rs".into(), start: 42, end: 48, text: "use the existing helper".into(), hunk: String::new() },
-            Comment { path: "a.py".into(), start: 3, end: 3, text: " no timeout ".into(), hunk: String::new() },
+            Comment {
+                path: "src/api.rs".into(),
+                start: 42,
+                end: 48,
+                text: "use the existing helper".into(),
+                hunk: String::new(),
+            },
+            Comment {
+                path: "a.py".into(),
+                start: 3,
+                end: 3,
+                text: " no timeout ".into(),
+                hunk: String::new(),
+            },
         ];
         let text = format_comments(&comments);
         assert!(text.contains("src/api.rs:42-48 — use the existing helper"));

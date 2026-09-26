@@ -68,7 +68,9 @@ pub fn source(lang: Lang) -> &'static str {
         Lang::Python => PYTHON,
         Lang::Rust => RUST,
         Lang::JavaScript => JAVASCRIPT,
-        Lang::TypeScript | Lang::Tsx => TS.get_or_init(|| format!("{JAVASCRIPT}\n{TYPESCRIPT_EXTRA}")),
+        Lang::TypeScript | Lang::Tsx => {
+            TS.get_or_init(|| format!("{JAVASCRIPT}\n{TYPESCRIPT_EXTRA}"))
+        }
         Lang::Go => GO,
     }
 }

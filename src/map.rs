@@ -73,7 +73,9 @@ impl Marks {
     pub fn changed_symbols(&self, index: &Index) -> Vec<(String, usize, char)> {
         let mut out = Vec::new();
         for (file, syms) in &self.symbols {
-            let Some(fs) = index.symbols(file) else { continue };
+            let Some(fs) = index.symbols(file) else {
+                continue;
+            };
             for (&i, &m) in syms {
                 if fs.symbols.get(i).is_some_and(|s| s.kind.is_callable()) {
                     out.push((file.clone(), i, m));
@@ -88,7 +90,13 @@ impl Marks {
 /// Symbol names of a source text, for `compute_marks`.
 pub fn quals_of(path: &str, src: &str) -> Option<BTreeSet<String>> {
     let lang = Lang::from_path(path)?;
-    Some(lang::extract(lang, src).symbols.iter().map(|s| s.qual()).collect())
+    Some(
+        lang::extract(lang, src)
+            .symbols
+            .iter()
+            .map(|s| s.qual())
+            .collect(),
+    )
 }
 
 /// Compute marks from a diff. `old_quals` gives the symbol names of the
@@ -112,7 +120,9 @@ pub fn compute_marks(
             line_marks.insert(*n, if added.contains(n) { 'A' } else { 'M' });
         }
         marks.lines.insert(d.path.clone(), line_marks);
-        let Some(fs) = index.symbols(&d.path) else { continue };
+        let Some(fs) = index.symbols(&d.path) else {
+            continue;
+        };
         let old_quals: Option<BTreeSet<String>> = if d.status == FileStatus::Added {
             Some(BTreeSet::new())
         } else {
@@ -128,8 +138,14 @@ pub fn compute_marks(
                 sm.insert(i, 'A');
             } else if let Some(m) = d.mark_for_range(s.start_line, s.end_line) {
                 // Containers are "M" when anything inside them changed.
-                let m = if old_quals.is_some() && m == 'A' { 'M' } else { m };
-                if !s.kind.is_container() || touched.range(s.start_line..=s.end_line).next().is_some() {
+                let m = if old_quals.is_some() && m == 'A' {
+                    'M'
+                } else {
+                    m
+                };
+                if !s.kind.is_container()
+                    || touched.range(s.start_line..=s.end_line).next().is_some()
+                {
                     sm.insert(i, m);
                 }
             }
@@ -144,7 +160,10 @@ pub enum NodeKind {
     Dir(String),
     File(String),
     /// A function, method or class of the file level.
-    Symbol { file: String, idx: usize },
+    Symbol {
+        file: String,
+        idx: usize,
+    },
     /// Another file, at the file level (callers and callees).
     External(String),
     /// "N more" when a level is paginated.
@@ -229,7 +248,9 @@ fn human_size(bytes: u64) -> String {
 /// Rows describing a file's top-level symbols.
 fn file_rows(index: &Index, marks: &Marks, file: &str) -> (Vec<Row>, Option<String>) {
     let Some(fs) = index.symbols(file) else {
-        let size = std::fs::metadata(index.root.join(file)).map(|m| m.len()).unwrap_or(0);
+        let size = std::fs::metadata(index.root.join(file))
+            .map(|m| m.len())
+            .unwrap_or(0);
         let note = if Lang::from_path(file).is_some() {
             "not parsed yet".to_string()
         } else {
@@ -246,7 +267,10 @@ fn file_rows(index: &Index, marks: &Marks, file: &str) -> (Vec<Row>, Option<Stri
         );
     };
     let top = fs.top_level();
-    let top: Vec<usize> = top.into_iter().filter(|&i| fs.symbols[i].kind != SymKind::Impl).collect();
+    let top: Vec<usize> = top
+        .into_iter()
+        .filter(|&i| fs.symbols[i].kind != SymKind::Impl)
+        .collect();
     let mut title_extra = None;
     let mut rows = Vec::new();
     let only_container = top.len() == 1 && fs.symbols[top[0]].kind.is_container();
@@ -338,7 +362,13 @@ pub fn build(index: &Index, marks: &Marks, level: &Level, page: usize, max_width
             LNode { w, h }
         })
         .collect();
-    let ledges: Vec<LEdge> = edges.iter().map(|e| LEdge { from: e.from, to: e.to }).collect();
+    let ledges: Vec<LEdge> = edges
+        .iter()
+        .map(|e| LEdge {
+            from: e.from,
+            to: e.to,
+        })
+        .collect();
     let layout = layout::layout(
         &lnodes,
         &ledges,
@@ -369,7 +399,11 @@ fn build_dir(index: &Index, marks: &Marks, dir: &str, page: usize) -> Built {
         let fns = index.function_count_under(sub);
         let mut rows = vec![Row {
             text: if fns > 0 {
-                format!("{} · {}", util::plural(*count, "file", "files"), util::plural(fns, "function", "functions"))
+                format!(
+                    "{} · {}",
+                    util::plural(*count, "file", "files"),
+                    util::plural(fns, "function", "functions")
+                )
             } else {
                 util::plural(*count, "file", "files")
             },
@@ -448,7 +482,9 @@ fn build_dir(index: &Index, marks: &Marks, dir: &str, page: usize) -> Built {
         if !in_dir(&c.from_file, dir) || !in_dir(&c.to.file, dir) {
             continue;
         }
-        let (Some(a), Some(b)) = (owner(&c.from_file), owner(&c.to.file)) else { continue };
+        let (Some(a), Some(b)) = (owner(&c.from_file), owner(&c.to.file)) else {
+            continue;
+        };
         if a == b {
             continue;
         }
@@ -468,7 +504,9 @@ fn build_dir(index: &Index, marks: &Marks, dir: &str, page: usize) -> Built {
             if !in_dir(to, dir) {
                 continue;
             }
-            let (Some(a), Some(b)) = (owner(from), owner(to)) else { continue };
+            let (Some(a), Some(b)) = (owner(from), owner(to)) else {
+                continue;
+            };
             if a == b {
                 continue;
             }
@@ -485,7 +523,10 @@ fn build_dir(index: &Index, marks: &Marks, dir: &str, page: usize) -> Built {
             import_only: calls == 0,
         })
         .collect();
-    let modules = files.iter().filter(|f| Lang::from_path(f).is_some()).count();
+    let modules = files
+        .iter()
+        .filter(|f| Lang::from_path(f).is_some())
+        .count();
     let fns = index.function_count_under(dir);
     let changed = marks.changed_under(dir);
     let mut summary = vec![];
@@ -520,7 +561,14 @@ fn build_file(index: &Index, marks: &Marks, file: &str) -> Built {
     let top: Vec<usize> = fs
         .top_level()
         .into_iter()
-        .filter(|&i| fs.symbols[i].kind != SymKind::Impl || !fs.top_level().iter().any(|&j| j != i && fs.symbols[j].name == fs.symbols[i].name && fs.symbols[j].kind != SymKind::Impl))
+        .filter(|&i| {
+            fs.symbols[i].kind != SymKind::Impl
+                || !fs.top_level().iter().any(|&j| {
+                    j != i
+                        && fs.symbols[j].name == fs.symbols[i].name
+                        && fs.symbols[j].kind != SymKind::Impl
+                })
+        })
         .collect();
     let mut node_of_sym: HashMap<usize, usize> = HashMap::new();
     for &i in &top {
@@ -545,7 +593,12 @@ fn build_file(index: &Index, marks: &Marks, file: &str) -> Built {
             }
             if rows.is_empty() {
                 rows.push(Row {
-                    text: format!("{} · lines {}–{}", s.kind.keyword(lang), s.start_line, s.end_line),
+                    text: format!(
+                        "{} · lines {}–{}",
+                        s.kind.keyword(lang),
+                        s.start_line,
+                        s.end_line
+                    ),
                     mark: None,
                     sym: None,
                     dim: true,
@@ -601,7 +654,9 @@ fn build_file(index: &Index, marks: &Marks, file: &str) -> Built {
     let mut ext_edges: Vec<(Option<usize>, String, bool, String)> = Vec::new(); // (local node, ext file, outgoing, name)
     for c in &index.calls {
         if c.from_file == file && c.to.file == file {
-            let (Some(a), Some(b)) = (c.from_sym.and_then(owner_node), owner_node(c.to.idx)) else { continue };
+            let (Some(a), Some(b)) = (c.from_sym.and_then(owner_node), owner_node(c.to.idx)) else {
+                continue;
+            };
             if a != b {
                 let name = fs.symbols[c.to.idx].name.clone();
                 let e = agg.entry((a, b)).or_default();
@@ -613,15 +668,28 @@ fn build_file(index: &Index, marks: &Marks, file: &str) -> Built {
                 .symbols(&c.to.file)
                 .map(|s| s.symbols[c.to.idx].qual())
                 .unwrap_or_default();
-            ext_out.entry(c.to.file.clone()).or_default().insert(name.clone());
-            ext_edges.push((c.from_sym.and_then(owner_node), c.to.file.clone(), true, name));
+            ext_out
+                .entry(c.to.file.clone())
+                .or_default()
+                .insert(name.clone());
+            ext_edges.push((
+                c.from_sym.and_then(owner_node),
+                c.to.file.clone(),
+                true,
+                name,
+            ));
         } else if c.to.file == file {
             let name = c
                 .from_sym
                 .and_then(|s| index.symbols(&c.from_file).map(|f| f.symbols[s].qual()))
                 .unwrap_or_else(|| "module".to_string());
             ext_in.entry(c.from_file.clone()).or_default().insert(name);
-            ext_edges.push((owner_node(c.to.idx), c.from_file.clone(), false, String::new()));
+            ext_edges.push((
+                owner_node(c.to.idx),
+                c.from_file.clone(),
+                false,
+                String::new(),
+            ));
         }
     }
     // Keep the busiest external files.
@@ -667,7 +735,9 @@ fn build_file(index: &Index, marks: &Marks, file: &str) -> Built {
         });
     }
     for (local, f, outgoing, name) in ext_edges {
-        let (Some(local), Some(&ext)) = (local, ext_node.get(&f)) else { continue };
+        let (Some(local), Some(&ext)) = (local, ext_node.get(&f)) else {
+            continue;
+        };
         let key = if outgoing { (local, ext) } else { (ext, local) };
         let e = agg.entry(key).or_default();
         e.0 += 1;
@@ -687,7 +757,11 @@ fn build_file(index: &Index, marks: &Marks, file: &str) -> Built {
         .collect();
     let fns = fs.symbols.iter().filter(|s| s.kind.is_callable()).count();
     let changed = marks.symbols.get(file).map(|m| m.len()).unwrap_or(0);
-    let mut summary = vec![lang.name().to_string(), util::plural(fns, "function", "functions"), util::plural(fs.lines as usize, "line", "lines")];
+    let mut summary = vec![
+        lang.name().to_string(),
+        util::plural(fns, "function", "functions"),
+        util::plural(fs.lines as usize, "line", "lines"),
+    ];
     if changed > 0 {
         summary.push(format!("{changed} changed"));
     }
@@ -721,7 +795,13 @@ pub fn draw(scene: &Scene, cursor: Option<Cursor>) -> Canvas {
             .edges
             .iter()
             .any(|x| x.from == e.from && x.to == e.to && x.import_only);
-        let tone = if hot { Tone::Blue } else if import_only { Tone::Muted } else { Tone::Rule };
+        let tone = if hot {
+            Tone::Blue
+        } else if import_only {
+            Tone::Muted
+        } else {
+            Tone::Rule
+        };
         c.polyline(&r.points, tone);
         let (sx, sy) = r.points[0];
         // join the source's bottom border
@@ -757,7 +837,14 @@ pub fn draw(scene: &Scene, cursor: Option<Cursor>) -> Canvas {
                 }
             }
         }
-        c.rect(r.x, r.y, r.w, r.h, tone, matches!(n.kind, NodeKind::Dir(_) | NodeKind::More));
+        c.rect(
+            r.x,
+            r.y,
+            r.w,
+            r.h,
+            tone,
+            matches!(n.kind, NodeKind::Dir(_) | NodeKind::More),
+        );
         for (x, y, mask, t) in saved {
             if mask & DOWN != 0 && y == r.bottom() - 1 {
                 c.bits(x, y, DOWN, t);
@@ -771,7 +858,10 @@ pub fn draw(scene: &Scene, cursor: Option<Cursor>) -> Canvas {
             Tone::Text
         };
         let max_title = r.w.saturating_sub(4);
-        let title = format!(" {} ", util::truncate(&n.title, max_title.saturating_sub(2)));
+        let title = format!(
+            " {} ",
+            util::truncate(&n.title, max_title.saturating_sub(2))
+        );
         c.text(r.x + 2, r.y, &title, title_tone, is_sel || n.mark.is_some());
         for (ri, row) in n.rows.iter().enumerate() {
             let y = r.y + 1 + ri;
@@ -786,9 +876,22 @@ pub fn draw(scene: &Scene, cursor: Option<Cursor>) -> Canvas {
                 None => Tone::Dim,
             };
             let avail = r.w.saturating_sub(if row.mark.is_some() { 6 } else { 4 });
-            c.text_max(r.x + 2, y, &row.text, avail, if row_sel { Tone::Text } else { tone }, row_sel);
+            c.text_max(
+                r.x + 2,
+                y,
+                &row.text,
+                avail,
+                if row_sel { Tone::Text } else { tone },
+                row_sel,
+            );
             if let Some(m) = row.mark {
-                c.text(r.right() - 3, y, &m.to_string(), if m == 'A' { Tone::Add } else { Tone::Mod }, true);
+                c.text(
+                    r.right() - 3,
+                    y,
+                    &m.to_string(),
+                    if m == 'A' { Tone::Add } else { Tone::Mod },
+                    true,
+                );
             }
             if row_sel {
                 c.band(r.x + 1, r.right() - 2, y, Band::Active);
@@ -802,7 +905,13 @@ pub fn draw(scene: &Scene, cursor: Option<Cursor>) -> Canvas {
     }
     // Edge labels: callee names beside the arrowhead when there is room.
     for (ei, e) in scene.edges.iter().enumerate() {
-        let Some(route) = l.routes.iter().find(|r| r.edge.from == e.from && r.edge.to == e.to) else { continue };
+        let Some(route) = l
+            .routes
+            .iter()
+            .find(|r| r.edge.from == e.from && r.edge.to == e.to)
+        else {
+            continue;
+        };
         let _ = ei;
         if e.names.is_empty() || route.reversed {
             continue;
@@ -832,7 +941,10 @@ pub fn node_for_symbol(scene: &Scene, file: &str, idx: usize) -> Option<Cursor> 
         }
         for (ri, r) in n.rows.iter().enumerate() {
             if r.sym.as_ref().is_some_and(|(f, s)| f == file && *s == idx) {
-                return Some(Cursor { node: i, row: Some(ri) });
+                return Some(Cursor {
+                    node: i,
+                    row: Some(ri),
+                });
             }
         }
     }

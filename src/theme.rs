@@ -84,10 +84,48 @@ const fn pal(
 
 impl Palette {
     pub fn catppuccin() -> Self {
-        pal(rgb(137, 180, 250), rgb(24, 24, 37), rgb(30, 30, 46), rgb(49, 50, 68), rgb(49, 50, 68), rgb(69, 71, 90), rgb(30, 30, 46), rgb(108, 112, 134), rgb(127, 132, 156), rgb(205, 214, 244), rgb(166, 173, 200), rgb(203, 166, 247), rgb(166, 227, 161), rgb(249, 226, 175), rgb(243, 139, 168), rgb(137, 180, 250), rgb(148, 226, 213), rgb(250, 179, 135))
+        pal(
+            rgb(137, 180, 250),
+            rgb(24, 24, 37),
+            rgb(30, 30, 46),
+            rgb(49, 50, 68),
+            rgb(49, 50, 68),
+            rgb(69, 71, 90),
+            rgb(30, 30, 46),
+            rgb(108, 112, 134),
+            rgb(127, 132, 156),
+            rgb(205, 214, 244),
+            rgb(166, 173, 200),
+            rgb(203, 166, 247),
+            rgb(166, 227, 161),
+            rgb(249, 226, 175),
+            rgb(243, 139, 168),
+            rgb(137, 180, 250),
+            rgb(148, 226, 213),
+            rgb(250, 179, 135),
+        )
     }
     pub fn catppuccin_latte() -> Self {
-        pal(rgb(30, 102, 245), rgb(239, 241, 245), rgb(230, 233, 239), rgb(189, 208, 245), rgb(204, 208, 218), rgb(188, 192, 204), rgb(230, 233, 239), rgb(156, 160, 176), rgb(140, 143, 161), rgb(76, 79, 105), rgb(108, 111, 133), rgb(136, 57, 239), rgb(64, 160, 43), rgb(223, 142, 29), rgb(210, 15, 57), rgb(30, 102, 245), rgb(23, 146, 153), rgb(254, 100, 11))
+        pal(
+            rgb(30, 102, 245),
+            rgb(239, 241, 245),
+            rgb(230, 233, 239),
+            rgb(189, 208, 245),
+            rgb(204, 208, 218),
+            rgb(188, 192, 204),
+            rgb(230, 233, 239),
+            rgb(156, 160, 176),
+            rgb(140, 143, 161),
+            rgb(76, 79, 105),
+            rgb(108, 111, 133),
+            rgb(136, 57, 239),
+            rgb(64, 160, 43),
+            rgb(223, 142, 29),
+            rgb(210, 15, 57),
+            rgb(30, 102, 245),
+            rgb(23, 146, 153),
+            rgb(254, 100, 11),
+        )
     }
     pub fn terminal() -> Self {
         Palette {
@@ -113,49 +151,334 @@ impl Palette {
         }
     }
     pub fn tokyo_night() -> Self {
-        pal(rgb(122, 162, 247), rgb(26, 27, 38), rgb(35, 38, 54), rgb(45, 54, 80), rgb(36, 40, 59), rgb(65, 72, 104), rgb(26, 27, 38), rgb(86, 95, 137), rgb(105, 113, 150), rgb(192, 202, 245), rgb(169, 177, 214), rgb(187, 154, 247), rgb(158, 206, 106), rgb(224, 175, 104), rgb(247, 118, 142), rgb(122, 162, 247), rgb(125, 207, 255), rgb(255, 158, 100))
+        pal(
+            rgb(122, 162, 247),
+            rgb(26, 27, 38),
+            rgb(35, 38, 54),
+            rgb(45, 54, 80),
+            rgb(36, 40, 59),
+            rgb(65, 72, 104),
+            rgb(26, 27, 38),
+            rgb(86, 95, 137),
+            rgb(105, 113, 150),
+            rgb(192, 202, 245),
+            rgb(169, 177, 214),
+            rgb(187, 154, 247),
+            rgb(158, 206, 106),
+            rgb(224, 175, 104),
+            rgb(247, 118, 142),
+            rgb(122, 162, 247),
+            rgb(125, 207, 255),
+            rgb(255, 158, 100),
+        )
     }
     pub fn tokyo_night_day() -> Self {
-        pal(rgb(46, 125, 233), rgb(225, 226, 231), rgb(210, 211, 218), rgb(182, 202, 231), rgb(196, 200, 218), rgb(168, 174, 203), rgb(210, 211, 218), rgb(137, 144, 179), rgb(104, 112, 154), rgb(55, 96, 191), rgb(97, 114, 176), rgb(120, 71, 189), rgb(88, 117, 57), rgb(140, 108, 62), rgb(245, 42, 101), rgb(46, 125, 233), rgb(17, 140, 116), rgb(177, 92, 0))
+        pal(
+            rgb(46, 125, 233),
+            rgb(225, 226, 231),
+            rgb(210, 211, 218),
+            rgb(182, 202, 231),
+            rgb(196, 200, 218),
+            rgb(168, 174, 203),
+            rgb(210, 211, 218),
+            rgb(137, 144, 179),
+            rgb(104, 112, 154),
+            rgb(55, 96, 191),
+            rgb(97, 114, 176),
+            rgb(120, 71, 189),
+            rgb(88, 117, 57),
+            rgb(140, 108, 62),
+            rgb(245, 42, 101),
+            rgb(46, 125, 233),
+            rgb(17, 140, 116),
+            rgb(177, 92, 0),
+        )
     }
     pub fn dracula() -> Self {
-        pal(rgb(189, 147, 249), rgb(40, 42, 54), rgb(55, 60, 82), rgb(70, 63, 93), rgb(68, 71, 90), rgb(98, 114, 164), rgb(40, 42, 54), rgb(98, 114, 164), rgb(130, 140, 180), rgb(248, 248, 242), rgb(210, 210, 220), rgb(255, 121, 198), rgb(80, 250, 123), rgb(241, 250, 140), rgb(255, 85, 85), rgb(139, 233, 253), rgb(139, 233, 253), rgb(255, 184, 108))
+        pal(
+            rgb(189, 147, 249),
+            rgb(40, 42, 54),
+            rgb(55, 60, 82),
+            rgb(70, 63, 93),
+            rgb(68, 71, 90),
+            rgb(98, 114, 164),
+            rgb(40, 42, 54),
+            rgb(98, 114, 164),
+            rgb(130, 140, 180),
+            rgb(248, 248, 242),
+            rgb(210, 210, 220),
+            rgb(255, 121, 198),
+            rgb(80, 250, 123),
+            rgb(241, 250, 140),
+            rgb(255, 85, 85),
+            rgb(139, 233, 253),
+            rgb(139, 233, 253),
+            rgb(255, 184, 108),
+        )
     }
     pub fn nord() -> Self {
-        pal(rgb(136, 192, 208), rgb(46, 52, 64), rgb(67, 76, 94), rgb(64, 80, 93), rgb(59, 66, 82), rgb(67, 76, 94), rgb(46, 52, 64), rgb(76, 86, 106), rgb(100, 110, 130), rgb(236, 239, 244), rgb(216, 222, 233), rgb(180, 142, 173), rgb(163, 190, 140), rgb(235, 203, 139), rgb(191, 97, 106), rgb(129, 161, 193), rgb(143, 188, 187), rgb(208, 135, 112))
+        pal(
+            rgb(136, 192, 208),
+            rgb(46, 52, 64),
+            rgb(67, 76, 94),
+            rgb(64, 80, 93),
+            rgb(59, 66, 82),
+            rgb(67, 76, 94),
+            rgb(46, 52, 64),
+            rgb(76, 86, 106),
+            rgb(100, 110, 130),
+            rgb(236, 239, 244),
+            rgb(216, 222, 233),
+            rgb(180, 142, 173),
+            rgb(163, 190, 140),
+            rgb(235, 203, 139),
+            rgb(191, 97, 106),
+            rgb(129, 161, 193),
+            rgb(143, 188, 187),
+            rgb(208, 135, 112),
+        )
     }
     pub fn gruvbox() -> Self {
-        pal(rgb(215, 153, 33), rgb(40, 40, 40), rgb(50, 49, 48), rgb(75, 63, 39), rgb(60, 56, 54), rgb(80, 73, 69), rgb(40, 40, 40), rgb(146, 131, 116), rgb(168, 153, 132), rgb(235, 219, 178), rgb(213, 196, 161), rgb(211, 134, 155), rgb(184, 187, 38), rgb(250, 189, 47), rgb(251, 73, 52), rgb(131, 165, 152), rgb(142, 192, 124), rgb(254, 128, 25))
+        pal(
+            rgb(215, 153, 33),
+            rgb(40, 40, 40),
+            rgb(50, 49, 48),
+            rgb(75, 63, 39),
+            rgb(60, 56, 54),
+            rgb(80, 73, 69),
+            rgb(40, 40, 40),
+            rgb(146, 131, 116),
+            rgb(168, 153, 132),
+            rgb(235, 219, 178),
+            rgb(213, 196, 161),
+            rgb(211, 134, 155),
+            rgb(184, 187, 38),
+            rgb(250, 189, 47),
+            rgb(251, 73, 52),
+            rgb(131, 165, 152),
+            rgb(142, 192, 124),
+            rgb(254, 128, 25),
+        )
     }
     pub fn gruvbox_light() -> Self {
-        pal(rgb(7, 102, 120), rgb(251, 241, 199), rgb(242, 229, 188), rgb(235, 219, 178), rgb(235, 219, 178), rgb(213, 196, 161), rgb(242, 229, 188), rgb(146, 131, 116), rgb(124, 111, 100), rgb(60, 56, 54), rgb(80, 73, 69), rgb(143, 63, 113), rgb(121, 116, 14), rgb(181, 118, 20), rgb(157, 0, 6), rgb(7, 102, 120), rgb(66, 123, 88), rgb(175, 58, 3))
+        pal(
+            rgb(7, 102, 120),
+            rgb(251, 241, 199),
+            rgb(242, 229, 188),
+            rgb(235, 219, 178),
+            rgb(235, 219, 178),
+            rgb(213, 196, 161),
+            rgb(242, 229, 188),
+            rgb(146, 131, 116),
+            rgb(124, 111, 100),
+            rgb(60, 56, 54),
+            rgb(80, 73, 69),
+            rgb(143, 63, 113),
+            rgb(121, 116, 14),
+            rgb(181, 118, 20),
+            rgb(157, 0, 6),
+            rgb(7, 102, 120),
+            rgb(66, 123, 88),
+            rgb(175, 58, 3),
+        )
     }
     pub fn one_dark() -> Self {
-        pal(rgb(97, 175, 239), rgb(40, 44, 52), rgb(49, 54, 64), rgb(51, 70, 89), rgb(44, 49, 58), rgb(62, 68, 81), rgb(40, 44, 52), rgb(92, 99, 112), rgb(115, 122, 135), rgb(171, 178, 191), rgb(150, 156, 168), rgb(198, 120, 221), rgb(152, 195, 121), rgb(229, 192, 123), rgb(224, 108, 117), rgb(97, 175, 239), rgb(86, 182, 194), rgb(209, 154, 102))
+        pal(
+            rgb(97, 175, 239),
+            rgb(40, 44, 52),
+            rgb(49, 54, 64),
+            rgb(51, 70, 89),
+            rgb(44, 49, 58),
+            rgb(62, 68, 81),
+            rgb(40, 44, 52),
+            rgb(92, 99, 112),
+            rgb(115, 122, 135),
+            rgb(171, 178, 191),
+            rgb(150, 156, 168),
+            rgb(198, 120, 221),
+            rgb(152, 195, 121),
+            rgb(229, 192, 123),
+            rgb(224, 108, 117),
+            rgb(97, 175, 239),
+            rgb(86, 182, 194),
+            rgb(209, 154, 102),
+        )
     }
     pub fn one_light() -> Self {
-        pal(rgb(64, 120, 242), rgb(250, 250, 250), rgb(216, 219, 226), rgb(205, 219, 248), rgb(240, 240, 241), rgb(229, 229, 230), rgb(245, 245, 246), rgb(160, 161, 167), rgb(104, 107, 119), rgb(56, 58, 66), rgb(104, 107, 119), rgb(166, 38, 164), rgb(80, 161, 79), rgb(193, 132, 1), rgb(228, 86, 73), rgb(64, 120, 242), rgb(1, 132, 188), rgb(152, 104, 1))
+        pal(
+            rgb(64, 120, 242),
+            rgb(250, 250, 250),
+            rgb(216, 219, 226),
+            rgb(205, 219, 248),
+            rgb(240, 240, 241),
+            rgb(229, 229, 230),
+            rgb(245, 245, 246),
+            rgb(160, 161, 167),
+            rgb(104, 107, 119),
+            rgb(56, 58, 66),
+            rgb(104, 107, 119),
+            rgb(166, 38, 164),
+            rgb(80, 161, 79),
+            rgb(193, 132, 1),
+            rgb(228, 86, 73),
+            rgb(64, 120, 242),
+            rgb(1, 132, 188),
+            rgb(152, 104, 1),
+        )
     }
     pub fn solarized() -> Self {
-        pal(rgb(38, 139, 210), rgb(0, 43, 54), rgb(22, 75, 87), rgb(8, 62, 85), rgb(7, 54, 66), rgb(88, 110, 117), rgb(0, 43, 54), rgb(88, 110, 117), rgb(101, 123, 131), rgb(147, 161, 161), rgb(131, 148, 150), rgb(211, 54, 130), rgb(133, 153, 0), rgb(181, 137, 0), rgb(220, 50, 47), rgb(38, 139, 210), rgb(42, 161, 152), rgb(203, 75, 22))
+        pal(
+            rgb(38, 139, 210),
+            rgb(0, 43, 54),
+            rgb(22, 75, 87),
+            rgb(8, 62, 85),
+            rgb(7, 54, 66),
+            rgb(88, 110, 117),
+            rgb(0, 43, 54),
+            rgb(88, 110, 117),
+            rgb(101, 123, 131),
+            rgb(147, 161, 161),
+            rgb(131, 148, 150),
+            rgb(211, 54, 130),
+            rgb(133, 153, 0),
+            rgb(181, 137, 0),
+            rgb(220, 50, 47),
+            rgb(38, 139, 210),
+            rgb(42, 161, 152),
+            rgb(203, 75, 22),
+        )
     }
     pub fn solarized_light() -> Self {
-        pal(rgb(38, 139, 210), rgb(253, 246, 227), rgb(238, 232, 213), rgb(201, 220, 223), rgb(238, 232, 213), rgb(147, 161, 161), rgb(238, 232, 213), rgb(147, 161, 161), rgb(88, 110, 117), rgb(101, 123, 131), rgb(131, 148, 150), rgb(211, 54, 130), rgb(133, 153, 0), rgb(181, 137, 0), rgb(220, 50, 47), rgb(38, 139, 210), rgb(42, 161, 152), rgb(203, 75, 22))
+        pal(
+            rgb(38, 139, 210),
+            rgb(253, 246, 227),
+            rgb(238, 232, 213),
+            rgb(201, 220, 223),
+            rgb(238, 232, 213),
+            rgb(147, 161, 161),
+            rgb(238, 232, 213),
+            rgb(147, 161, 161),
+            rgb(88, 110, 117),
+            rgb(101, 123, 131),
+            rgb(131, 148, 150),
+            rgb(211, 54, 130),
+            rgb(133, 153, 0),
+            rgb(181, 137, 0),
+            rgb(220, 50, 47),
+            rgb(38, 139, 210),
+            rgb(42, 161, 152),
+            rgb(203, 75, 22),
+        )
     }
     pub fn kanagawa() -> Self {
-        pal(rgb(126, 156, 216), rgb(31, 31, 40), rgb(54, 54, 70), rgb(50, 56, 75), rgb(42, 42, 55), rgb(54, 54, 70), rgb(31, 31, 40), rgb(114, 113, 105), rgb(135, 134, 125), rgb(220, 215, 186), rgb(200, 195, 170), rgb(149, 127, 184), rgb(118, 148, 106), rgb(192, 163, 110), rgb(195, 64, 67), rgb(126, 156, 216), rgb(127, 180, 202), rgb(255, 160, 102))
+        pal(
+            rgb(126, 156, 216),
+            rgb(31, 31, 40),
+            rgb(54, 54, 70),
+            rgb(50, 56, 75),
+            rgb(42, 42, 55),
+            rgb(54, 54, 70),
+            rgb(31, 31, 40),
+            rgb(114, 113, 105),
+            rgb(135, 134, 125),
+            rgb(220, 215, 186),
+            rgb(200, 195, 170),
+            rgb(149, 127, 184),
+            rgb(118, 148, 106),
+            rgb(192, 163, 110),
+            rgb(195, 64, 67),
+            rgb(126, 156, 216),
+            rgb(127, 180, 202),
+            rgb(255, 160, 102),
+        )
     }
     pub fn kanagawa_lotus() -> Self {
-        pal(rgb(77, 105, 155), rgb(242, 236, 188), rgb(213, 206, 163), rgb(220, 213, 172), rgb(220, 213, 172), rgb(201, 203, 209), rgb(213, 206, 163), rgb(160, 156, 172), rgb(138, 137, 128), rgb(84, 84, 100), rgb(67, 67, 108), rgb(98, 76, 131), rgb(111, 137, 78), rgb(119, 113, 63), rgb(200, 64, 83), rgb(77, 105, 155), rgb(78, 140, 162), rgb(204, 109, 0))
+        pal(
+            rgb(77, 105, 155),
+            rgb(242, 236, 188),
+            rgb(213, 206, 163),
+            rgb(220, 213, 172),
+            rgb(220, 213, 172),
+            rgb(201, 203, 209),
+            rgb(213, 206, 163),
+            rgb(160, 156, 172),
+            rgb(138, 137, 128),
+            rgb(84, 84, 100),
+            rgb(67, 67, 108),
+            rgb(98, 76, 131),
+            rgb(111, 137, 78),
+            rgb(119, 113, 63),
+            rgb(200, 64, 83),
+            rgb(77, 105, 155),
+            rgb(78, 140, 162),
+            rgb(204, 109, 0),
+        )
     }
     pub fn rose_pine() -> Self {
-        pal(rgb(196, 167, 231), rgb(25, 23, 36), rgb(38, 35, 58), rgb(59, 52, 75), rgb(31, 29, 46), rgb(38, 35, 58), rgb(38, 35, 58), rgb(110, 106, 134), rgb(144, 140, 170), rgb(224, 222, 244), rgb(200, 197, 220), rgb(196, 167, 231), rgb(49, 116, 143), rgb(246, 193, 119), rgb(235, 111, 146), rgb(49, 116, 143), rgb(156, 207, 216), rgb(234, 154, 151))
+        pal(
+            rgb(196, 167, 231),
+            rgb(25, 23, 36),
+            rgb(38, 35, 58),
+            rgb(59, 52, 75),
+            rgb(31, 29, 46),
+            rgb(38, 35, 58),
+            rgb(38, 35, 58),
+            rgb(110, 106, 134),
+            rgb(144, 140, 170),
+            rgb(224, 222, 244),
+            rgb(200, 197, 220),
+            rgb(196, 167, 231),
+            rgb(49, 116, 143),
+            rgb(246, 193, 119),
+            rgb(235, 111, 146),
+            rgb(49, 116, 143),
+            rgb(156, 207, 216),
+            rgb(234, 154, 151),
+        )
     }
     pub fn rose_pine_dawn() -> Self {
-        pal(rgb(144, 122, 169), rgb(250, 244, 237), rgb(227, 217, 207), rgb(242, 233, 225), rgb(242, 233, 225), rgb(255, 250, 243), rgb(242, 233, 225), rgb(152, 147, 165), rgb(121, 117, 147), rgb(70, 66, 97), rgb(121, 117, 147), rgb(144, 122, 169), rgb(40, 105, 131), rgb(234, 157, 52), rgb(180, 99, 122), rgb(40, 105, 131), rgb(86, 148, 159), rgb(215, 130, 126))
+        pal(
+            rgb(144, 122, 169),
+            rgb(250, 244, 237),
+            rgb(227, 217, 207),
+            rgb(242, 233, 225),
+            rgb(242, 233, 225),
+            rgb(255, 250, 243),
+            rgb(242, 233, 225),
+            rgb(152, 147, 165),
+            rgb(121, 117, 147),
+            rgb(70, 66, 97),
+            rgb(121, 117, 147),
+            rgb(144, 122, 169),
+            rgb(40, 105, 131),
+            rgb(234, 157, 52),
+            rgb(180, 99, 122),
+            rgb(40, 105, 131),
+            rgb(86, 148, 159),
+            rgb(215, 130, 126),
+        )
     }
     pub fn vesper() -> Self {
-        pal(rgb(255, 199, 153), rgb(26, 26, 26), rgb(16, 16, 16), rgb(35, 35, 35), rgb(35, 35, 35), rgb(40, 40, 40), rgb(16, 16, 16), rgb(92, 92, 92), rgb(126, 126, 126), rgb(255, 255, 255), rgb(160, 160, 160), rgb(255, 209, 168), rgb(153, 255, 228), rgb(255, 199, 153), rgb(255, 128, 128), rgb(176, 176, 176), rgb(102, 221, 204), rgb(255, 199, 153))
+        pal(
+            rgb(255, 199, 153),
+            rgb(26, 26, 26),
+            rgb(16, 16, 16),
+            rgb(35, 35, 35),
+            rgb(35, 35, 35),
+            rgb(40, 40, 40),
+            rgb(16, 16, 16),
+            rgb(92, 92, 92),
+            rgb(126, 126, 126),
+            rgb(255, 255, 255),
+            rgb(160, 160, 160),
+            rgb(255, 209, 168),
+            rgb(153, 255, 228),
+            rgb(255, 199, 153),
+            rgb(255, 128, 128),
+            rgb(176, 176, 176),
+            rgb(102, 221, 204),
+            rgb(255, 199, 153),
+        )
     }
 
     pub fn from_name(name: &str) -> Option<Self> {
@@ -352,7 +675,9 @@ pub fn herdr_config_path() -> PathBuf {
     if let Some(x) = std::env::var_os("XDG_CONFIG_HOME").filter(|v| !v.is_empty()) {
         return PathBuf::from(x).join("herdr").join("config.toml");
     }
-    let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_default();
     home.join(".config").join("herdr").join("config.toml")
 }
 
@@ -366,9 +691,15 @@ pub fn parse_theme_config(toml_text: &str) -> ThemeConfig {
 /// codeMorph cannot see the host appearance, so it assumes dark.
 pub fn resolve_palette(cfg: &ThemeConfig) -> (Palette, String) {
     let (name, mode) = if cfg.auto_switch {
-        (cfg.dark_name.clone().unwrap_or_else(|| "catppuccin".into()), Some(true))
+        (
+            cfg.dark_name.clone().unwrap_or_else(|| "catppuccin".into()),
+            Some(true),
+        )
     } else {
-        (cfg.name.clone().unwrap_or_else(|| "catppuccin".into()), None)
+        (
+            cfg.name.clone().unwrap_or_else(|| "catppuccin".into()),
+            None,
+        )
     };
     let canonical = canonical_theme_name(&name).unwrap_or("catppuccin");
     let mut palette = Palette::from_name(canonical).unwrap_or_else(Palette::catppuccin);
@@ -415,7 +746,9 @@ pub struct Theme {
 fn blend(fg: Color, bg: Color, alpha: f32) -> Color {
     match (fg, bg) {
         (Color::Rgb(r1, g1, b1), Color::Rgb(r2, g2, b2)) => {
-            let mix = |a: u8, b: u8| -> u8 { (a as f32 * alpha + b as f32 * (1.0 - alpha)).round() as u8 };
+            let mix = |a: u8, b: u8| -> u8 {
+                (a as f32 * alpha + b as f32 * (1.0 - alpha)).round() as u8
+            };
             Color::Rgb(mix(r1, r2), mix(g1, g2), mix(b1, b2))
         }
         _ => bg,
@@ -424,10 +757,23 @@ fn blend(fg: Color, bg: Color, alpha: f32) -> Color {
 
 impl Theme {
     pub fn from_palette(p: &Palette, base: &Palette, name: &str) -> Theme {
-        let body = if base.panel_bg == Color::Reset { Color::Reset } else { base.panel_bg };
-        let rail = if p.sidebar_bg == Color::Reset { p.panel_bg } else { p.sidebar_bg };
-        let dark_text = matches!(p.text, Color::Rgb(r, g, b) if (r as u32 + g as u32 + b as u32) < 384);
-        let on_accent = if dark_text { Color::Rgb(255, 255, 255) } else { Color::Rgb(0, 0, 0) };
+        let body = if base.panel_bg == Color::Reset {
+            Color::Reset
+        } else {
+            base.panel_bg
+        };
+        let rail = if p.sidebar_bg == Color::Reset {
+            p.panel_bg
+        } else {
+            p.sidebar_bg
+        };
+        let dark_text =
+            matches!(p.text, Color::Rgb(r, g, b) if (r as u32 + g as u32 + b as u32) < 384);
+        let on_accent = if dark_text {
+            Color::Rgb(255, 255, 255)
+        } else {
+            Color::Rgb(0, 0, 0)
+        };
         let (add_bg, del_bg, add_word, del_word) = match body {
             Color::Rgb(..) => (
                 blend(p.green, body, 0.15),
@@ -577,9 +923,24 @@ prefix = "ctrl+b"
     #[test]
     fn every_builtin_resolves() {
         for name in [
-            "catppuccin", "catppuccin-latte", "terminal", "tokyo-night", "tokyo-night-day", "dracula", "nord",
-            "gruvbox", "gruvbox-light", "one-dark", "one-light", "solarized", "solarized-light", "kanagawa",
-            "kanagawa-lotus", "rose-pine", "rose-pine-dawn", "vesper",
+            "catppuccin",
+            "catppuccin-latte",
+            "terminal",
+            "tokyo-night",
+            "tokyo-night-day",
+            "dracula",
+            "nord",
+            "gruvbox",
+            "gruvbox-light",
+            "one-dark",
+            "one-light",
+            "solarized",
+            "solarized-light",
+            "kanagawa",
+            "kanagawa-lotus",
+            "rose-pine",
+            "rose-pine-dawn",
+            "vesper",
         ] {
             assert!(Palette::from_name(name).is_some(), "{name}");
         }

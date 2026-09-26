@@ -46,7 +46,9 @@ pub fn run() -> i32 {
                 "{} {} turn {} {}",
                 out.action,
                 out.pane_key,
-                out.turn.map(|n| n.to_string()).unwrap_or_else(|| "-".into()),
+                out.turn
+                    .map(|n| n.to_string())
+                    .unwrap_or_else(|| "-".into()),
                 out.checkpoint.map(|c| c.commit).unwrap_or_default()
             );
             0
@@ -65,13 +67,16 @@ pub fn handle(
     ctx: Option<&PluginContext>,
 ) -> Result<HookOutcome, String> {
     // Where is the agent working?
-    let ctx_matches = ctx.is_some_and(|c| c.focused_pane_id.as_deref() == Some(event.pane_id.as_str()));
-    let mut cwd: Option<String> = ctx.filter(|_| ctx_matches).and_then(|c| c.focused_pane_cwd.clone());
+    let ctx_matches =
+        ctx.is_some_and(|c| c.focused_pane_id.as_deref() == Some(event.pane_id.as_str()));
+    let mut cwd: Option<String> = ctx
+        .filter(|_| ctx_matches)
+        .and_then(|c| c.focused_pane_cwd.clone());
     let mut terminal_id: Option<String> = None;
-    let mut agent = event
-        .agent
-        .clone()
-        .or_else(|| ctx.filter(|_| ctx_matches).and_then(|c| c.focused_pane_agent.clone()));
+    let mut agent = event.agent.clone().or_else(|| {
+        ctx.filter(|_| ctx_matches)
+            .and_then(|c| c.focused_pane_agent.clone())
+    });
     if let Some(client) = client {
         if let Ok(pane) = client.pane_get(&event.pane_id) {
             let s = |k: &str| pane.get(k).and_then(Value::as_str).map(str::to_string);

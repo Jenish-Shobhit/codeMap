@@ -19,23 +19,61 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
     let t = app.theme;
     let body = a.body;
     if app.not_a_repo() {
-        put(buf, body.x, body.y, &format!("not a git repository · {}", util::tilde(&app.root)), style(t.modified, t.body), body.width);
-        put(buf, body.x, body.y + 1, "Map and Flow still work.", style(t.muted, t.body), body.width);
+        put(
+            buf,
+            body.x,
+            body.y,
+            &format!("not a git repository · {}", util::tilde(&app.root)),
+            style(t.modified, t.body),
+            body.width,
+        );
+        put(
+            buf,
+            body.x,
+            body.y + 1,
+            "Map and Flow still work.",
+            style(t.muted, t.body),
+            body.width,
+        );
         return;
     }
     if !app.repo_known || !app.diffs_loaded {
-        put(buf, body.x, body.y, "reading git status…", style(t.muted, t.body), body.width);
+        put(
+            buf,
+            body.x,
+            body.y,
+            "reading git status…",
+            style(t.muted, t.body),
+            body.width,
+        );
         return;
     }
     if let Some(e) = &app.diff_error {
-        put(buf, body.x, body.y, &format!("git: {e}"), style(t.del, t.body), body.width);
+        put(
+            buf,
+            body.x,
+            body.y,
+            &format!("git: {e}"),
+            style(t.del, t.body),
+            body.width,
+        );
         return;
     }
     if app.diffs.is_empty() {
-        let msg = match (&app.scope_info.turn_n, app.scope_info.fallback_note.is_none()) {
-            (Some(n), true) if matches!(app.scope, crate::app::Scope::Turn) => format!("turn {n} changed nothing"),
+        let msg = match (
+            &app.scope_info.turn_n,
+            app.scope_info.fallback_note.is_none(),
+        ) {
+            (Some(n), true) if matches!(app.scope, crate::app::Scope::Turn) => {
+                format!("turn {n} changed nothing")
+            }
             _ => {
-                let subject = app.history.commits.first().map(|c| c.subject.clone()).unwrap_or_default();
+                let subject = app
+                    .history
+                    .commits
+                    .first()
+                    .map(|c| c.subject.clone())
+                    .unwrap_or_default();
                 if subject.is_empty() {
                     "no changes since HEAD".to_string()
                 } else {
@@ -43,7 +81,14 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
                 }
             }
         };
-        put(buf, body.x, body.y, &msg, style(t.muted, t.body), body.width);
+        put(
+            buf,
+            body.x,
+            body.y,
+            &msg,
+            style(t.muted, t.body),
+            body.width,
+        );
         return;
     }
     let file_idx = app.changes.file.min(app.diffs.len() - 1);
@@ -62,13 +107,26 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
         head = head.push(format!(" −{}", f.dels()), style(t.del, t.body));
     }
     if total > 0 {
-        let st = if done == total { style(t.add, t.body) } else { style(t.muted, t.body) };
+        let st = if done == total {
+            style(t.add, t.body)
+        } else {
+            style(t.muted, t.body)
+        };
         head = head.push(format!("    ✓ {done} of {total}"), st);
     }
     head.draw(buf, body.x, body.y, body.width);
     if f.binary {
-        let size = std::fs::metadata(app.root.join(&f.path)).map(|m| m.len()).unwrap_or(0);
-        put(buf, body.x, body.y + 2, &format!("binary · {}", human(size)), style(t.modified, t.body), body.width);
+        let size = std::fs::metadata(app.root.join(&f.path))
+            .map(|m| m.len())
+            .unwrap_or(0);
+        put(
+            buf,
+            body.x,
+            body.y + 2,
+            &format!("binary · {}", human(size)),
+            style(t.modified, t.body),
+            body.width,
+        );
         return;
     }
     if f.hunks.is_empty() {
@@ -77,7 +135,14 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
             FileStatus::Deleted => "deleted",
             _ => "no text changes",
         };
-        put(buf, body.x, body.y + 2, what, style(t.muted, t.body), body.width);
+        put(
+            buf,
+            body.x,
+            body.y + 2,
+            what,
+            style(t.muted, t.body),
+            body.width,
+        );
         return;
     }
     let rows = app.change_rows(file_idx);
@@ -92,7 +157,12 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
     let sel_range = app.changes.anchor.map(|a| (a.min(cur), a.max(cur)));
     let marks = app.marks.symbols.get(&f.path);
     let _ = marks;
-    for (i, row) in rows.iter().enumerate().skip(app.changes.scroll).take(view_h) {
+    for (i, row) in rows
+        .iter()
+        .enumerate()
+        .skip(app.changes.scroll)
+        .take(view_h)
+    {
         let y = body.y + 1 + (i - app.changes.scroll) as u16;
         let is_cur = i == cur && app.changes.focus == Focus::Body;
         let in_sel = sel_range.is_some_and(|(a, b)| i >= a && i <= b);
@@ -106,7 +176,10 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
                     .bg(bg)
                     .push("@@ ", style(t.rule, bg))
                     .push(name, style(t.text2, bg))
-                    .push(format!(" · {}–{}", h.new_start, h.new_end()), style(t.muted, bg));
+                    .push(
+                        format!(" · {}–{}", h.new_start, h.new_end()),
+                        style(t.muted, bg),
+                    );
                 if reviewed {
                     line = line.push("   ✓ reviewed", style(t.add, bg));
                 }
@@ -114,7 +187,16 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
             }
             CRow::Line(hi, li) => {
                 let dl = &f.hunks[*hi].lines[*li];
-                diff_line(buf, body.x, y, body.width, dl, &t, is_cur, in_sel);
+                diff_line(
+                    buf,
+                    Rect::new(body.x, y, body.width, 1),
+                    dl,
+                    &t,
+                    RowMark {
+                        cursor: is_cur,
+                        selected: in_sel,
+                    },
+                );
             }
             CRow::Comment(ci) => {
                 let c = &app.drafts[*ci];
@@ -156,7 +238,16 @@ fn human(n: u64) -> String {
     }
 }
 
-pub fn diff_line(buf: &mut Buffer, x: u16, y: u16, w: u16, dl: &DiffLine, t: &Theme, cursor: bool, selected: bool) {
+/// How a diff row is highlighted.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RowMark {
+    pub cursor: bool,
+    pub selected: bool,
+}
+
+pub fn diff_line(buf: &mut Buffer, at: Rect, dl: &DiffLine, t: &Theme, mark: RowMark) {
+    let (x, y, w) = (at.x, at.y, at.width);
+    let RowMark { cursor, selected } = mark;
     let (sign, band, sign_color, text_color): (&str, Color, Color, Color) = match dl.kind {
         LineKind::Add => ("+", t.add_bg, t.add, t.text),
         LineKind::Del => ("−", t.del_bg, t.del, t.text),
@@ -169,7 +260,11 @@ pub fn diff_line(buf: &mut Buffer, x: u16, y: u16, w: u16, dl: &DiffLine, t: &Th
     } else {
         band
     };
-    let no = dl.new_no.or(dl.old_no).map(|n| n.to_string()).unwrap_or_default();
+    let no = dl
+        .new_no
+        .or(dl.old_no)
+        .map(|n| n.to_string())
+        .unwrap_or_default();
     let marker = if cursor { "›" } else { " " };
     let st = |c: Color| -> Style { style(c, bg) };
     let text = util::sanitize_line(&dl.text);
@@ -179,7 +274,14 @@ pub fn diff_line(buf: &mut Buffer, x: u16, y: u16, w: u16, dl: &DiffLine, t: &Th
         .push(format!("{no:>4}"), st(t.muted))
         .push(sign, st(sign_color))
         .push(" ", st(text_color))
-        .push(text, if cursor { bold(st(text_color)) } else { st(text_color) })
+        .push(
+            text,
+            if cursor {
+                bold(st(text_color))
+            } else {
+                st(text_color)
+            },
+        )
         .draw(buf, x, y, w);
 }
 
@@ -193,11 +295,25 @@ fn rail(buf: &mut Buffer, area: Rect, app: &App) {
         r.section("agents");
         for a in &app.agents {
             let bg = t.rail;
-            let (dot, c) = if a.working { ("● ", t.add) } else { ("○ ", t.muted) };
+            let (dot, c) = if a.working {
+                ("● ", t.add)
+            } else {
+                ("○ ", t.muted)
+            };
             let mut line = Line::new()
                 .push(dot, style(c, bg))
-                .push(util::pad(&a.label, 14), if a.selected { bold(style(t.text, bg)) } else { style(t.text2, bg) })
-                .push(format!(" {}", util::plural(a.files, "file", "files")), style(t.muted, bg));
+                .push(
+                    util::pad(&a.label, 14),
+                    if a.selected {
+                        bold(style(t.text, bg))
+                    } else {
+                        style(t.text2, bg)
+                    },
+                )
+                .push(
+                    format!(" {}", util::plural(a.files, "file", "files")),
+                    style(t.muted, bg),
+                );
             if a.adds > 0 {
                 line = line.push(format!(" +{}", a.adds), style(t.add, bg));
             }
@@ -208,19 +324,36 @@ fn rail(buf: &mut Buffer, area: Rect, app: &App) {
         }
         r.blank();
     }
-    let noun = if app.scope_info.noun.is_empty() { "changes".to_string() } else { app.scope_info.noun.clone() };
-    r.section(&format!("{noun} · {}", util::plural(app.diffs.len(), "file", "files")));
+    let noun = if app.scope_info.noun.is_empty() {
+        "changes".to_string()
+    } else {
+        app.scope_info.noun.clone()
+    };
+    r.section(&format!(
+        "{noun} · {}",
+        util::plural(app.diffs.len(), "file", "files")
+    ));
     // Files grouped by folder.
     let mut groups: BTreeMap<String, Vec<usize>> = BTreeMap::new();
     for (i, f) in app.diffs.iter().enumerate() {
-        groups.entry(parent_dir(&f.path).to_string()).or_default().push(i);
+        groups
+            .entry(parent_dir(&f.path).to_string())
+            .or_default()
+            .push(i);
     }
     let footer = 2 + if app.drafts.is_empty() { 0 } else { 2 };
     'outer: for (dir, idxs) in &groups {
         if r.room() <= footer {
             break;
         }
-        r.line(Line::new().push(if dir.is_empty() { "./".to_string() } else { format!("{dir}/") }, style(t.text2, t.rail)));
+        r.line(Line::new().push(
+            if dir.is_empty() {
+                "./".to_string()
+            } else {
+                format!("{dir}/")
+            },
+            style(t.text2, t.rail),
+        ));
         for &i in idxs {
             if r.room() <= footer {
                 r.line(Line::new().push("…", style(t.muted, t.rail)));
@@ -241,7 +374,14 @@ fn rail(buf: &mut Buffer, area: Rect, app: &App) {
             let mut line = Line::new()
                 .bg(bg)
                 .push(format!("{letter} "), style(lc, bg))
-                .push(util::pad(name, 20), if sel { bold(style(t.text, bg)) } else { style(t.text, bg) });
+                .push(
+                    util::pad(name, 20),
+                    if sel {
+                        bold(style(t.text, bg))
+                    } else {
+                        style(t.text, bg)
+                    },
+                );
             if f.binary {
                 line = line.push(" bin", style(t.modified, bg));
             } else {
@@ -263,11 +403,18 @@ fn rail(buf: &mut Buffer, area: Rect, app: &App) {
         r.line(
             Line::new()
                 .push("draft  ", bold(style(t.text2, t.rail)))
-                .push(util::plural(app.drafts.len(), "comment", "comments"), style(t.renamed, t.rail))
+                .push(
+                    util::plural(app.drafts.len(), "comment", "comments"),
+                    style(t.renamed, t.rail),
+                )
                 .push(" · P sends", style(t.muted, t.rail)),
         );
     }
-    let scope = app.scope_info.fallback_note.clone().unwrap_or_else(|| app.scope_info.rail.clone());
+    let scope = app
+        .scope_info
+        .fallback_note
+        .clone()
+        .unwrap_or_else(|| app.scope_info.rail.clone());
     r.footer(
         Line::new()
             .push("scope  ", bold(style(t.text2, t.rail)))
@@ -276,7 +423,13 @@ fn rail(buf: &mut Buffer, area: Rect, app: &App) {
 }
 
 /// All files of a diff as rows (History's commit diff).
-pub fn render_diff_list(buf: &mut Buffer, area: Rect, files: &[FileDiff], scroll: usize, t: &Theme) -> usize {
+pub fn render_diff_list(
+    buf: &mut Buffer,
+    area: Rect,
+    files: &[FileDiff],
+    scroll: usize,
+    t: &Theme,
+) -> usize {
     let mut rows: Vec<Line> = Vec::new();
     for f in files {
         let mut head = Line::new().push(f.path.clone(), bold(style(t.text, t.body)));
@@ -293,11 +446,17 @@ pub fn render_diff_list(buf: &mut Buffer, area: Rect, files: &[FileDiff], scroll
         for h in &f.hunks {
             let mut head = Line::new().push("@@ ", style(t.rule, t.body));
             if h.section.is_empty() {
-                head = head.push(format!("lines {}–{}", h.new_start, h.new_end()), style(t.muted, t.body));
+                head = head.push(
+                    format!("lines {}–{}", h.new_start, h.new_end()),
+                    style(t.muted, t.body),
+                );
             } else {
                 head = head
                     .push(util::truncate(&h.section, 50), style(t.text2, t.body))
-                    .push(format!(" · {}–{}", h.new_start, h.new_end()), style(t.muted, t.body));
+                    .push(
+                        format!(" · {}–{}", h.new_start, h.new_end()),
+                        style(t.muted, t.body),
+                    );
             }
             rows.push(head);
             for dl in &h.lines {
@@ -306,7 +465,11 @@ pub fn render_diff_list(buf: &mut Buffer, area: Rect, files: &[FileDiff], scroll
                     LineKind::Del => ("−", t.del_bg, t.del, t.text),
                     LineKind::Context => (" ", t.body, t.muted, t.text2),
                 };
-                let no = dl.new_no.or(dl.old_no).map(|n| n.to_string()).unwrap_or_default();
+                let no = dl
+                    .new_no
+                    .or(dl.old_no)
+                    .map(|n| n.to_string())
+                    .unwrap_or_default();
                 rows.push(
                     Line::new()
                         .bg(bg)
@@ -320,7 +483,12 @@ pub fn render_diff_list(buf: &mut Buffer, area: Rect, files: &[FileDiff], scroll
         rows.push(Line::new());
     }
     let total = rows.len();
-    for (i, line) in rows.iter().skip(scroll).take(area.height as usize).enumerate() {
+    for (i, line) in rows
+        .iter()
+        .skip(scroll)
+        .take(area.height as usize)
+        .enumerate()
+    {
         line.draw(buf, area.x, area.y + i as u16, area.width);
     }
     total

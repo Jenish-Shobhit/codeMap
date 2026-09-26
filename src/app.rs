@@ -160,14 +160,17 @@ pub struct WorktreeRow {
     pub current: bool,
 }
 
+/// What repository discovery found.
+pub struct RepoLoad {
+    pub root: PathBuf,
+    pub repo: Result<RepoInfo, Option<String>>,
+    pub files: Vec<String>,
+    pub truncated: bool,
+    pub agent: Option<AgentInfo>,
+}
+
 pub enum Msg {
-    Repo {
-        root: PathBuf,
-        repo: Result<RepoInfo, Option<String>>,
-        files: Vec<String>,
-        truncated: bool,
-        agent: Option<AgentInfo>,
-    },
+    Repo(Box<RepoLoad>),
     Parsed(Vec<(String, FileSymbols, (SystemTime, u64))>, bool),
     Changes(Box<ChangeSet>),
     History {
@@ -429,7 +432,12 @@ impl App {
     pub fn load_blocking(&mut self) {
         self.sync = true;
         let (tx, rx) = mpsc::channel();
-        load_repo(&tx, self.root.clone(), self.client.clone(), self.agent.clone());
+        load_repo(
+            &tx,
+            self.root.clone(),
+            self.client.clone(),
+            self.agent.clone(),
+        );
         drop(tx);
         let msgs: Vec<Msg> = rx.into_iter().collect();
         for m in msgs {
@@ -472,13 +480,14 @@ impl App {
 
     pub fn apply(&mut self, msg: Msg) {
         match msg {
-            Msg::Repo {
-                root,
-                repo,
-                files,
-                truncated,
-                agent,
-            } => {
+            Msg::Repo(load) => {
+                let RepoLoad {
+                    root,
+                    repo,
+                    files,
+                    truncated,
+                    agent,
+                } = *load;
                 self.root = root.clone();
                 self.repo_known = true;
                 match repo {
@@ -610,7 +619,12 @@ impl App {
             .count();
         let code_subs: Vec<&(String, usize)> = subs
             .iter()
-            .filter(|(d, _)| self.index.files.iter().any(|f| in_dir(f, d) && Lang::from_path(f).is_some()))
+            .filter(|(d, _)| {
+                self.index
+                    .files
+                    .iter()
+                    .any(|f| in_dir(f, d) && Lang::from_path(f).is_some())
+            })
             .collect();
         if code_subs.len() == 1 && root_code == 0 {
             return code_subs[0].0.clone();
@@ -629,7 +643,10 @@ impl App {
                 Some(Level::Dir(d)) => d.clone(),
                 _ => String::new(),
             };
-            sources.into_iter().filter(|f| parent_dir(f) == dir).collect()
+            sources
+                .into_iter()
+                .filter(|f| parent_dir(f) == dir)
+                .collect()
         };
         self.request_parse(targets);
     }
@@ -715,7 +732,9 @@ impl App {
     }
 
     pub fn request_commit_diff(&mut self, sha: String) {
-        let Some(repo) = self.repo.clone() else { return };
+        let Some(repo) = self.repo.clone() else {
+            return;
+        };
         self.history.loading_detail = true;
         self.spawn(move |tx| {
             let r = git::show_commit(&repo.root, &sha).map_err(|e| e.0);
@@ -815,12 +834,20 @@ impl App {
                 }
             }
         }
-        let mut scene = map::build(&self.index, &self.marks, &level, self.map.page, width.max(40));
+        let mut scene = map::build(
+            &self.index,
+            &self.marks,
+            &level,
+            self.map.page,
+            width.max(40),
+        );
         self.map.page = scene.page;
         let mut cursor = Cursor::default();
         if let Some(sel) = self.map.pending_select.take() {
             let find = |scene: &Scene| match &sel {
-                Select::Path(p) => map::node_for_path(scene, p).map(|n| Cursor { node: n, row: None }),
+                Select::Path(p) => {
+                    map::node_for_path(scene, p).map(|n| Cursor { node: n, row: None })
+                }
                 Select::Symbol(f, i) => map::node_for_symbol(scene, f, *i),
             };
             let mut found = find(&scene);
@@ -839,7 +866,9 @@ impl App {
             if let Some(c) = found {
                 cursor = c;
             }
-        } else if self.map.scene.as_ref().is_some_and(|s| s.level == level) && self.map.built_page == self.map.page {
+        } else if self.map.scene.as_ref().is_some_and(|s| s.level == level)
+            && self.map.built_page == self.map.page
+        {
             cursor = self.map.cursor;
         } else if let Some(first_changed) = scene.nodes.iter().position(|n| n.mark.is_some()) {
             cursor.node = first_changed;
@@ -848,7 +877,11 @@ impl App {
             cursor = Cursor::default();
         }
         if let Some(r) = cursor.row {
-            if scene.nodes.get(cursor.node).is_none_or(|n| r >= n.rows.len()) {
+            if scene
+                .nodes
+                .get(cursor.node)
+                .is_none_or(|n| r >= n.rows.len())
+            {
                 cursor.row = None;
             }
         }
@@ -860,10 +893,12 @@ impl App {
     }
 
     pub fn map_canvas(&self) -> Option<Canvas> {
-        self.map
-            .scene
-            .as_ref()
-            .map(|s| map::draw(s, (self.map.focus == Focus::Body).then_some(self.map.cursor)))
+        self.map.scene.as_ref().map(|s| {
+            map::draw(
+                s,
+                (self.map.focus == Focus::Body).then_some(self.map.cursor),
+            )
+        })
     }
 
     /// The function the cursor is on (for Flow and the hint line).
@@ -898,7 +933,9 @@ impl App {
     /// j/k: rows inside the selected box, then the next box in reading order.
     pub fn map_row(&mut self, delta: i32) {
         let Some(scene) = &self.map.scene else { return };
-        let Some(node) = scene.nodes.get(self.map.cursor.node) else { return };
+        let Some(node) = scene.nodes.get(self.map.cursor.node) else {
+            return;
+        };
         let selectable: Vec<usize> = node
             .rows
             .iter()
@@ -925,8 +962,17 @@ impl App {
                 // leave the box: next/previous node in reading order
                 let mut order: Vec<usize> = (0..scene.nodes.len()).collect();
                 order.sort_by_key(|&i| (scene.layout.nodes[i].y, scene.layout.nodes[i].x));
-                let at = order.iter().position(|&i| i == self.map.cursor.node).unwrap_or(0);
-                let target = if delta > 0 { order.get(at + 1) } else if at > 0 { order.get(at - 1) } else { None };
+                let at = order
+                    .iter()
+                    .position(|&i| i == self.map.cursor.node)
+                    .unwrap_or(0);
+                let target = if delta > 0 {
+                    order.get(at + 1)
+                } else if at > 0 {
+                    order.get(at - 1)
+                } else {
+                    None
+                };
                 if let Some(&t) = target {
                     let rows = &scene.nodes[t].rows;
                     let row = if delta < 0 {
@@ -942,7 +988,9 @@ impl App {
 
     pub fn map_enter(&mut self) {
         let Some(scene) = &self.map.scene else { return };
-        let Some(node) = scene.nodes.get(self.map.cursor.node).cloned() else { return };
+        let Some(node) = scene.nodes.get(self.map.cursor.node).cloned() else {
+            return;
+        };
         let row_sym = self
             .map
             .cursor
@@ -956,14 +1004,23 @@ impl App {
                 if Lang::from_path(f).is_some() {
                     self.zoom_to(Level::File(f.clone()), sel);
                 } else {
-                    self.message = Some(format!("no grammar for {} · codeMorph reads {}", f, lang::supported_extensions()));
+                    self.message = Some(format!(
+                        "no grammar for {} · codeMorph reads {}",
+                        f,
+                        lang::supported_extensions()
+                    ));
                 }
             }
             NodeKind::External(f) => self.zoom_to(Level::File(f.clone()), None),
             NodeKind::Symbol { file, idx } => {
                 let target = match row_sym {
                     Some((f, i)) => Some(SymId { file: f, idx: i }),
-                    None => self.current_function().or_else(|| Some(SymId { file: file.clone(), idx: *idx })),
+                    None => self.current_function().or_else(|| {
+                        Some(SymId {
+                            file: file.clone(),
+                            idx: *idx,
+                        })
+                    }),
                 };
                 if let Some(t) = target {
                     self.open_flow(t);
@@ -1006,8 +1063,14 @@ impl App {
     /// Jump the map to a symbol or file (search, rail lists).
     pub fn reveal(&mut self, file: &str, sym: Option<usize>) {
         match sym {
-            Some(i) => self.zoom_to(Level::File(file.to_string()), Some(Select::Symbol(file.to_string(), i))),
-            None => self.zoom_to(Level::Dir(parent_dir(file).to_string()), Some(Select::Path(file.to_string()))),
+            Some(i) => self.zoom_to(
+                Level::File(file.to_string()),
+                Some(Select::Symbol(file.to_string(), i)),
+            ),
+            None => self.zoom_to(
+                Level::Dir(parent_dir(file).to_string()),
+                Some(Select::Path(file.to_string())),
+            ),
         }
     }
 
@@ -1040,7 +1103,9 @@ impl App {
             return;
         }
         if self.flow.target.is_none() {
-            self.flow.target = self.current_function().or_else(|| self.first_changed_function());
+            self.flow.target = self
+                .current_function()
+                .or_else(|| self.first_changed_function());
         }
         self.flow.dirty = false;
         self.flow.error = None;
@@ -1120,7 +1185,9 @@ impl App {
     /// Move to the nearest box sideways (branches).
     pub fn flow_side(&mut self, dir: i32) {
         let Some(l) = &self.flow.layout else { return };
-        let Some(cur) = l.boxes.get(self.flow.selected) else { return };
+        let Some(cur) = l.boxes.get(self.flow.selected) else {
+            return;
+        };
         let cy = cur.y + cur.h / 2;
         let cx = cur.x + cur.w / 2;
         let best = l
@@ -1129,7 +1196,11 @@ impl App {
             .enumerate()
             .filter(|(_, b)| {
                 let bx = b.x + b.w / 2;
-                if dir > 0 { bx > cx + cur.w / 2 } else { bx + cur.w / 2 < cx }
+                if dir > 0 {
+                    bx > cx + cur.w / 2
+                } else {
+                    bx + cur.w / 2 < cx
+                }
             })
             .min_by_key(|(_, b)| {
                 let by = b.y + b.h / 2;
@@ -1147,7 +1218,9 @@ impl App {
         let (Some(t), Some(l)) = (&self.flow.target, &self.flow.layout) else {
             return Vec::new();
         };
-        let Some(b) = l.boxes.get(self.flow.selected) else { return Vec::new() };
+        let Some(b) = l.boxes.get(self.flow.selected) else {
+            return Vec::new();
+        };
         let lines: BTreeSet<u32> = b.lines.iter().map(|x| x.line).collect();
         let mut out = Vec::new();
         for c in self.index.calls_from(&t.file, t.idx) {
@@ -1173,8 +1246,12 @@ impl App {
 
     /// Functions listed in the Flow rail: those of the target's file.
     pub fn flow_rail_functions(&self) -> Vec<(usize, String)> {
-        let Some(t) = &self.flow.target else { return Vec::new() };
-        let Some(fs) = self.index.symbols(&t.file) else { return Vec::new() };
+        let Some(t) = &self.flow.target else {
+            return Vec::new();
+        };
+        let Some(fs) = self.index.symbols(&t.file) else {
+            return Vec::new();
+        };
         fs.symbols
             .iter()
             .enumerate()
@@ -1186,7 +1263,9 @@ impl App {
     // ---- changes ------------------------------------------------------------
 
     pub fn change_rows(&self, file: usize) -> Vec<CRow> {
-        let Some(f) = self.diffs.get(file) else { return Vec::new() };
+        let Some(f) = self.diffs.get(file) else {
+            return Vec::new();
+        };
         let mut rows = Vec::new();
         for (hi, h) in f.hunks.iter().enumerate() {
             rows.push(CRow::Hunk(hi));
@@ -1271,8 +1350,12 @@ impl App {
     }
 
     pub fn toggle_reviewed(&mut self) {
-        let Some(f) = self.diffs.get(self.changes.file) else { return };
-        let Some(hi) = self.hunk_at_row(self.changes.row) else { return };
+        let Some(f) = self.diffs.get(self.changes.file) else {
+            return;
+        };
+        let Some(hi) = self.hunk_at_row(self.changes.row) else {
+            return;
+        };
         let hash = f.hunks[hi].hash();
         let path = f.path.clone();
         let now = self.reviews.toggle(&path, &hash);
@@ -1284,7 +1367,9 @@ impl App {
     }
 
     pub fn reviewed_count(&self, file: usize) -> (usize, usize) {
-        let Some(f) = self.diffs.get(file) else { return (0, 0) };
+        let Some(f) = self.diffs.get(file) else {
+            return (0, 0);
+        };
         let done = f
             .hunks
             .iter()
@@ -1327,10 +1412,14 @@ impl App {
     }
 
     pub fn start_comment(&mut self) {
-        let Some(f) = self.diffs.get(self.changes.file) else { return };
+        let Some(f) = self.diffs.get(self.changes.file) else {
+            return;
+        };
         let path = f.path.clone();
         let anchor = self.changes.anchor.unwrap_or(self.changes.row);
-        let Some((start, end, hunk)) = self.line_range(anchor, self.changes.row) else { return };
+        let Some((start, end, hunk)) = self.line_range(anchor, self.changes.row) else {
+            return;
+        };
         self.input = Some(Input {
             kind: InputKind::Comment {
                 path,
@@ -1400,9 +1489,10 @@ impl App {
             Err(e) if e.code == "agent_blocked" => {
                 Err("agent is waiting on a question · P pastes instead".into())
             }
-            Err(e) if e.code == "agent_not_ready" || e.code == "agent_not_found" => {
-                Err(format!("the agent is not ready ({}) · P pastes instead", e.code))
-            }
+            Err(e) if e.code == "agent_not_ready" || e.code == "agent_not_found" => Err(format!(
+                "the agent is not ready ({}) · P pastes instead",
+                e.code
+            )),
             Err(e) => Err(format!("send failed: {e}")),
         }
     }
@@ -1445,7 +1535,9 @@ impl App {
             }
             View::Changes => {
                 let f = self.diffs.get(self.changes.file)?;
-                let (start, _, _) = self.line_range(self.changes.row, self.changes.row).unwrap_or((1, 1, String::new()));
+                let (start, _, _) = self
+                    .line_range(self.changes.row, self.changes.row)
+                    .unwrap_or((1, 1, String::new()));
                 Some((f.path.clone(), start))
             }
             View::History => None,
@@ -1469,7 +1561,11 @@ impl App {
             }) => text.clone(),
             _ => return,
         };
-        self.search_hits = if q.is_empty() { Vec::new() } else { self.index.search(&q, 40) };
+        self.search_hits = if q.is_empty() {
+            Vec::new()
+        } else {
+            self.index.search(&q, 40)
+        };
         self.search_sel = 0;
     }
 
@@ -1497,7 +1593,9 @@ impl App {
 
     /// History ⏎: show the selected commit's diff.
     pub fn history_open(&mut self) {
-        let Some(c) = self.history.commits.get(self.history.sel) else { return };
+        let Some(c) = self.history.commits.get(self.history.sel) else {
+            return;
+        };
         let sha = c.sha.clone();
         self.history.show_diff = true;
         self.history.diff_scroll = 0;
@@ -1559,7 +1657,10 @@ fn parse_file(root: &std::path::Path, f: &str) -> Option<(String, FileSymbols, (
     let lang = Lang::from_path(f)?;
     let path = root.join(f);
     let meta = std::fs::metadata(&path).ok()?;
-    let stamp = (meta.modified().unwrap_or(SystemTime::UNIX_EPOCH), meta.len());
+    let stamp = (
+        meta.modified().unwrap_or(SystemTime::UNIX_EPOCH),
+        meta.len(),
+    );
     let syms = if meta.len() > crate::index::MAX_PARSE_BYTES {
         FileSymbols {
             lang,
@@ -1592,9 +1693,15 @@ fn load_repo(tx: &Sender<Msg>, root: PathBuf, client: Option<Client>, agent: Opt
                 if let Some(cwd) = cwd.filter(|p| p.is_dir()) {
                     root = cwd;
                 }
-                a.terminal_id = pane.get("terminal_id").and_then(Value::as_str).map(str::to_string);
+                a.terminal_id = pane
+                    .get("terminal_id")
+                    .and_then(Value::as_str)
+                    .map(str::to_string);
                 if a.agent.is_none() {
-                    a.agent = pane.get("agent").and_then(Value::as_str).map(str::to_string);
+                    a.agent = pane
+                        .get("agent")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
                 }
                 if let Some(s) = pane.get("agent_status").and_then(Value::as_str) {
                     a.status = Some(s.to_string());
@@ -1619,13 +1726,13 @@ fn load_repo(tx: &Sender<Msg>, root: PathBuf, client: Option<Client>, agent: Opt
             (Err(e.map(|e| e.0)), root, files, truncated)
         }
     };
-    let _ = tx.send(Msg::Repo {
+    let _ = tx.send(Msg::Repo(Box::new(RepoLoad {
         root,
         repo,
         files,
         truncated,
         agent,
-    });
+    })));
 }
 
 /// Diff for a scope, plus the base versions' symbol names for A/M marks.
@@ -1646,7 +1753,11 @@ pub fn compute_changes(
     let chosen: Option<&PaneState> = wanted
         .as_ref()
         .and_then(|k| panes.iter().find(|p| &p.pane_key == k))
-        .or_else(|| focused_key.as_ref().and_then(|k| panes.iter().find(|p| &p.pane_key == k)))
+        .or_else(|| {
+            focused_key
+                .as_ref()
+                .and_then(|k| panes.iter().find(|p| &p.pane_key == k))
+        })
         .or_else(|| {
             // Standalone: the agent that worked here most recently.
             if agent.is_none_or(|a| a.pane_id.is_none()) {
@@ -1667,15 +1778,31 @@ pub fn compute_changes(
     // Agents strip: each agent's last turn in this repo.
     let mut agents = Vec::new();
     for p in panes.iter().take(6) {
-        let Some(t) = p.last_turn(&repo.root) else { continue };
-        let (Some(start), end) = (&t.start, &t.end) else { continue };
-        let target = if t.open { now(&shadow) } else { end.as_ref().map(|e| e.tree.clone()) };
+        let Some(t) = p.last_turn(&repo.root) else {
+            continue;
+        };
+        let (Some(start), end) = (&t.start, &t.end) else {
+            continue;
+        };
+        let target = if t.open {
+            now(&shadow)
+        } else {
+            end.as_ref().map(|e| e.tree.clone())
+        };
         let (files, adds, dels) = match target.and_then(|to| shadow.diff(&start.tree, &to).ok()) {
-            Some(d) => (d.len(), d.iter().map(FileDiff::adds).sum(), d.iter().map(FileDiff::dels).sum()),
+            Some(d) => (
+                d.len(),
+                d.iter().map(FileDiff::adds).sum(),
+                d.iter().map(FileDiff::dels).sum(),
+            ),
             None => (0, 0, 0),
         };
         let label = p.agent.clone().unwrap_or_else(|| "agent".into());
-        let label = if p.pane_id.is_empty() { label } else { format!("{label} {}", p.pane_id) };
+        let label = if p.pane_id.is_empty() {
+            label
+        } else {
+            format!("{label} {}", p.pane_id)
+        };
         agents.push(AgentRow {
             pane_key: p.pane_key.clone(),
             label,
@@ -1692,7 +1819,11 @@ pub fn compute_changes(
         Scope::Turn | Scope::Session => {
             let turn_pair = chosen.and_then(|p| {
                 let last = p.last_turn(&repo.root)?;
-                let first = if *scope == Scope::Session { p.first_turn(&repo.root)? } else { last };
+                let first = if *scope == Scope::Session {
+                    p.first_turn(&repo.root)?
+                } else {
+                    last
+                };
                 let start = first.start.clone()?;
                 Some((p, first.clone(), last.clone(), start))
             });
@@ -1701,13 +1832,21 @@ pub fn compute_changes(
                     let (to, to_label) = if last.open {
                         (now(&shadow), None)
                     } else {
-                        (last.end.as_ref().map(|e| e.tree.clone()), last.end.as_ref().map(|e| e.at))
+                        (
+                            last.end.as_ref().map(|e| e.tree.clone()),
+                            last.end.as_ref().map(|e| e.at),
+                        )
                     };
                     let when = to_label.unwrap_or(start.at);
                     info.turn_n = Some(last.n);
                     info.open = last.open;
-                    info.header = format!("turn {} · {}", last.n, util::ago(when, util::now_unix()));
-                    info.noun = if *scope == Scope::Session { "this session".into() } else { "this turn".into() };
+                    info.header =
+                        format!("turn {} · {}", last.n, util::ago(when, util::now_unix()));
+                    info.noun = if *scope == Scope::Session {
+                        "this session".into()
+                    } else {
+                        "this turn".into()
+                    };
                     info.rail = if *scope == Scope::Session {
                         format!("session · turns {}–{}", first.n, last.n)
                     } else if last.open {
@@ -1746,7 +1885,11 @@ pub fn compute_changes(
     // Symbol names of the base version of each changed source file.
     let mut old_quals = BTreeMap::new();
     if let (Ok(d), Some(base)) = (&diffs, &base) {
-        for f in d.iter().filter(|f| matches!(f.status, FileStatus::Modified | FileStatus::Renamed)).take(200) {
+        for f in d
+            .iter()
+            .filter(|f| matches!(f.status, FileStatus::Modified | FileStatus::Renamed))
+            .take(200)
+        {
             let path = f.old_path.as_deref().unwrap_or(&f.path);
             if Lang::from_path(path).is_none() {
                 continue;

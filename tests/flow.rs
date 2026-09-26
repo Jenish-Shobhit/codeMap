@@ -138,7 +138,11 @@ fn typescript_and_go_constructs() {
     let ts = "function f(x: number) {\n  if (x > 1) { return 1; } else { g(); }\n  for (const i of xs) { if (!i) continue; h(i); }\n  try { k(); } catch (e) { throw e; }\n  switch (x) { case 1: a(); break; default: b(); }\n  return 0;\n}\n";
     let c = chart(Lang::TypeScript, ts, "f");
     let s = c.stats();
-    assert_eq!((s["if"], s["loop"], s["try"], s["switch"]), (2, 1, 1, 1), "{s:?}");
+    assert_eq!(
+        (s["if"], s["loop"], s["try"], s["switch"]),
+        (2, 1, 1, 1),
+        "{s:?}"
+    );
     assert_eq!(s["raise"], 1);
     assert!(flow::layout(&c).overlaps().is_empty());
 
@@ -157,7 +161,13 @@ fn early_return_ends_the_path() {
     let c = chart(Lang::Python, src, "g");
     match &c.body[0] {
         Flow::If { yes, no, .. } => {
-            assert!(matches!(yes[0], Flow::End { kind: EndKind::Return, .. }));
+            assert!(matches!(
+                yes[0],
+                Flow::End {
+                    kind: EndKind::Return,
+                    ..
+                }
+            ));
             assert!(no.is_empty());
         }
         other => panic!("{other:?}"),
@@ -200,7 +210,12 @@ fn every_panemorph_function_lays_out_cleanly() {
         for s in fs.symbols.iter().filter(|s| s.kind.is_callable()) {
             let c = flow::build(Lang::Python, &src, s).unwrap_or_else(|| panic!("{f}:{}", s.name));
             let l = flow::layout(&c);
-            assert!(l.overlaps().is_empty(), "{f}:{} overlaps {:?}", s.name, l.overlaps());
+            assert!(
+                l.overlaps().is_empty(),
+                "{f}:{} overlaps {:?}",
+                s.name,
+                l.overlaps()
+            );
             let canvas = l.draw(&BTreeMap::new(), None);
             assert!(canvas.w > 0 && canvas.h > 0);
             charted += 1;

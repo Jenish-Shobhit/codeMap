@@ -19,7 +19,9 @@ fn panemorph_index() -> Index {
 
 fn edge_names(index: &Index, from_file: &str, from_qual: &str) -> Vec<String> {
     let syms = index.symbols(from_file).unwrap();
-    let from = syms.find(from_qual).unwrap_or_else(|| panic!("no {from_qual} in {from_file}"));
+    let from = syms
+        .find(from_qual)
+        .unwrap_or_else(|| panic!("no {from_qual} in {from_file}"));
     let mut out: Vec<String> = index
         .calls_from(from_file, from)
         .iter()
@@ -52,7 +54,12 @@ fn extracts_panemorph_symbols() {
     let cls = &service.symbols[service.find("PaneMorphService").unwrap()];
     assert_eq!(cls.kind, SymKind::Class);
     assert_eq!(cls.start_line, 10);
-    assert!(service.children(service.find("PaneMorphService").unwrap()).len() >= 15);
+    assert!(
+        service
+            .children(service.find("PaneMorphService").unwrap())
+            .len()
+            >= 15
+    );
 
     let api = index.symbols("panemorph/api.py").unwrap();
     let quals: Vec<String> = api.symbols.iter().map(|s| s.qual()).collect();
@@ -101,7 +108,11 @@ fn resolves_calls_across_files() {
     let all_targets: Vec<String> = index
         .calls
         .iter()
-        .map(|c| index.symbols(&c.to.file).unwrap().symbols[c.to.idx].name.clone())
+        .map(|c| {
+            index.symbols(&c.to.file).unwrap().symbols[c.to.idx]
+                .name
+                .clone()
+        })
         .collect();
     assert!(!all_targets.contains(&"get".to_string()));
 }
@@ -112,12 +123,22 @@ fn resolves_imports_to_files() {
     let service_imports: Vec<&String> = index.imports["panemorph/service.py"].iter().collect();
     assert_eq!(
         service_imports,
-        vec!["panemorph/api.py", "panemorph/model.py", "panemorph/topology.py"]
+        vec![
+            "panemorph/api.py",
+            "panemorph/model.py",
+            "panemorph/topology.py"
+        ]
     );
-    let selector_imports: Vec<&String> = index.imports["panemorph/actions/selector.py"].iter().collect();
+    let selector_imports: Vec<&String> = index.imports["panemorph/actions/selector.py"]
+        .iter()
+        .collect();
     assert_eq!(
         selector_imports,
-        vec!["panemorph/api.py", "panemorph/model.py", "panemorph/service.py"]
+        vec![
+            "panemorph/api.py",
+            "panemorph/model.py",
+            "panemorph/service.py"
+        ]
     );
 }
 
@@ -149,7 +170,11 @@ fn rust_crate_paths_resolve() {
         "src/git/mod.rs",
         "pub mod diff;\npub fn run() -> String { diff::parse(\"\") }\n",
     );
-    write(t.path(), "src/git/diff.rs", "pub fn parse(s: &str) -> String { s.to_string() }\n");
+    write(
+        t.path(),
+        "src/git/diff.rs",
+        "pub fn parse(s: &str) -> String { s.to_string() }\n",
+    );
     write(
         t.path(),
         "src/store.rs",
@@ -167,28 +192,48 @@ fn rust_crate_paths_resolve() {
         edge_names(&index, "src/store.rs", "Store.open"),
         vec!["mod.rs:run", "diff.rs:parse"]
     );
-    assert_eq!(edge_names(&index, "src/store.rs", "Store.close"), vec!["store.rs:Store.open"]);
-    assert_eq!(edge_names(&index, "src/git/mod.rs", "run"), vec!["diff.rs:parse"]);
+    assert_eq!(
+        edge_names(&index, "src/store.rs", "Store.close"),
+        vec!["store.rs:Store.open"]
+    );
+    assert_eq!(
+        edge_names(&index, "src/git/mod.rs", "run"),
+        vec!["diff.rs:parse"]
+    );
 }
 
 #[test]
 fn typescript_relative_imports_resolve() {
     let t = TempDir::new("ts");
-    write(t.path(), "src/api.ts", "export function request(x: number) { return x; }\n");
+    write(
+        t.path(),
+        "src/api.ts",
+        "export function request(x: number) { return x; }\n",
+    );
     write(
         t.path(),
         "src/board.ts",
         "import { request } from \"./api\";\nexport class Board { draw() { return request(1); } }\n",
     );
-    write(t.path(), "src/index.ts", "import { Board } from \"./board\";\nnew Board().draw();\n");
+    write(
+        t.path(),
+        "src/index.ts",
+        "import { Board } from \"./board\";\nnew Board().draw();\n",
+    );
     let files = git::walk_files(t.path(), 100);
     let mut index = Index::new(t.path(), files);
     index.ensure_parsed_under("", 100);
     index.resolve();
-    assert_eq!(edge_names(&index, "src/board.ts", "Board.draw"), vec!["api.ts:request"]);
+    assert_eq!(
+        edge_names(&index, "src/board.ts", "Board.draw"),
+        vec!["api.ts:request"]
+    );
     assert!(index.imports["src/index.ts"].contains("src/board.ts"));
     // module-level calls have no caller symbol but still resolve
-    assert!(index.calls.iter().any(|c| c.from_file == "src/index.ts" && c.from_sym.is_none()));
+    assert!(index
+        .calls
+        .iter()
+        .any(|c| c.from_file == "src/index.ts" && c.from_sym.is_none()));
 }
 
 #[test]
@@ -208,9 +253,16 @@ fn parse_cache_is_reused() {
     write(t.path(), "a.py", "def f():\n    pass\n");
     let mut index = Index::new(t.path(), vec!["a.py".into()]);
     assert!(index.ensure_parsed("a.py"));
-    assert!(!index.ensure_parsed("a.py"), "unchanged file must not be re-parsed");
+    assert!(
+        !index.ensure_parsed("a.py"),
+        "unchanged file must not be re-parsed"
+    );
     std::thread::sleep(std::time::Duration::from_millis(20));
-    write(t.path(), "a.py", "def f():\n    pass\n\ndef g():\n    f()\n");
+    write(
+        t.path(),
+        "a.py",
+        "def f():\n    pass\n\ndef g():\n    f()\n",
+    );
     assert!(index.ensure_parsed("a.py"));
     assert_eq!(index.symbols("a.py").unwrap().symbols.len(), 2);
 }
@@ -227,7 +279,8 @@ fn search_finds_symbols_and_files() {
 #[test]
 fn real_rust_source_parses() {
     // codeMorph's own source doubles as a Rust fixture.
-    let src = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/store.rs")).unwrap();
+    let src =
+        std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/store.rs")).unwrap();
     let fs = lang::extract(Lang::Rust, &src);
     assert!(!fs.has_errors);
     let quals: Vec<String> = fs.symbols.iter().map(|s| s.qual()).collect();

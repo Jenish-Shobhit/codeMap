@@ -189,7 +189,11 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
             layer[u] = min_succ.saturating_sub(1);
         }
     }
-    let n_layers = (0..n).filter(|&v| connected[v]).map(|v| layer[v] + 1).max().unwrap_or(0);
+    let n_layers = (0..n)
+        .filter(|&v| connected[v])
+        .map(|v| layer[v] + 1)
+        .max()
+        .unwrap_or(0);
 
     // 4. Dummy chains for long edges.
     let mut layers: Vec<Vec<Item>> = vec![Vec::new(); n_layers];
@@ -202,10 +206,10 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
     let mut chains: Vec<Vec<Item>> = Vec::with_capacity(dag.len());
     for &(u, v, _, _) in &dag {
         let mut chain = vec![Item::Node(u)];
-        for l in layer[u] + 1..layer[v] {
+        for layer_items in layers.iter_mut().take(layer[v]).skip(layer[u] + 1) {
             let d = Item::Dummy(dummies);
             dummies += 1;
-            layers[l].push(d);
+            layer_items.push(d);
             chain.push(d);
         }
         chain.push(Item::Node(v));
@@ -251,9 +255,9 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
     set_pos(&layers, &mut pos);
     let count_crossings = |layers: &Vec<Vec<Item>>, pos: &Vec<f64>| -> usize {
         let mut c = 0;
-        for l in 0..layers.len().saturating_sub(1) {
+        for items in layers.iter().take(layers.len().saturating_sub(1)) {
             let mut segs: Vec<(f64, f64)> = Vec::new();
-            for it in &layers[l] {
+            for it in items {
                 let a = key(*it);
                 for &b in &down[a] {
                     segs.push((pos[a], pos[b]));
@@ -354,7 +358,11 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
                         let c: f64 = nb
                             .iter()
                             .map(|&m| {
-                                let it2 = if m < n { Item::Node(m) } else { Item::Dummy(m - n) };
+                                let it2 = if m < n {
+                                    Item::Node(m)
+                                } else {
+                                    Item::Dummy(m - n)
+                                };
                                 center(&x, it2)
                             })
                             .sum::<f64>()
@@ -393,7 +401,10 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
             }
         }
     }
-    let min_x = (0..total).filter(|&k| k >= n || connected[k]).map(|k| x[k]).fold(f64::INFINITY, f64::min);
+    let min_x = (0..total)
+        .filter(|&k| k >= n || connected[k])
+        .map(|k| x[k])
+        .fold(f64::INFINITY, f64::min);
     let shift = if min_x.is_finite() { -min_x } else { 0.0 };
     let xi: Vec<usize> = x.iter().map(|v| (v + shift).max(0.0) as usize).collect();
 
@@ -404,7 +415,10 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
         for pair in chain.windows(2) {
             let l = match pair[0] {
                 Item::Node(v) => layer[v],
-                Item::Dummy(d) => layers.iter().position(|ls| ls.contains(&Item::Dummy(d))).unwrap_or(0),
+                Item::Dummy(d) => layers
+                    .iter()
+                    .position(|ls| ls.contains(&Item::Dummy(d)))
+                    .unwrap_or(0),
             };
             seg_by_channel[l].push((ei, pair[0], pair[1]));
         }
@@ -440,10 +454,26 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
         for segs in &seg_by_channel {
             for &(ei, a, b) in segs {
                 if a == Item::Node(v) {
-                    outs.push((ei, item_x(b) + if let Item::Node(t) = b { nodes[t].w / 2 } else { 0 }));
+                    outs.push((
+                        ei,
+                        item_x(b)
+                            + if let Item::Node(t) = b {
+                                nodes[t].w / 2
+                            } else {
+                                0
+                            },
+                    ));
                 }
                 if b == Item::Node(v) {
-                    ins.push((ei, item_x(a) + if let Item::Node(s) = a { nodes[s].w / 2 } else { 0 }));
+                    ins.push((
+                        ei,
+                        item_x(a)
+                            + if let Item::Node(s) = a {
+                                nodes[s].w / 2
+                            } else {
+                                0
+                            },
+                    ));
                 }
             }
         }
@@ -592,7 +622,11 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
     }
 
     // 10. Unconnected nodes in a grid below.
-    let mut max_right = (0..n).filter(|&v| connected[v]).map(|v| out.nodes[v].right()).max().unwrap_or(0);
+    let mut max_right = (0..n)
+        .filter(|&v| connected[v])
+        .map(|v| out.nodes[v].right())
+        .max()
+        .unwrap_or(0);
     for r in &out.routes {
         for p in &r.points {
             max_right = max_right.max(p.0 + 1);
@@ -600,7 +634,11 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
     }
     let wrap = opts.max_width.max(max_right).max(20);
     let mut gx = 0usize;
-    let mut gy = if layered_height > 0 { layered_height + 2 } else { 0 };
+    let mut gy = if layered_height > 0 {
+        layered_height + 2
+    } else {
+        0
+    };
     let mut row_h = 0usize;
     for v in 0..n {
         if connected[v] {
@@ -621,7 +659,13 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
         gx += w + gap;
         row_h = row_h.max(nodes[v].h);
     }
-    out.width = out.nodes.iter().map(Rect::right).max().unwrap_or(0).max(max_right);
+    out.width = out
+        .nodes
+        .iter()
+        .map(Rect::right)
+        .max()
+        .unwrap_or(0)
+        .max(max_right);
     out.height = out.nodes.iter().map(Rect::bottom).max().unwrap_or(0);
     for r in &out.routes {
         for p in &r.points {
@@ -703,13 +747,21 @@ pub fn neighbor(layout: &Layout, from: usize, dx: i32, dy: i32) -> Option<usize>
         let primary = ddx * dx as i64 + ddy * dy as i64;
         if dy != 0 {
             // must be in another row in that direction
-            let beyond = if dy > 0 { b.y as i64 >= a.bottom() as i64 } else { (b.bottom() as i64) <= a.y as i64 };
+            let beyond = if dy > 0 {
+                b.y as i64 >= a.bottom() as i64
+            } else {
+                (b.bottom() as i64) <= a.y as i64
+            };
             if !beyond {
                 continue;
             }
         } else {
             let overlap_rows = (b.y as i64) < a.bottom() as i64 && (a.y as i64) < b.bottom() as i64;
-            let beyond = if dx > 0 { b.x as i64 >= a.right() as i64 } else { (b.right() as i64) <= a.x as i64 };
+            let beyond = if dx > 0 {
+                b.x as i64 >= a.right() as i64
+            } else {
+                (b.right() as i64) <= a.x as i64
+            };
             if !beyond || !overlap_rows {
                 continue;
             }
@@ -774,13 +826,24 @@ mod tests {
         ];
         let l = layout(&ns, &es, &Options::default());
         assert!(l.overlaps().is_empty(), "{:?}", l.overlaps());
-        assert!(l.route_collisions().is_empty(), "{:?}", l.route_collisions());
+        assert!(
+            l.route_collisions().is_empty(),
+            "{:?}",
+            l.route_collisions()
+        );
     }
 
     #[test]
     fn isolated_nodes_wrap_in_a_grid() {
         let ns = nodes(&[(30, 3); 6]);
-        let l = layout(&ns, &[], &Options { max_width: 70, ..Default::default() });
+        let l = layout(
+            &ns,
+            &[],
+            &Options {
+                max_width: 70,
+                ..Default::default()
+            },
+        );
         assert!(l.overlaps().is_empty());
         assert!(l.width <= 70);
         assert!(l.height >= 9);

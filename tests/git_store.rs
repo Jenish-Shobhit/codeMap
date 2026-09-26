@@ -49,13 +49,21 @@ fn turn_diff_shows_only_the_turn() {
 
     let start = shadow.snapshot("turn 1 start").unwrap();
     // The agent's turn: edit app.py, add new.py.
-    write(repo.path(), "app.py", "def main():\n    return run()\n\ndef run():\n    return 1\n");
+    write(
+        repo.path(),
+        "app.py",
+        "def main():\n    return run()\n\ndef run():\n    return 1\n",
+    );
     write(repo.path(), "pkg/new.py", "def added():\n    pass\n");
     let end = shadow.snapshot("turn 1 end").unwrap();
 
     let turn = shadow.diff(&start.commit, &end.commit).unwrap();
     let paths: Vec<&str> = turn.iter().map(|f| f.path.as_str()).collect();
-    assert_eq!(paths, vec!["app.py", "pkg/new.py"], "util.py was the user's edit");
+    assert_eq!(
+        paths,
+        vec!["app.py", "pkg/new.py"],
+        "util.py was the user's edit"
+    );
     assert_eq!(turn[1].status, FileStatus::Added);
     // Line-level marks: new lines 2-4 were added; main() as a whole changed.
     assert_eq!(turn[0].mark_for_range(2, 4), Some('A'));
@@ -68,8 +76,12 @@ fn turn_diff_shows_only_the_turn() {
     assert_eq!(paths, vec!["app.py", "pkg/new.py", "util.py"]);
 
     // Refs live in the shadow only.
-    shadow.update_ref("refs/codemorph/p1/1-start", &start.commit).unwrap();
-    assert!(shadow.refs().contains(&"refs/codemorph/p1/1-start".to_string()));
+    shadow
+        .update_ref("refs/codemorph/p1/1-start", &start.commit)
+        .unwrap();
+    assert!(shadow
+        .refs()
+        .contains(&"refs/codemorph/p1/1-start".to_string()));
     let user_refs = common::git(repo.path(), &["for-each-ref", "--format=%(refname)"]);
     assert!(!user_refs.contains("codemorph"));
 }
@@ -90,7 +102,9 @@ fn shadow_store_writes_nothing_into_the_repo() {
     let a = shadow.snapshot("start").unwrap();
     write(repo.path(), "b/c.py", "def f():\n    return 1\n");
     let b = shadow.snapshot("end").unwrap();
-    shadow.update_ref("refs/codemorph/x/1-end", &b.commit).unwrap();
+    shadow
+        .update_ref("refs/codemorph/x/1-end", &b.commit)
+        .unwrap();
     let _ = shadow.diff(&a.commit, &b.commit).unwrap();
     let _ = shadow.diff(info.head.as_deref().unwrap(), &b.tree).unwrap();
     let head_diff = git::diff_head(&info, &shadow.dir).unwrap();
@@ -105,13 +119,18 @@ fn shadow_store_writes_nothing_into_the_repo() {
     // Undo the one work-tree edit the test itself made, then compare.
     write(repo.path(), "b/c.py", "def f():\n    pass\n");
     let after = fingerprint(repo.path());
-    assert_eq!(before.0, after.0, ".git changed: codeMorph wrote into the repo");
+    assert_eq!(
+        before.0, after.0,
+        ".git changed: codeMorph wrote into the repo"
+    );
     assert_eq!(before.1, after.1, "git status changed");
     // The shadow really has its own objects and index.
     assert!(shadow.git_dir.join("index").is_file());
     // No persistent alternates: writes never reach the user's object store.
     assert!(!shadow.git_dir.join("objects/info/alternates").exists());
-    let objects = std::fs::read_dir(shadow.git_dir.join("objects")).unwrap().count();
+    let objects = std::fs::read_dir(shadow.git_dir.join("objects"))
+        .unwrap()
+        .count();
     assert!(objects > 2, "the shadow holds its own objects");
 }
 
@@ -145,7 +164,10 @@ fn graph_of_branches_and_merge() {
     write(p, "c.txt", "3\n");
     common::git(p, &["add", "-A"]);
     common::git(p, &["commit", "-q", "-m", "main work"]);
-    common::git(p, &["merge", "-q", "--no-ff", "feature", "-m", "merge feature"]);
+    common::git(
+        p,
+        &["merge", "-q", "--no-ff", "feature", "-m", "merge feature"],
+    );
     common::git(p, &["tag", "v0.1.0"]);
 
     let commits = git::graph::log(p, 100).unwrap();
@@ -172,7 +194,17 @@ fn worktrees_are_listed() {
     let repo = repo_with(&[("a.txt", "1\n")]);
     let wt = TempDir::new("wt");
     let wt_path = wt.path().join("feature-wt");
-    common::git(repo.path(), &["worktree", "add", "-q", "-b", "agent-branch", wt_path.to_str().unwrap()]);
+    common::git(
+        repo.path(),
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "-b",
+            "agent-branch",
+            wt_path.to_str().unwrap(),
+        ],
+    );
     let list = git::worktrees(repo.path()).unwrap();
     assert_eq!(list.len(), 2);
     assert_eq!(list[1].branch.as_deref(), Some("agent-branch"));
@@ -212,5 +244,7 @@ fn pane_state_round_trips() {
     let loaded = store.load_pane(&key);
     assert_eq!(loaded, pane);
     assert_eq!(store.panes_for_repo(std::path::Path::new("/r")).len(), 1);
-    assert!(store.panes_for_repo(std::path::Path::new("/other")).is_empty());
+    assert!(store
+        .panes_for_repo(std::path::Path::new("/other"))
+        .is_empty());
 }

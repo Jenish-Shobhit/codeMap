@@ -21,7 +21,13 @@ pub struct Screen {
 
 impl Screen {
     pub fn new(cols: usize, rows: usize) -> Self {
-        Screen { cols, rows, cells: vec![vec![' '; cols]; rows], x: 0, y: 0 }
+        Screen {
+            cols,
+            rows,
+            cells: vec![vec![' '; cols]; rows],
+            x: 0,
+            y: 0,
+        }
     }
 
     pub fn feed(&mut self, bytes: &[u8]) {
@@ -90,7 +96,13 @@ impl Screen {
     pub fn text(&self) -> String {
         self.cells
             .iter()
-            .map(|r| r.iter().filter(|c| **c != '\0').collect::<String>().trim_end().to_string())
+            .map(|r| {
+                r.iter()
+                    .filter(|c| **c != '\0')
+                    .collect::<String>()
+                    .trim_end()
+                    .to_string()
+            })
             .collect::<Vec<_>>()
             .join("\n")
     }
@@ -237,4 +249,3 @@ impl Pty {
         }
     }
 }
-

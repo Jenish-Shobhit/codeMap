@@ -16,7 +16,14 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
     rail(buf, a.rail, app);
     let t = app.theme;
     if !app.files_loaded {
-        put(buf, body.x, body.y, "reading files…", style(t.muted, t.body), body.width);
+        put(
+            buf,
+            body.x,
+            body.y,
+            "reading files…",
+            style(t.muted, t.body),
+            body.width,
+        );
         return;
     }
     let Some(scene) = &app.map.scene else { return };
@@ -24,25 +31,53 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
     let mut head = Line::new().push(scene.level.label(), bold(style(t.text, t.body)));
     let mut summary = scene.summary.clone();
     if app.parse_pending {
-        summary = format!("{summary} · parsing {} files…", app.index.source_files().count().saturating_sub(app.index.parsed_count()));
+        summary = format!(
+            "{summary} · parsing {} files…",
+            app.index
+                .source_files()
+                .count()
+                .saturating_sub(app.index.parsed_count())
+        );
     }
     if !app.marks.is_empty() && !app.scope_info.noun.is_empty() && summary.contains("changed") {
         summary = format!("{summary} {}", app.scope_info.noun);
     }
-    head = head.push("  ", style(t.muted, t.body)).push(summary, style(t.muted, t.body));
+    head = head
+        .push("  ", style(t.muted, t.body))
+        .push(summary, style(t.muted, t.body));
     if scene.pages > 1 {
-        head = head.push(format!("   page {} of {}", scene.page + 1, scene.pages), style(t.text2, t.body));
+        head = head.push(
+            format!("   page {} of {}", scene.page + 1, scene.pages),
+            style(t.text2, t.body),
+        );
     }
     if app.index.truncated {
-        head = head.push("   huge repo: first 20,000 files", style(t.modified, t.body));
+        head = head.push(
+            "   huge repo: first 20,000 files",
+            style(t.modified, t.body),
+        );
     }
     head.draw(buf, body.x, body.y, body.width);
     if scene.nodes.is_empty() {
-        put(buf, body.x, body.y + 2, "empty folder", style(t.muted, t.body), body.width);
+        put(
+            buf,
+            body.x,
+            body.y + 2,
+            "empty folder",
+            style(t.muted, t.body),
+            body.width,
+        );
         return;
     }
-    let view = Rect::new(body.x, body.y + 2, body.width, body.height.saturating_sub(2));
-    let Some(canvas) = app.map_canvas() else { return };
+    let view = Rect::new(
+        body.x,
+        body.y + 2,
+        body.width,
+        body.height.saturating_sub(2),
+    );
+    let Some(canvas) = app.map_canvas() else {
+        return;
+    };
     let r = scene.layout.nodes[app.map.cursor.node.min(scene.layout.nodes.len() - 1)];
     let mut scroll = app.map.scroll;
     follow(
@@ -67,7 +102,11 @@ fn rail(buf: &mut Buffer, area: Rect, app: &App) {
             r.section("search");
             if app.search_hits.is_empty() {
                 r.line(Line::new().push(
-                    if input.text.is_empty() { "type a symbol or file name" } else { "no match" },
+                    if input.text.is_empty() {
+                        "type a symbol or file name"
+                    } else {
+                        "no match"
+                    },
                     style(t.muted, t.rail),
                 ));
             }
@@ -125,33 +164,68 @@ fn rail(buf: &mut Buffer, area: Rect, app: &App) {
     let root_count = app.index.files.len();
     r.line(
         Line::new()
-            .push(format!("{} ", util::pad(&format!("{root_name}/"), 17)), style(if crumbs.is_empty() { t.text } else { t.text2 }, t.rail))
-            .push(util::plural(root_count, "file", "files"), style(t.muted, t.rail)),
+            .push(
+                format!("{} ", util::pad(&format!("{root_name}/"), 17)),
+                style(if crumbs.is_empty() { t.text } else { t.text2 }, t.rail),
+            )
+            .push(
+                util::plural(root_count, "file", "files"),
+                style(t.muted, t.rail),
+            ),
     );
     for (depth, c) in crumbs.iter().enumerate() {
         let is_file = matches!(level, Level::File(_)) && depth == crumbs.len() - 1;
         let name = c.rsplit('/').next().unwrap_or(c);
-        let label = format!("{}{}{}", "  ".repeat(depth + 1), name, if is_file { "" } else { "/" });
+        let label = format!(
+            "{}{}{}",
+            "  ".repeat(depth + 1),
+            name,
+            if is_file { "" } else { "/" }
+        );
         let count = if is_file {
             app.index
                 .symbols(c)
-                .map(|s| util::plural(s.symbols.iter().filter(|x| x.kind.is_callable()).count(), "function", "functions"))
+                .map(|s| {
+                    util::plural(
+                        s.symbols.iter().filter(|x| x.kind.is_callable()).count(),
+                        "function",
+                        "functions",
+                    )
+                })
                 .unwrap_or_default()
         } else {
-            util::plural(app.index.files.iter().filter(|f| crate::index::in_dir(f, c)).count(), "file", "files")
+            util::plural(
+                app.index
+                    .files
+                    .iter()
+                    .filter(|f| crate::index::in_dir(f, c))
+                    .count(),
+                "file",
+                "files",
+            )
         };
         let last = depth == crumbs.len() - 1;
         r.line(
             Line::new()
-                .push(format!("{} ", util::pad(&label, 17)), style(if last { t.text } else { t.text2 }, t.rail))
+                .push(
+                    format!("{} ", util::pad(&label, 17)),
+                    style(if last { t.text } else { t.text2 }, t.rail),
+                )
                 .push(count, style(t.muted, t.rail)),
         );
     }
     r.blank();
     // Changed functions in the scope.
     let changed = app.marks.changed_symbols(&app.index);
-    let noun = if app.scope_info.noun.is_empty() { "changed".to_string() } else { app.scope_info.noun.clone() };
-    r.section(&format!("{noun} · {}", util::plural(changed.len(), "function", "functions")));
+    let noun = if app.scope_info.noun.is_empty() {
+        "changed".to_string()
+    } else {
+        app.scope_info.noun.clone()
+    };
+    r.section(&format!(
+        "{noun} · {}",
+        util::plural(changed.len(), "function", "functions")
+    ));
     if changed.is_empty() {
         let note = if !app.diffs_loaded && app.repo.is_some() {
             "reading changes…"
@@ -171,7 +245,9 @@ fn rail(buf: &mut Buffer, area: Rect, app: &App) {
             r.line(Line::new().push(format!("… {more} more"), style(t.muted, t.rail)));
             break;
         }
-        let Some(s) = app.index.symbols(file).and_then(|f| f.symbols.get(*idx)) else { continue };
+        let Some(s) = app.index.symbols(file).and_then(|f| f.symbols.get(*idx)) else {
+            continue;
+        };
         let sel = app.map.focus == Focus::Rail && app.map.rail_sel == i;
         let bg = if sel { t.active_row } else { t.rail };
         let stem = file.rsplit('/').next().unwrap_or(file);
@@ -179,8 +255,18 @@ fn rail(buf: &mut Buffer, area: Rect, app: &App) {
         r.line(
             Line::new()
                 .bg(bg)
-                .push(format!("{mark} "), style(if *mark == 'A' { t.add } else { t.modified }, bg))
-                .push(util::pad(&s.name, 18), if sel { bold(style(t.text, bg)) } else { style(t.text, bg) })
+                .push(
+                    format!("{mark} "),
+                    style(if *mark == 'A' { t.add } else { t.modified }, bg),
+                )
+                .push(
+                    util::pad(&s.name, 18),
+                    if sel {
+                        bold(style(t.text, bg))
+                    } else {
+                        style(t.text, bg)
+                    },
+                )
                 .push(" ", style(t.muted, bg))
                 .push(stem.to_string(), style(t.branch, bg)),
         );

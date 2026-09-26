@@ -49,7 +49,11 @@ fn turns_start_and_end_on_status_changes() {
     let start = out.checkpoint.unwrap();
 
     // The agent edits during its turn.
-    write(repo.path(), "app.py", "def main():\n    return helper()\n\ndef helper():\n    return 1\n");
+    write(
+        repo.path(),
+        "app.py",
+        "def main():\n    return helper()\n\ndef helper():\n    return 1\n",
+    );
 
     // Repeated status reports do nothing.
     let out = hook::handle(&store, None, &event("w1:p2", "working"), Some(&c)).unwrap();
@@ -132,7 +136,11 @@ fn retention_keeps_the_last_fifty_turns() {
 /// follows the pane's foreground cwd.
 fn fake_herdr(_dir: &std::path::Path, cwd: &std::path::Path) -> std::path::PathBuf {
     // Unix socket paths are limited to ~104 bytes on macOS; temp_dir() is long.
-    let sock = std::path::PathBuf::from(format!("/tmp/cmh-{}-{}.sock", std::process::id(), codemorph::util::now_unix_ms()));
+    let sock = std::path::PathBuf::from(format!(
+        "/tmp/cmh-{}-{}.sock",
+        std::process::id(),
+        codemorph::util::now_unix_ms()
+    ));
     let _ = std::fs::remove_file(&sock);
     let listener = UnixListener::bind(&sock).unwrap();
     let cwd = cwd.display().to_string();
@@ -202,7 +210,11 @@ fn the_binary_runs_as_herdr_runs_it() {
             .env("HERDR_PLUGIN_STATE_DIR", state.path())
             .output()
             .unwrap();
-        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
         String::from_utf8_lossy(&out.stdout).into_owned()
     };
     let t = std::time::Instant::now();

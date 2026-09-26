@@ -23,7 +23,9 @@ impl Commit {
     }
 
     pub fn is_head(&self) -> bool {
-        self.refs.iter().any(|r| r == "HEAD" || r.starts_with("HEAD -> "))
+        self.refs
+            .iter()
+            .any(|r| r == "HEAD" || r.starts_with("HEAD -> "))
     }
 
     /// Branch and tag names without the "HEAD -> " prefix.
@@ -156,7 +158,7 @@ pub fn layout(commits: &[Commit]) -> Vec<GraphRow> {
         if expecting.len() > 1 {
             let last = *expecting.last().unwrap();
             let mut row = blank_row(&lanes, &lane_color);
-            for j in col..=last {
+            for (j, lane) in lanes.iter().enumerate().take(last + 1).skip(col) {
                 let cell = j * 2;
                 let glyph = if j == col {
                     '├'
@@ -164,7 +166,7 @@ pub fn layout(commits: &[Commit]) -> Vec<GraphRow> {
                     '╯'
                 } else if expecting.contains(&j) {
                     '┴'
-                } else if lanes[j].is_some() {
+                } else if lane.is_some() {
                     '┼'
                 } else {
                     '─'
@@ -197,7 +199,8 @@ pub fn layout(commits: &[Commit]) -> Vec<GraphRow> {
         if !extra.is_empty() {
             let mut targets = Vec::new();
             for p in &extra {
-                if let Some(existing) = lanes.iter().position(|l| l.as_deref() == Some(p.as_str())) {
+                if let Some(existing) = lanes.iter().position(|l| l.as_deref() == Some(p.as_str()))
+                {
                     targets.push((existing, false));
                 } else {
                     let free = lanes
@@ -223,7 +226,7 @@ pub fn layout(commits: &[Commit]) -> Vec<GraphRow> {
             let mut row = blank_row(&lanes, &lane_color);
             for (t, opened) in targets {
                 let (lo, hi) = if t > col { (col, t) } else { (t, col) };
-                for j in lo..=hi {
+                for (j, lane) in lanes.iter().enumerate().take(hi + 1).skip(lo) {
                     let cell = j * 2;
                     let glyph = if j == col {
                         if t > col {
@@ -243,7 +246,7 @@ pub fn layout(commits: &[Commit]) -> Vec<GraphRow> {
                         } else {
                             '├'
                         }
-                    } else if lanes[j].is_some() {
+                    } else if lane.is_some() {
                         '┼'
                     } else {
                         '─'

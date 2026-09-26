@@ -70,11 +70,17 @@ impl Hunk {
     }
 
     pub fn adds(&self) -> usize {
-        self.lines.iter().filter(|l| l.kind == LineKind::Add).count()
+        self.lines
+            .iter()
+            .filter(|l| l.kind == LineKind::Add)
+            .count()
     }
 
     pub fn dels(&self) -> usize {
-        self.lines.iter().filter(|l| l.kind == LineKind::Del).count()
+        self.lines
+            .iter()
+            .filter(|l| l.kind == LineKind::Del)
+            .count()
     }
 
     /// Last new-side line number covered by the hunk.
@@ -429,7 +435,10 @@ fn find_middle_split(body: &str) -> Option<usize> {
         return None;
     }
     let half = (len - 3) / 2;
-    if body.is_char_boundary(half) && &body[half..half + 3] == " b/" && body[..half] == body[half + 3..] {
+    if body.is_char_boundary(half)
+        && &body[half..half + 3] == " b/"
+        && body[..half] == body[half + 3..]
+    {
         Some(half)
     } else {
         None
@@ -585,7 +594,8 @@ Binary files a/logo.png and b/logo.png differ
 
     #[test]
     fn deletion_touches_neighbours() {
-        let text = "diff --git a/f.py b/f.py\n--- a/f.py\n+++ b/f.py\n@@ -1,4 +1,3 @@\n a\n-b\n c\n d\n";
+        let text =
+            "diff --git a/f.py b/f.py\n--- a/f.py\n+++ b/f.py\n@@ -1,4 +1,3 @@\n a\n-b\n c\n d\n";
         let files = parse(text);
         let t: Vec<u32> = files[0].touched_lines().into_iter().collect();
         assert!(t.contains(&2));

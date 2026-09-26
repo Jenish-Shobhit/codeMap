@@ -117,20 +117,16 @@ fn rust(node: Node, src: &str, out: &mut Vec<ImportRef>) -> bool {
             }
             true
         }
-        "mod_item" => {
-            // `mod foo;` pulls in foo.rs / foo/mod.rs.
-            if node.child_by_field_name("body").is_none() {
-                if let Some(name) = node.child_by_field_name("name") {
-                    out.push(ImportRef {
-                        module: format!("mod::{}", text(name, src)),
-                        line: line(node),
-                        ..Default::default()
-                    });
-                }
-                true
-            } else {
-                false
+        // `mod foo;` pulls in foo.rs / foo/mod.rs.
+        "mod_item" if node.child_by_field_name("body").is_none() => {
+            if let Some(name) = node.child_by_field_name("name") {
+                out.push(ImportRef {
+                    module: format!("mod::{}", text(name, src)),
+                    line: line(node),
+                    ..Default::default()
+                });
             }
+            true
         }
         _ => false,
     }
@@ -175,7 +171,9 @@ fn flatten_use(node: Node, src: &str, prefix: &str, out: &mut Vec<(String, Optio
             }
         }
         "use_wildcard" => {
-            let t = text(node, src).trim_end_matches("::*").trim_end_matches('*');
+            let t = text(node, src)
+                .trim_end_matches("::*")
+                .trim_end_matches('*');
             let base = join(prefix, t.trim_end_matches("::"));
             out.push((format!("{base}::*"), None));
         }
@@ -187,7 +185,8 @@ fn flatten_use(node: Node, src: &str, prefix: &str, out: &mut Vec<(String, Optio
 }
 
 fn unquote(s: &str) -> String {
-    s.trim_matches(|c| c == '"' || c == '\'' || c == '`').to_string()
+    s.trim_matches(|c| c == '"' || c == '\'' || c == '`')
+        .to_string()
 }
 
 fn js(node: Node, src: &str, out: &mut Vec<ImportRef>) -> bool {

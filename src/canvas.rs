@@ -309,7 +309,15 @@ impl Canvas {
     }
 
     /// Text clipped to `max` cells (with …).
-    pub fn text_max(&mut self, x: usize, y: usize, s: &str, max: usize, tone: Tone, bold: bool) -> usize {
+    pub fn text_max(
+        &mut self,
+        x: usize,
+        y: usize,
+        s: &str,
+        max: usize,
+        tone: Tone,
+        bold: bool,
+    ) -> usize {
         let t = util::truncate(s, max);
         self.text(x, y, &t, tone, bold)
     }

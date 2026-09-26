@@ -127,16 +127,24 @@ fn map_zooms_into_files_and_back() {
     assert!(t.contains("open_selector.py"), "{t}");
     key(&mut app, KeyCode::Enter);
     let t = text(&mut app);
-    assert_eq!(app.map_level(), Level::File("panemorph/actions/open_selector.py".into()));
+    assert_eq!(
+        app.map_level(),
+        Level::File("panemorph/actions/open_selector.py".into())
+    );
     assert!(t.contains("finish_selection"), "{t}");
-    assert!(t.contains("panemorph/api.py"), "callees appear as external boxes\n{t}");
+    assert!(
+        t.contains("panemorph/api.py"),
+        "callees appear as external boxes\n{t}"
+    );
     snapshot("map_file", &normalize(&t, pm.tmp.path()));
     // Backspace returns to the folder with the file still selected.
     key(&mut app, KeyCode::Backspace);
     text(&mut app);
     assert_eq!(app.map_level(), Level::Dir("panemorph/actions".into()));
     let scene = app.map.scene.as_ref().unwrap();
-    assert!(matches!(&scene.nodes[app.map.cursor.node].kind, codemorph::map::NodeKind::File(f) if f.ends_with("open_selector.py")));
+    assert!(
+        matches!(&scene.nodes[app.map.cursor.node].kind, codemorph::map::NodeKind::File(f) if f.ends_with("open_selector.py"))
+    );
 }
 
 #[test]
@@ -160,11 +168,17 @@ fn map_arrow_keys_move_between_boxes() {
         .iter()
         .position(|n| n.title.starts_with("service.py"))
         .unwrap();
-    app.map.cursor = codemorph::map::Cursor { node: svc, row: None };
+    app.map.cursor = codemorph::map::Cursor {
+        node: svc,
+        row: None,
+    };
     key(&mut app, KeyCode::Char('j'));
     assert_eq!(app.map.cursor.row, Some(0));
     let f = app.current_function().unwrap();
-    assert_eq!(app.index.symbols(&f.file).unwrap().symbols[f.idx].qual(), "PaneMorphService.__init__");
+    assert_eq!(
+        app.index.symbols(&f.file).unwrap().symbols[f.idx].qual(),
+        "PaneMorphService.__init__"
+    );
 }
 
 #[test]
@@ -179,7 +193,12 @@ fn flow_view() {
     text(&mut app);
     app.reveal("panemorph/actions/selector.py", Some(4));
     text(&mut app);
-    let main = app.index.symbols("panemorph/actions/selector.py").unwrap().find("main").unwrap();
+    let main = app
+        .index
+        .symbols("panemorph/actions/selector.py")
+        .unwrap()
+        .find("main")
+        .unwrap();
     app.open_flow(codemorph::index::SymId {
         file: "panemorph/actions/selector.py".into(),
         idx: main,
@@ -197,7 +216,10 @@ fn flow_view() {
         assert!(t.contains(needle), "missing {needle:?}\n{t}");
     }
     // Lines this turn changed carry an M in the gutter.
-    let marked = t.lines().find(|l| l.contains("Path(result_path).write_text(json.dumps({\"choice\"")).unwrap();
+    let marked = t
+        .lines()
+        .find(|l| l.contains("Path(result_path).write_text(json.dumps({\"choice\""))
+        .unwrap();
     let gutter = marked.split('│').next().unwrap().trim();
     assert!(gutter.ends_with('A') || gutter.ends_with('M'), "{marked}");
     snapshot("flow_main", &normalize(&t, pm.tmp.path()));
@@ -214,7 +236,10 @@ fn flow_view() {
     app.flow.selected = try_box;
     key(&mut app, KeyCode::Enter);
     let t = text(&mut app);
-    assert!(t.contains("HerdrClient") || t.contains("PaneMorphService"), "{t}");
+    assert!(
+        t.contains("HerdrClient") || t.contains("PaneMorphService"),
+        "{t}"
+    );
     key(&mut app, KeyCode::Backspace);
     let t = text(&mut app);
     assert!(t.contains("main()  panemorph/actions/selector.py"), "{t}");
@@ -237,7 +262,10 @@ fn changes_view_review_and_comment() {
     // Next file: open_selector.py.
     key(&mut app, KeyCode::Char('}'));
     let t = text(&mut app);
-    assert!(t.contains("panemorph/actions/open_selector.py   +50 −13"), "{t}");
+    assert!(
+        t.contains("panemorph/actions/open_selector.py   +50 −13"),
+        "{t}"
+    );
     assert!(t.contains("@@ "), "{t}");
     snapshot("changes_open_selector", &normalize(&t, pm.tmp.path()));
     // space marks the hunk reviewed and persists across restarts.
@@ -251,7 +279,10 @@ fn changes_view_review_and_comment() {
     key(&mut app, KeyCode::Char('j'));
     key(&mut app, KeyCode::Char('j'));
     key(&mut app, KeyCode::Char('c'));
-    assert!(matches!(app.input.as_ref().unwrap().kind, InputKind::Comment { .. }));
+    assert!(matches!(
+        app.input.as_ref().unwrap().kind,
+        InputKind::Comment { .. }
+    ));
     chars(&mut app, "this loop has no timeout");
     key(&mut app, KeyCode::Enter);
     assert_eq!(app.drafts.len(), 1);
@@ -325,7 +356,11 @@ fn standalone_without_agent_shows_repo_path_and_head_scope() {
 fn not_a_git_repo_state() {
     let t = TempDir::new("plain");
     let state = TempDir::new("plain-state");
-    write(t.path(), "tool.py", "def run():\n    if x:\n        return 1\n    return 2\n");
+    write(
+        t.path(),
+        "tool.py",
+        "def run():\n    if x:\n        return 1\n    return 2\n",
+    );
     write(t.path(), "notes.md", "# notes\n");
     let mut app = App::new(Options {
         path: Some(t.path().to_path_buf()),
@@ -408,7 +443,11 @@ fn unsupported_language_and_big_folders() {
     let state = TempDir::new("big-state");
     git(t.path(), &["init", "-q"]);
     for i in 0..50 {
-        write(t.path(), &format!("pkg/mod_{i:02}.py"), &format!("def f{i}():\n    return {i}\n"));
+        write(
+            t.path(),
+            &format!("pkg/mod_{i:02}.py"),
+            &format!("def f{i}():\n    return {i}\n"),
+        );
     }
     write(t.path(), "pkg/README.md", "# pkg\n");
     git(t.path(), &["add", "-A"]);
@@ -433,9 +472,16 @@ fn unsupported_language_and_big_folders() {
     app.reveal("pkg/README.md", None);
     text(&mut app);
     key(&mut app, KeyCode::Enter);
-    assert!(app.message.as_deref().unwrap_or("").contains("no grammar"), "{:?}", app.message);
+    assert!(
+        app.message.as_deref().unwrap_or("").contains("no grammar"),
+        "{:?}",
+        app.message
+    );
     // Flow on a non-code file explains itself.
-    app.open_flow(codemorph::index::SymId { file: "pkg/README.md".into(), idx: 0 });
+    app.open_flow(codemorph::index::SymId {
+        file: "pkg/README.md".into(),
+        idx: 0,
+    });
     let flow = text(&mut app);
     assert!(flow.contains("no flow for pkg/README.md"), "{flow}");
 }
@@ -449,10 +495,17 @@ fn theme_colours_reach_the_screen() {
     // The active view label is the only accent block.
     let accent_cells: Vec<u16> = (0..W).filter(|&x| buf[(x, 0)].bg == t.accent).collect();
     assert!(!accent_cells.is_empty());
-    let label: String = accent_cells.iter().map(|&x| buf[(x, 0)].symbol().to_string()).collect();
+    let label: String = accent_cells
+        .iter()
+        .map(|&x| buf[(x, 0)].symbol().to_string())
+        .collect();
     assert_eq!(label.trim(), "changes");
     assert_eq!(buf[(0, 5)].bg, Color::Rgb(0, 0, 0), "rail is black");
-    assert_eq!(buf[(W - 1, 5)].bg, Color::Rgb(0x28, 0x2a, 0x36), "body is #282a36");
+    assert_eq!(
+        buf[(W - 1, 5)].bg,
+        Color::Rgb(0x28, 0x2a, 0x36),
+        "body is #282a36"
+    );
     // Added lines sit on the green band.
     key(&mut app, KeyCode::Char('}'));
     let buf = draw(&mut app, W, H);

@@ -68,7 +68,11 @@ fn random_graphs_have_no_overlaps_or_collisions() {
             })
             .collect();
         let l = layout(&nodes, &edges, &Options::default());
-        assert!(l.overlaps().is_empty(), "case {case}: overlapping boxes {:?}", l.overlaps());
+        assert!(
+            l.overlaps().is_empty(),
+            "case {case}: overlapping boxes {:?}",
+            l.overlaps()
+        );
         assert!(
             l.route_collisions().is_empty(),
             "case {case}: edge through a box {:?}\n{:?}",
@@ -76,11 +80,18 @@ fn random_graphs_have_no_overlaps_or_collisions() {
             edges
         );
         for (i, r) in l.nodes.iter().enumerate() {
-            assert_eq!((r.w, r.h), (nodes[i].w.max(3), nodes[i].h), "case {case}: size kept");
+            assert_eq!(
+                (r.w, r.h),
+                (nodes[i].w.max(3), nodes[i].h),
+                "case {case}: size kept"
+            );
         }
         // Every non-self edge got a route.
-        let distinct: std::collections::BTreeSet<(usize, usize)> =
-            edges.iter().filter(|e| e.from != e.to).map(|e| (e.from, e.to)).collect();
+        let distinct: std::collections::BTreeSet<(usize, usize)> = edges
+            .iter()
+            .filter(|e| e.from != e.to)
+            .map(|e| (e.from, e.to))
+            .collect();
         assert_eq!(l.routes.len(), distinct.len(), "case {case}");
     }
 }
@@ -106,11 +117,17 @@ fn orthogonal_routes_start_below_and_end_above() {
         let first = r.points[0];
         let last = *r.points.last().unwrap();
         assert_eq!(first.1, src.bottom(), "starts right below the source");
-        assert!(first.0 > src.x && first.0 < src.right() - 1, "leaves through the bottom border");
+        assert!(
+            first.0 > src.x && first.0 < src.right() - 1,
+            "leaves through the bottom border"
+        );
         assert_eq!(last.1 + 1, dst.y, "ends right above the target");
         assert!(last.0 > dst.x && last.0 < dst.right() - 1);
         for pair in r.points.windows(2) {
-            assert!(pair[0].0 == pair[1].0 || pair[0].1 == pair[1].1, "orthogonal");
+            assert!(
+                pair[0].0 == pair[1].0 || pair[0].1 == pair[1].1,
+                "orthogonal"
+            );
         }
     }
     let names: Vec<String> = ["service.py", "api.py", "model.py", "topology.py"]
@@ -148,7 +165,17 @@ fn print_sample() {
         LEdge { from: 1, to: 6 },
     ];
     let l = layout(&nodes, &edges, &Options::default());
-    let names: Vec<String> = ["extract.py", "open_selector.py", "selector.py", "service.py", "topology.py", "model.py", "api.py"]
-        .iter().map(|s| s.to_string()).collect();
+    let names: Vec<String> = [
+        "extract.py",
+        "open_selector.py",
+        "selector.py",
+        "service.py",
+        "topology.py",
+        "model.py",
+        "api.py",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
     println!("{}", draw(&nodes, &l, &names));
 }

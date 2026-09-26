@@ -29,7 +29,10 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
         return input_key(app, key);
     }
     if app.show_help {
-        if matches!(key.code, KeyCode::Esc | KeyCode::Char('?') | KeyCode::Char('q') | KeyCode::Enter) {
+        if matches!(
+            key.code,
+            KeyCode::Esc | KeyCode::Char('?') | KeyCode::Char('q') | KeyCode::Enter
+        ) {
             app.show_help = false;
         }
         return Action::Redraw;
@@ -105,7 +108,9 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
         }
         KeyCode::Char('p') if !ctrl => return Action::Pin("split"),
         KeyCode::Char('T') => return Action::Pin("tab"),
-        KeyCode::Char('s') if !ctrl && matches!(app.view, View::Changes | View::Map | View::Flow) => {
+        KeyCode::Char('s')
+            if !ctrl && matches!(app.view, View::Changes | View::Map | View::Flow) =>
+        {
             app.cycle_scope();
             return Action::Redraw;
         }
@@ -144,7 +149,11 @@ fn toggle_focus(app: &mut App) {
         View::Changes => &mut app.changes.focus,
         View::History => return,
     };
-    *f = if *f == Focus::Body { Focus::Rail } else { Focus::Body };
+    *f = if *f == Focus::Body {
+        Focus::Rail
+    } else {
+        Focus::Body
+    };
     if app.view == View::Flow && app.flow.focus == Focus::Rail {
         let cur = app.flow.target.as_ref().map(|t| t.idx);
         app.flow.rail_sel = app
@@ -156,7 +165,9 @@ fn toggle_focus(app: &mut App) {
 }
 
 fn input_key(app: &mut App, key: KeyEvent) -> Action {
-    let Some(input) = app.input.as_mut() else { return Action::None };
+    let Some(input) = app.input.as_mut() else {
+        return Action::None;
+    };
     match key.code {
         KeyCode::Esc => {
             app.input = None;
@@ -164,7 +175,12 @@ fn input_key(app: &mut App, key: KeyEvent) -> Action {
         }
         KeyCode::Enter => match input.kind.clone() {
             InputKind::Search => app.accept_search(),
-            InputKind::Comment { path, start, end, hunk } => {
+            InputKind::Comment {
+                path,
+                start,
+                end,
+                hunk,
+            } => {
                 let text = input.text.clone();
                 app.input = None;
                 app.add_comment(path, start, end, hunk, text);
@@ -205,14 +221,21 @@ fn map_key(app: &mut App, key: KeyEvent) -> Action {
     if app.map.focus == Focus::Rail {
         let n = app.marks.changed_symbols(&app.index).len();
         match key.code {
-            KeyCode::Up | KeyCode::Char('k') => app.map.rail_sel = app.map.rail_sel.saturating_sub(1),
+            KeyCode::Up | KeyCode::Char('k') => {
+                app.map.rail_sel = app.map.rail_sel.saturating_sub(1)
+            }
             KeyCode::Down | KeyCode::Char('j') => {
                 if app.map.rail_sel + 1 < n {
                     app.map.rail_sel += 1;
                 }
             }
             KeyCode::Enter => {
-                if let Some((file, idx, _)) = app.marks.changed_symbols(&app.index).get(app.map.rail_sel).cloned() {
+                if let Some((file, idx, _)) = app
+                    .marks
+                    .changed_symbols(&app.index)
+                    .get(app.map.rail_sel)
+                    .cloned()
+                {
                     app.reveal(&file, Some(idx));
                     app.map.focus = Focus::Body;
                 }
@@ -241,15 +264,22 @@ fn flow_key(app: &mut App, key: KeyEvent) -> Action {
     if app.flow.focus == Focus::Rail {
         let fns = app.flow_rail_functions();
         match key.code {
-            KeyCode::Up | KeyCode::Char('k') => app.flow.rail_sel = app.flow.rail_sel.saturating_sub(1),
+            KeyCode::Up | KeyCode::Char('k') => {
+                app.flow.rail_sel = app.flow.rail_sel.saturating_sub(1)
+            }
             KeyCode::Down | KeyCode::Char('j') => {
                 if app.flow.rail_sel + 1 < fns.len() {
                     app.flow.rail_sel += 1;
                 }
             }
             KeyCode::Enter => {
-                if let (Some((idx, _)), Some(t)) = (fns.get(app.flow.rail_sel), app.flow.target.clone()) {
-                    app.open_flow(crate::index::SymId { file: t.file, idx: *idx });
+                if let (Some((idx, _)), Some(t)) =
+                    (fns.get(app.flow.rail_sel), app.flow.target.clone())
+                {
+                    app.open_flow(crate::index::SymId {
+                        file: t.file,
+                        idx: *idx,
+                    });
                     app.flow.focus = Focus::Body;
                 }
             }
@@ -333,10 +363,14 @@ fn history_key(app: &mut App, key: KeyEvent) -> Action {
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
     if app.history.show_diff {
         match key.code {
-            KeyCode::Up | KeyCode::Char('k') => app.history.diff_scroll = app.history.diff_scroll.saturating_sub(1),
+            KeyCode::Up | KeyCode::Char('k') => {
+                app.history.diff_scroll = app.history.diff_scroll.saturating_sub(1)
+            }
             KeyCode::Down | KeyCode::Char('j') => app.history.diff_scroll += 1,
             KeyCode::Char('d') if ctrl => app.history.diff_scroll += 15,
-            KeyCode::Char('u') if ctrl => app.history.diff_scroll = app.history.diff_scroll.saturating_sub(15),
+            KeyCode::Char('u') if ctrl => {
+                app.history.diff_scroll = app.history.diff_scroll.saturating_sub(15)
+            }
             KeyCode::PageDown | KeyCode::Char(' ') => app.history.diff_scroll += 30,
             KeyCode::PageUp => app.history.diff_scroll = app.history.diff_scroll.saturating_sub(30),
             KeyCode::Backspace | KeyCode::Delete | KeyCode::Left => app.history.show_diff = false,

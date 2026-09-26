@@ -176,8 +176,11 @@ impl Client {
 
     /// Type text into a pane without pressing Enter.
     pub fn send_text(&self, pane_id: &str, text: &str) -> Result<(), HerdrError> {
-        self.call("pane.send_text", json!({ "pane_id": pane_id, "text": text }))
-            .map(|_| ())
+        self.call(
+            "pane.send_text",
+            json!({ "pane_id": pane_id, "text": text }),
+        )
+        .map(|_| ())
     }
 
     /// Submit a prompt to an agent (text plus Enter, bracketed-paste aware).
@@ -323,7 +326,10 @@ mod tests {
     #[test]
     fn call_round_trips_one_line() {
         let dir = temp_dir("rt");
-        let (sock, seen) = fake_server(&dir, json!({ "type": "pong", "version": "0.9.0", "protocol": 22 }));
+        let (sock, seen) = fake_server(
+            &dir,
+            json!({ "type": "pong", "version": "0.9.0", "protocol": 22 }),
+        );
         let client = Client::new(&sock);
         let result = client.ping().unwrap();
         assert_eq!(result["protocol"], 22);

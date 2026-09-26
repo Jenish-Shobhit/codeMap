@@ -46,13 +46,76 @@ pub struct Index {
 
 /// Methods too generic to link by name alone when the receiver is unknown.
 const GENERIC_METHODS: &[&str] = &[
-    "get", "set", "append", "extend", "pop", "push", "keys", "values", "items", "join", "split",
-    "strip", "format", "replace", "update", "copy", "clear", "insert", "remove", "read", "write",
-    "open", "close", "len", "map", "filter", "to_string", "clone", "unwrap", "iter", "into",
-    "from", "as_str", "collect", "add", "sort", "find", "next", "send", "run", "call", "load",
-    "save", "parse", "new", "default", "fmt", "eq", "hash", "log", "error", "info", "debug",
-    "exists", "is_file", "is_dir", "lower", "upper", "startswith", "endswith", "encode", "decode",
-    "then", "catch", "forEach", "toString", "Println", "Printf", "Sprintf", "Errorf",
+    "get",
+    "set",
+    "append",
+    "extend",
+    "pop",
+    "push",
+    "keys",
+    "values",
+    "items",
+    "join",
+    "split",
+    "strip",
+    "format",
+    "replace",
+    "update",
+    "copy",
+    "clear",
+    "insert",
+    "remove",
+    "read",
+    "write",
+    "open",
+    "close",
+    "len",
+    "map",
+    "filter",
+    "to_string",
+    "clone",
+    "unwrap",
+    "iter",
+    "into",
+    "from",
+    "as_str",
+    "collect",
+    "add",
+    "sort",
+    "find",
+    "next",
+    "send",
+    "run",
+    "call",
+    "load",
+    "save",
+    "parse",
+    "new",
+    "default",
+    "fmt",
+    "eq",
+    "hash",
+    "log",
+    "error",
+    "info",
+    "debug",
+    "exists",
+    "is_file",
+    "is_dir",
+    "lower",
+    "upper",
+    "startswith",
+    "endswith",
+    "encode",
+    "decode",
+    "then",
+    "catch",
+    "forEach",
+    "toString",
+    "Println",
+    "Printf",
+    "Sprintf",
+    "Errorf",
 ];
 
 impl Index {
@@ -90,7 +153,10 @@ impl Index {
         let Ok(meta) = std::fs::metadata(&path) else {
             return false;
         };
-        let stamp = (meta.modified().unwrap_or(SystemTime::UNIX_EPOCH), meta.len());
+        let stamp = (
+            meta.modified().unwrap_or(SystemTime::UNIX_EPOCH),
+            meta.len(),
+        );
         if self.stamps.get(file) == Some(&stamp) && self.parsed.contains_key(file) {
             return false;
         }
@@ -154,10 +220,7 @@ impl Index {
 
     /// Files directly inside `dir`.
     pub fn files_in(&self, dir: &str) -> Vec<&String> {
-        self.files
-            .iter()
-            .filter(|f| parent_dir(f) == dir)
-            .collect()
+        self.files.iter().filter(|f| parent_dir(f) == dir).collect()
     }
 
     /// Immediate subdirectories of `dir`, with how many files each holds.
@@ -167,7 +230,11 @@ impl Index {
             if !in_dir(f, dir) {
                 continue;
             }
-            let rest = if dir.is_empty() { f.as_str() } else { &f[dir.len() + 1..] };
+            let rest = if dir.is_empty() {
+                f.as_str()
+            } else {
+                &f[dir.len() + 1..]
+            };
             if let Some((first, _)) = rest.split_once('/') {
                 let sub = if dir.is_empty() {
                     first.to_string()
@@ -231,7 +298,12 @@ impl Index {
                 }
             }
         }
-        hits.sort_by(|a, b| b.score.cmp(&a.score).then(a.label.cmp(&b.label)).then(a.file.cmp(&b.file)));
+        hits.sort_by(|a, b| {
+            b.score
+                .cmp(&a.score)
+                .then(a.label.cmp(&b.label))
+                .then(a.file.cmp(&b.file))
+        });
         hits.truncate(limit);
         hits
     }
@@ -250,7 +322,8 @@ pub fn parent_dir(file: &str) -> &str {
 }
 
 pub fn in_dir(file: &str, dir: &str) -> bool {
-    dir.is_empty() || (file.len() > dir.len() && file.starts_with(dir) && file.as_bytes()[dir.len()] == b'/')
+    dir.is_empty()
+        || (file.len() > dir.len() && file.starts_with(dir) && file.as_bytes()[dir.len()] == b'/')
 }
 
 /// Name resolution by rules, most specific first:
@@ -281,7 +354,10 @@ impl<'a> Resolver<'a> {
                 by_name.entry(s.name.as_str()).or_default().push(id.clone());
                 if s.kind == SymKind::Method {
                     if let Some(c) = &s.container {
-                        methods.entry((c.as_str(), s.name.as_str())).or_default().push(id);
+                        methods
+                            .entry((c.as_str(), s.name.as_str()))
+                            .or_default()
+                            .push(id);
                     }
                 }
             }
@@ -334,9 +410,13 @@ impl<'a> Resolver<'a> {
                 }
                 if !targets.is_empty() {
                     let alias = imp.alias.clone().or_else(|| match syms.lang {
-                        Lang::Python if imp.names.is_empty() => {
-                            Some(imp.module.rsplit('.').next().unwrap_or(&imp.module).to_string())
-                        }
+                        Lang::Python if imp.names.is_empty() => Some(
+                            imp.module
+                                .rsplit('.')
+                                .next()
+                                .unwrap_or(&imp.module)
+                                .to_string(),
+                        ),
                         Lang::Rust if imp.names.len() == 1 => Some(imp.names[0].0.clone()),
                         Lang::Rust => imp.module.strip_prefix("mod::").map(str::to_string),
                         _ => None,
@@ -347,9 +427,14 @@ impl<'a> Resolver<'a> {
                 }
             }
             for call in &syms.calls {
-                if let Some(to) = self.resolve_call(file, syms, call, &module_alias, &imported_names) {
+                if let Some(to) =
+                    self.resolve_call(file, syms, call, &module_alias, &imported_names)
+                {
                     // Skip a function "calling" its own definition line.
-                    if to.file == *file && Some(to.idx) == call.caller && self.index.parsed[file].symbols[to.idx].start_line == call.line {
+                    if to.file == *file
+                        && Some(to.idx) == call.caller
+                        && self.index.parsed[file].symbols[to.idx].start_line == call.line
+                    {
                         continue;
                     }
                     calls.push(CallEdge {
@@ -379,9 +464,7 @@ impl<'a> Resolver<'a> {
         let name = call.name.as_str();
         let candidates = self.by_name.get(name)?;
         let in_file = |f: &'a str| candidates.iter().filter(move |c| c.file == f);
-        let caller_container = call
-            .caller
-            .and_then(|c| syms.symbols[c].container.clone());
+        let caller_container = call.caller.and_then(|c| syms.symbols[c].container.clone());
         match call.receiver.as_deref() {
             None => {
                 // 1. Same file: prefer non-methods (functions, classes).
@@ -391,11 +474,10 @@ impl<'a> Resolver<'a> {
                 // 2. Imported by name.
                 if let Some((targets, original)) = imported_names.get(name) {
                     for t in targets {
-                        if let Some(c) = self
-                            .by_name
-                            .get(original.as_str())
-                            .and_then(|v| v.iter().find(|c| &c.file == t && self.sym(c).kind != SymKind::Method))
-                        {
+                        if let Some(c) = self.by_name.get(original.as_str()).and_then(|v| {
+                            v.iter()
+                                .find(|c| &c.file == t && self.sym(c).kind != SymKind::Method)
+                        }) {
                             return Some(c.clone());
                         }
                     }
@@ -427,7 +509,10 @@ impl<'a> Resolver<'a> {
                     return None;
                 }
                 // module.func() through an import alias
-                if let Some(targets) = module_alias.get(recv).or_else(|| module_alias.get(recv_head)) {
+                if let Some(targets) = module_alias
+                    .get(recv)
+                    .or_else(|| module_alias.get(recv_head))
+                {
                     for t in targets {
                         if let Some(c) = candidates.iter().find(|c| &c.file == t) {
                             return Some(c.clone());
@@ -435,7 +520,10 @@ impl<'a> Resolver<'a> {
                     }
                 }
                 // Type::method() / Type.method()
-                let recv_last = recv.rsplit(['.', ':']).find(|s| !s.is_empty()).unwrap_or(recv);
+                let recv_last = recv
+                    .rsplit(['.', ':'])
+                    .find(|s| !s.is_empty())
+                    .unwrap_or(recv);
                 if let Some(v) = self.methods.get(&(recv_last, name)) {
                     if let Some(c) = v.iter().find(|c| c.file == file).or(v.first()) {
                         return Some(c.clone());
@@ -457,7 +545,10 @@ impl<'a> Resolver<'a> {
                     return Some((*c).clone());
                 }
                 let dir = parent_dir(file);
-                let same_dir: Vec<&&SymId> = methods.iter().filter(|c| parent_dir(&c.file) == dir).collect();
+                let same_dir: Vec<&&SymId> = methods
+                    .iter()
+                    .filter(|c| parent_dir(&c.file) == dir)
+                    .collect();
                 if same_dir.len() == 1 {
                     return Some((*same_dir[0]).clone());
                 }
@@ -540,7 +631,9 @@ impl<'a> Resolver<'a> {
                     Some(d) => self
                         .files
                         .iter()
-                        .filter(|f| parent_dir(f) == d && f.ends_with(".go") && !f.ends_with("_test.go"))
+                        .filter(|f| {
+                            parent_dir(f) == d && f.ends_with(".go") && !f.ends_with("_test.go")
+                        })
                         .map(|f| f.to_string())
                         .collect(),
                     None => Vec::new(),
@@ -550,7 +643,13 @@ impl<'a> Resolver<'a> {
     }
 
     /// `from pkg import mod` where `mod` is itself a module file.
-    fn resolve_submodule(&self, file: &str, lang: Lang, imp: &lang::ImportRef, name: &str) -> Vec<String> {
+    fn resolve_submodule(
+        &self,
+        file: &str,
+        lang: Lang,
+        imp: &lang::ImportRef,
+        name: &str,
+    ) -> Vec<String> {
         if lang != Lang::Python || name == "*" {
             return Vec::new();
         }
@@ -589,7 +688,8 @@ impl<'a> Resolver<'a> {
                 let mut root = String::from("src");
                 let mut d = dir;
                 loop {
-                    if self.exists(&join_path(d, "lib.rs")) || self.exists(&join_path(d, "main.rs")) {
+                    if self.exists(&join_path(d, "lib.rs")) || self.exists(&join_path(d, "main.rs"))
+                    {
                         root = d.to_string();
                         break;
                     }

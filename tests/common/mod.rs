@@ -50,7 +50,14 @@ pub fn git(dir: &Path, args: &[&str]) -> String {
         .env_remove("GIT_DIR")
         .env_remove("GIT_WORK_TREE")
         .env_remove("GIT_INDEX_FILE")
-        .args(["-c", "init.defaultBranch=main", "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false"])
+        .args([
+            "-c",
+            "init.defaultBranch=main",
+            "-c",
+            "commit.gpgsign=false",
+            "-c",
+            "tag.gpgsign=false",
+        ])
         .args(args)
         .output()
         .expect("git runs");
@@ -171,17 +178,47 @@ pub fn panemorph_repo() -> PmRepo {
     std::fs::remove_dir_all(&actions).unwrap();
     write(p, "README.md", "# paneMorph\n\nMove live herdr panes.\n");
     git(p, &["add", "-A"]);
-    git(p, &["commit", "-q", "-m", "feat: add Herdr API client and topology planner"]);
+    git(
+        p,
+        &[
+            "commit",
+            "-q",
+            "-m",
+            "feat: add Herdr API client and topology planner",
+        ],
+    );
     std::fs::create_dir_all(&actions).unwrap();
     copy_tree(stash.path(), &actions);
     git(p, &["add", "-A"]);
-    git(p, &["commit", "-q", "-m", "feat: implement pane and tab workflows"]);
+    git(
+        p,
+        &[
+            "commit",
+            "-q",
+            "-m",
+            "feat: implement pane and tab workflows",
+        ],
+    );
     git(p, &["tag", "v0.1.0"]);
     git(p, &["checkout", "-q", "-b", "docs"]);
-    write(p, "README.md", "# paneMorph\n\nMove live herdr panes between tabs.\n");
+    write(
+        p,
+        "README.md",
+        "# paneMorph\n\nMove live herdr panes between tabs.\n",
+    );
     git(p, &["commit", "-q", "-am", "docs: describe workflows"]);
     git(p, &["checkout", "-q", "main"]);
-    git(p, &["merge", "-q", "--no-ff", "docs", "-m", "Merge branch 'docs'"]);
+    git(
+        p,
+        &[
+            "merge",
+            "-q",
+            "--no-ff",
+            "docs",
+            "-m",
+            "Merge branch 'docs'",
+        ],
+    );
 
     // The agent's turn, recorded the way the hook records it.
     let state = TempDir::new("pm-state");
@@ -211,7 +248,12 @@ pub fn panemorph_repo() -> PmRepo {
         open: false,
     });
     store.save_pane(&pane).unwrap();
-    PmRepo { tmp, root, state, store }
+    PmRepo {
+        tmp,
+        root,
+        state,
+        store,
+    }
 }
 
 pub fn dracula() -> codemorph::theme::Theme {

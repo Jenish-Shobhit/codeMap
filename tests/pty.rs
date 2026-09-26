@@ -12,7 +12,6 @@ use std::time::Duration;
 use common::pty::*;
 use common::*;
 
-
 /// Text of a key press, then the view's marker text to wait for.
 fn press(p: &mut Pty, key: &[u8], expect: &str) {
     let from = p.len();
@@ -46,9 +45,12 @@ fn keys_first_paint_and_escape() {
         50,
     );
     // The frame: tabs are drawn before any git or parsing work lands.
-    let painted = p.wait_for("history", 0, Duration::from_secs(5)).expect("first paint");
+    let painted = p
+        .wait_for("history", 0, Duration::from_secs(5))
+        .expect("first paint");
     // Content fills in.
-    p.wait_for("PaneMorphService", 0, Duration::from_secs(10)).expect("map content");
+    p.wait_for("PaneMorphService", 0, Duration::from_secs(10))
+        .expect("map content");
     // 3: changes (standalone: since HEAD)
     press(&mut p, b"3", "since HEAD");
     // } next file, space marks reviewed
@@ -67,17 +69,27 @@ fn keys_first_paint_and_escape() {
     press(&mut p, b"?", "paste the draft");
     p.send(b"\x1b");
     std::thread::sleep(Duration::from_millis(150));
-    assert!(p.child.try_wait().unwrap().is_none(), "Esc on help must not quit");
+    assert!(
+        p.child.try_wait().unwrap().is_none(),
+        "Esc on help must not quit"
+    );
     // Esc closes codeMorph.
     p.send(b"\x1b");
-    let status = p.wait_exit(Duration::from_secs(5)).expect("Esc closes the popup");
+    let status = p
+        .wait_exit(Duration::from_secs(5))
+        .expect("Esc closes the popup");
     assert!(status.success());
     // The terminal is restored: alternate screen left, cursor shown.
     let out = p.text();
     assert!(out.contains("\x1b[?1049l"), "left the alternate screen");
     assert!(out.contains("\x1b[?25h"), "cursor shown again");
 
-    let first_byte = p.first_byte.lock().unwrap().unwrap().duration_since(p.started);
+    let first_byte = p
+        .first_byte
+        .lock()
+        .unwrap()
+        .unwrap()
+        .duration_since(p.started);
     let trace = std::fs::read_to_string(&trace).unwrap_or_default();
     let first_paint_ms: f64 = trace
         .split("first paint ")
@@ -94,7 +106,10 @@ fn keys_first_paint_and_escape() {
     );
     // The doc's target: open to first paint under 150 ms on a small repo.
     assert!(first_paint_ms < 150.0, "first paint {first_paint_ms} ms");
-    assert!(painted < Duration::from_millis(1500), "frame visible after {painted:?}");
+    assert!(
+        painted < Duration::from_millis(1500),
+        "frame visible after {painted:?}"
+    );
 }
 
 #[test]
@@ -104,12 +119,19 @@ fn q_quits_and_ctrl_c_quits() {
     let root = t.path().display().to_string();
     let state = t.path().join(".st").display().to_string();
     let mut p = spawn(&[&root], &[("CODEMORPH_STATE_DIR", &state)], 100, 30);
-    p.wait_for("a.py", 0, Duration::from_secs(5)).expect("map of a plain folder");
+    p.wait_for("a.py", 0, Duration::from_secs(5))
+        .expect("map of a plain folder");
     p.send(b"q");
-    assert!(p.wait_exit(Duration::from_secs(5)).expect("q quits").success());
+    assert!(p
+        .wait_exit(Duration::from_secs(5))
+        .expect("q quits")
+        .success());
 
     let mut p = spawn(&[&root], &[("CODEMORPH_STATE_DIR", &state)], 100, 30);
     p.wait_for("a.py", 0, Duration::from_secs(5)).expect("map");
     p.send(b"\x03");
-    assert!(p.wait_exit(Duration::from_secs(5)).is_some(), "ctrl-c quits");
+    assert!(
+        p.wait_exit(Duration::from_secs(5)).is_some(),
+        "ctrl-c quits"
+    );
 }
