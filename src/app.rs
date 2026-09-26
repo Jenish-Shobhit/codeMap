@@ -576,12 +576,7 @@ impl App {
                 }
                 self.history.total = total;
                 self.history.worktrees = worktrees;
-                if self.history.detail.is_none() {
-                    if let Some(c) = self.history.commits.get(self.history.sel) {
-                        let sha = c.sha.clone();
-                        self.request_commit_diff(sha);
-                    }
-                }
+                // The selected commit's files load when History is shown.
             }
             Msg::CommitDiff(sha, result) => {
                 self.history.loading_detail = false;
@@ -678,13 +673,16 @@ impl App {
         });
     }
 
-    /// Parse a folder when the map zooms into it (huge repositories).
+    /// Parse a folder's own files when the map zooms into it (huge
+    /// repositories); subfolders are parsed when they are opened.
     pub fn ensure_dir_parsed(&mut self, dir: &str) {
         let files: Vec<String> = self
             .index
             .files
             .iter()
-            .filter(|f| in_dir(f, dir) && Lang::from_path(f).is_some() && !self.index.is_parsed(f))
+            .filter(|f| {
+                parent_dir(f) == dir && Lang::from_path(f).is_some() && !self.index.is_parsed(f)
+            })
             .take(1_000)
             .cloned()
             .collect();
@@ -1600,6 +1598,21 @@ impl App {
         self.history.show_diff = true;
         self.history.diff_scroll = 0;
         if self.history.detail.as_ref().map(|(s, _)| s) != Some(&sha) {
+            self.request_commit_diff(sha);
+            self.drain_if_sync();
+        }
+    }
+
+    /// Load the selected commit's files if they are not loaded yet.
+    pub fn ensure_commit_detail(&mut self) {
+        if self.history.loading_detail {
+            return;
+        }
+        let Some(c) = self.history.commits.get(self.history.sel) else {
+            return;
+        };
+        if self.history.detail.as_ref().map(|(s, _)| s) != Some(&c.sha) {
+            let sha = c.sha.clone();
             self.request_commit_diff(sha);
             self.drain_if_sync();
         }

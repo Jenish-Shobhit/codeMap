@@ -50,6 +50,7 @@ fn lane_color(app: &App, i: usize) -> Color {
 
 pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
     let t = app.theme;
+    app.ensure_commit_detail();
     rail(buf, a.rail, app);
     let body = a.body;
     if app.not_a_repo() {
