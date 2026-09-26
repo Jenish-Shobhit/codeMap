@@ -85,13 +85,19 @@ impl Marks {
     }
 }
 
-/// Compute marks from a diff. `old_source` gives the base version of a file
-/// (None when it did not exist), so a symbol whose name is new is "A" even
-/// when git aligned some of its lines with old ones.
+/// Symbol names of a source text, for `compute_marks`.
+pub fn quals_of(path: &str, src: &str) -> Option<BTreeSet<String>> {
+    let lang = Lang::from_path(path)?;
+    Some(lang::extract(lang, src).symbols.iter().map(|s| s.qual()).collect())
+}
+
+/// Compute marks from a diff. `old_quals` gives the symbol names of the
+/// base version of a file, so a symbol whose name is new is "A" even when
+/// git aligned some of its lines with old ones.
 pub fn compute_marks(
     index: &Index,
     diffs: &[FileDiff],
-    old_source: &dyn Fn(&FileDiff) -> Option<String>,
+    old_quals: &dyn Fn(&FileDiff) -> Option<BTreeSet<String>>,
 ) -> Marks {
     let mut marks = Marks::default();
     for d in diffs {
@@ -110,15 +116,7 @@ pub fn compute_marks(
         let old_quals: Option<BTreeSet<String>> = if d.status == FileStatus::Added {
             Some(BTreeSet::new())
         } else {
-            old_source(d).and_then(|src| {
-                Lang::from_path(d.old_path.as_deref().unwrap_or(&d.path)).map(|lang| {
-                    lang::extract(lang, &src)
-                        .symbols
-                        .iter()
-                        .map(|s| s.qual())
-                        .collect()
-                })
-            })
+            old_quals(d)
         };
         let mut sm = BTreeMap::new();
         for (i, s) in fs.symbols.iter().enumerate() {

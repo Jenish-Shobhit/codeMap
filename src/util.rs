@@ -21,7 +21,20 @@ pub fn fnv_hex(bytes: &[u8]) -> String {
     format!("{:016x}", fnv64(bytes))
 }
 
+static FIXED_NOW: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+static FORCE_UTC: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Freeze the clock and format times in UTC (snapshot tests).
+pub fn freeze_time(now: i64) {
+    FIXED_NOW.store(now, std::sync::atomic::Ordering::Relaxed);
+    FORCE_UTC.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
 pub fn now_unix() -> i64 {
+    let fixed = FIXED_NOW.load(std::sync::atomic::Ordering::Relaxed);
+    if fixed != 0 {
+        return fixed;
+    }
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
@@ -64,11 +77,17 @@ pub struct LocalTime {
 
 /// Convert a unix timestamp to local wall-clock time with the C library.
 pub fn local_time(unix: i64) -> LocalTime {
-    // SAFETY: localtime_r only writes into the provided struct.
+    let utc = FORCE_UTC.load(std::sync::atomic::Ordering::Relaxed);
+    // SAFETY: localtime_r/gmtime_r only write into the provided struct.
     unsafe {
         let t: libc::time_t = unix as libc::time_t;
         let mut tm: libc::tm = std::mem::zeroed();
-        if libc::localtime_r(&t, &mut tm).is_null() {
+        let res = if utc {
+            libc::gmtime_r(&t, &mut tm)
+        } else {
+            libc::localtime_r(&t, &mut tm)
+        };
+        if res.is_null() {
             return LocalTime {
                 year: 1970,
                 month: 1,

@@ -10,7 +10,7 @@ pub mod graph;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-pub use diff::{FileDiff, FileStatus, Hunk, LineKind};
+pub use diff::{DiffLine, FileDiff, FileStatus, Hunk, LineKind};
 pub use graph::{Commit, GraphRow};
 
 #[derive(Debug, Clone, PartialEq, Eq)]

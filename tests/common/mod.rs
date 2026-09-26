@@ -127,3 +127,115 @@ pub fn fixture(name: &str) -> String {
 pub fn fixtures_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
 }
+
+/// Fixed "now" for snapshots: 21 Sep 2026 21:46:00 UTC.
+pub const NOW: i64 = 1_790_027_160;
+
+/// paneMorph's package as a git repo with history, plus one recorded agent
+/// turn (the real change of commit b8b645e) in codeMorph's shadow store.
+pub struct PmRepo {
+    pub repo: TempDir,
+    pub state: TempDir,
+    pub store: codemorph::store::Store,
+}
+
+pub fn copy_tree(from: &Path, to: &Path) {
+    for entry in std::fs::read_dir(from).unwrap().flatten() {
+        let p = entry.path();
+        let dest = to.join(entry.file_name());
+        if p.is_dir() {
+            std::fs::create_dir_all(&dest).unwrap();
+            copy_tree(&p, &dest);
+        } else {
+            std::fs::copy(&p, &dest).unwrap();
+        }
+    }
+}
+
+pub fn panemorph_repo() -> PmRepo {
+    let repo = TempDir::new("pm");
+    let p = repo.path();
+    git(p, &["init", "-q"]);
+    let fx = fixtures_dir();
+    copy_tree(&fx.join("panemorph"), p);
+    copy_tree(&fx.join("panemorph_before"), p);
+    // History: two feature commits, a tag and a docs branch.
+    let actions = p.join("panemorph/actions");
+    let tmp = TempDir::new("pm-actions");
+    copy_tree(&actions, tmp.path());
+    std::fs::remove_dir_all(&actions).unwrap();
+    write(p, "README.md", "# paneMorph\n\nMove live herdr panes.\n");
+    git(p, &["add", "-A"]);
+    git(p, &["commit", "-q", "-m", "feat: add Herdr API client and topology planner"]);
+    std::fs::create_dir_all(&actions).unwrap();
+    copy_tree(tmp.path(), &actions);
+    git(p, &["add", "-A"]);
+    git(p, &["commit", "-q", "-m", "feat: implement pane and tab workflows"]);
+    git(p, &["tag", "v0.1.0"]);
+    git(p, &["checkout", "-q", "-b", "docs"]);
+    write(p, "README.md", "# paneMorph\n\nMove live herdr panes between tabs.\n");
+    git(p, &["commit", "-q", "-am", "docs: describe workflows"]);
+    git(p, &["checkout", "-q", "main"]);
+    git(p, &["merge", "-q", "--no-ff", "docs", "-m", "Merge branch 'docs'"]);
+
+    // The agent's turn, recorded the way the hook records it.
+    let state = TempDir::new("pm-state");
+    let store = codemorph::store::Store::new(state.path());
+    let info = codemorph::git::discover(p).unwrap();
+    let shadow = store.shadow(&info);
+    let mut start = shadow.snapshot("turn 1 start").unwrap();
+    copy_tree(&fx.join("panemorph"), p);
+    let mut end = shadow.snapshot("turn 1 end").unwrap();
+    start.at = NOW - 420;
+    end.at = NOW - 120;
+    let mut pane = codemorph::store::PaneState {
+        pane_key: "term_1-claude".into(),
+        pane_id: "w1:p2".into(),
+        terminal_id: Some("term_1".into()),
+        agent: Some("claude".into()),
+        last_status: Some("idle".into()),
+        updated: NOW - 120,
+        turns: Vec::new(),
+    };
+    pane.turns.push(codemorph::store::Turn {
+        n: 3,
+        repo_root: info.root.to_string_lossy().into_owned(),
+        start: Some(start),
+        end: Some(end),
+        end_status: Some("idle".into()),
+        open: false,
+    });
+    store.save_pane(&pane).unwrap();
+    PmRepo { repo, state, store }
+}
+
+pub fn dracula() -> codemorph::theme::Theme {
+    codemorph::theme::Theme::from_config_text(
+        "[theme]\nname = \"dracula\"\n[theme.custom]\npanel_bg = \"#000000\"\nsidebar_bg = \"#000000\"\nactive_row_bg = \"#141414\"\nselection_bg = \"#1a1a1a\"\n",
+    )
+}
+
+pub fn agent_context() -> codemorph::herdr::PluginContext {
+    codemorph::herdr::PluginContext {
+        workspace_label: Some("paneMorph".into()),
+        tab_label: Some("selector-fix".into()),
+        focused_pane_id: Some("w1:p2".into()),
+        focused_pane_agent: Some("claude".into()),
+        focused_pane_status: Some("idle".into()),
+        ..Default::default()
+    }
+}
+
+pub fn app_for(pm: &PmRepo, view: codemorph::app::View, with_agent: bool) -> codemorph::app::App {
+    codemorph::util::freeze_time(NOW);
+    let mut app = codemorph::app::App::new(codemorph::app::Options {
+        path: Some(pm.repo.path().to_path_buf()),
+        view,
+        context: with_agent.then(agent_context),
+        client: None,
+        store: pm.store.clone(),
+        theme: dracula(),
+    });
+    app.load_blocking();
+    app
+}
