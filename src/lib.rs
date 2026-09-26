@@ -12,3 +12,5 @@ pub mod index;
 pub mod canvas;
 pub mod layout;
 pub mod theme;
+pub mod map;
+pub mod flow;

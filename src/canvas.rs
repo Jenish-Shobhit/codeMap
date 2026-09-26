@@ -52,6 +52,8 @@ pub struct Cell {
     pub band: Option<Band>,
     /// The second half of a wide character: draw nothing here.
     pub cont: bool,
+    /// Written as text: its character wins over lines, even a space.
+    pub txt: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -73,6 +75,7 @@ impl Default for Cell {
             bold: false,
             band: None,
             cont: false,
+            txt: false,
         }
     }
 }
@@ -85,14 +88,14 @@ impl Cell {
         if let Some(a) = self.arrow {
             return a;
         }
-        if self.ch != ' ' {
+        if self.txt || self.ch != ' ' {
             return self.ch;
         }
         line_glyph(self.mask, self.round)
     }
 
     pub fn is_blank(&self) -> bool {
-        self.ch == ' ' && self.mask == 0 && self.arrow.is_none() && !self.cont
+        self.ch == ' ' && self.mask == 0 && self.arrow.is_none() && !self.cont && !self.txt
     }
 }
 
@@ -291,6 +294,7 @@ impl Canvas {
                 c.bold = bold;
                 c.arrow = None;
                 c.cont = false;
+                c.txt = true;
             }
             if w == 2 {
                 if let Some(c) = self.get_mut(cx + 1, y) {
