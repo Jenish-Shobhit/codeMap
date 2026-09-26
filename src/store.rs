@@ -33,7 +33,17 @@ pub struct Store {
 
 impl Store {
     pub fn new(root: impl Into<PathBuf>) -> Self {
-        Store { root: root.into() }
+        let root: PathBuf = root.into();
+        // git runs with the work tree as its cwd, so the store must not be
+        // relative to ours.
+        let root = if root.is_relative() {
+            std::env::current_dir()
+                .map(|d| d.join(&root))
+                .unwrap_or(root)
+        } else {
+            root
+        };
+        Store { root }
     }
 
     /// Resolve the state directory: an explicit override, herdr's plugin
@@ -521,6 +531,13 @@ mod tests {
         assert_eq!(PaneState::key_for(None, "w1:p1", None), "w1_p1-agent");
         let k = Store::repo_key(Path::new("/Users/x/Desktop/paneMorph"));
         assert!(k.starts_with("paneMorph-"));
+    }
+
+    #[test]
+    fn relative_roots_become_absolute() {
+        let s = Store::new("some/state");
+        assert!(s.root.is_absolute());
+        assert!(s.root.ends_with("some/state"));
     }
 
     #[test]
