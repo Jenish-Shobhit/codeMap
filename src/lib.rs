@@ -9,3 +9,5 @@ pub mod git;
 pub mod store;
 pub mod lang;
 pub mod index;
+pub mod canvas;
+pub mod layout;
