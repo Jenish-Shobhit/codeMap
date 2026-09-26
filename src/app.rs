@@ -213,6 +213,7 @@ pub struct MapState {
     pub dirty: bool,
     pub pending_select: Option<Select>,
     pub built_width: usize,
+    pub built_page: usize,
 }
 
 #[derive(Debug, Default)]
@@ -809,23 +810,36 @@ impl App {
         // Keep the selection on the same thing across rebuilds.
         if self.map.pending_select.is_none() {
             if let Some(scene) = &self.map.scene {
-                if scene.level == level {
+                if scene.level == level && self.map.built_page == self.map.page {
                     self.map.pending_select = selection_of(scene, self.map.cursor);
                 }
             }
         }
-        let scene = map::build(&self.index, &self.marks, &level, self.map.page, width.max(40));
+        let mut scene = map::build(&self.index, &self.marks, &level, self.map.page, width.max(40));
         self.map.page = scene.page;
         let mut cursor = Cursor::default();
         if let Some(sel) = self.map.pending_select.take() {
-            let found = match &sel {
-                Select::Path(p) => map::node_for_path(&scene, p).map(|n| Cursor { node: n, row: None }),
-                Select::Symbol(f, i) => map::node_for_symbol(&scene, f, *i),
+            let find = |scene: &Scene| match &sel {
+                Select::Path(p) => map::node_for_path(scene, p).map(|n| Cursor { node: n, row: None }),
+                Select::Symbol(f, i) => map::node_for_symbol(scene, f, *i),
             };
+            let mut found = find(&scene);
+            // In a paginated folder, turn to the page that holds it.
+            if found.is_none() && scene.pages > 1 {
+                for page in 0..scene.pages {
+                    let other = map::build(&self.index, &self.marks, &level, page, width.max(40));
+                    if let Some(c) = find(&other) {
+                        found = Some(c);
+                        scene = other;
+                        self.map.page = page;
+                        break;
+                    }
+                }
+            }
             if let Some(c) = found {
                 cursor = c;
             }
-        } else if self.map.scene.as_ref().is_some_and(|s| s.level == level) {
+        } else if self.map.scene.as_ref().is_some_and(|s| s.level == level) && self.map.built_page == self.map.page {
             cursor = self.map.cursor;
         } else if let Some(first_changed) = scene.nodes.iter().position(|n| n.mark.is_some()) {
             cursor.node = first_changed;
@@ -842,6 +856,7 @@ impl App {
         self.map.scene = Some(scene);
         self.map.dirty = false;
         self.map.built_width = width;
+        self.map.built_page = self.map.page;
     }
 
     pub fn map_canvas(&self) -> Option<Canvas> {

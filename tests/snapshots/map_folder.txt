@@ -1,0 +1,50 @@
+  map   flow   changes   history                                                                                ○ paneMorph · selector-fix   main   turn 3 · 2m
+
+ map                                      panemorph/  1 folder · 6 modules · 39 functions · 3 changed this turn
+ paneMorph/        11 files
+   panemorph/      10 files                                        ╭─ actions/ ────────────╮
+                                                                   │ 4 files · 7 functions │
+ this turn · 4 functions                                           │ 2 changed           M │
+ M selector_command   open_selector                                ╰─────┬─────┬─────┬─────╯
+ A finish_selection   open_selector                                      │     │     │
+ M main               open_selector                      ┌───────────────┘     │     └───────────────┐
+ M main               selector                           │                     ▼ PaneMorphService +6 │
+                                                         │    ┌─ service.py · PaneMorphService ─┐    │
+                                                         │    │ __init__                        │    │
+                                                         │    │ _id                             │    │
+                                                         │    │ _layout                         │    │
+                                                         │    │ _tab                            │    │
+                                                         │    │ _pane_title                     │    │
+                                                         │    │ _tab_title                      │    │
+                                                         │    │ current                         │    │
+                                                         │    │ … 11 more                       │    │
+                                                         │    └────────┬───────┬───────┬────────┘    │
+                                                         │             │       │       │             │
+                                                         └────┐    ┌───┘       └──┐    └────────┐    └──┐
+                                                              │    │              ▼             │       │
+                                          ┌─ doctor.py ──┐    │    │    ┌─ topology.py ────┐    │       │
+                                          │ main         │    │    │    │ node_type        │    │       │
+                                          └───────┬──────┘    │    │    │ first_leaf       │    │       │
+                                                  │           │    │    │ leaf_ids         │    │       │
+                                                  │           │    │    │ _expansion_steps │    │       │
+                                                  │           │    │    │ plan_tab_merge   │    │       │
+                                                  │           │    │    └──────┬─────┬─────┘    │       │
+                                                  │           │    │           │     │          │       │
+                                                  └────┐    ┌─┘  ┌─┘  ┌────────┘     └┐    ┌────┘       │
+                                                       │    │    │    │               │    │    ┌───────┘
+                                                       ▼    ▼    ▼    ▼ HerdrError    ▼    ▼    ▼ Choice
+                                                 ┌─ api.py ────────────────┐    ┌─ model.py ──────────┐
+                                                 │ HerdrError              │    │ MoveStep · 1 method │
+                                                 │ HerdrClient · 5 methods │    │ Choice · 1 method   │
+                                                 │ caller_pane_id          │    └─────────────────────┘
+                                                 └─────────────────────────┘
+
+
+                                          ┌─ __init__.py ─┐
+                                          │ no functions  │
+                                          └───────────────┘
+
+
+
+ scope  last turn · done 9:44 PM
+ / search  tab list                       ⏎ zoom in  ⌫ zoom out  / search  ? keys

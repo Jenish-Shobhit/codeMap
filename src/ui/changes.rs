@@ -291,12 +291,15 @@ pub fn render_diff_list(buf: &mut Buffer, area: Rect, files: &[FileDiff], scroll
             rows.push(Line::new().push("  binary", style(t.modified, t.body)));
         }
         for h in &f.hunks {
-            rows.push(
-                Line::new()
-                    .push("@@ ", style(t.rule, t.body))
+            let mut head = Line::new().push("@@ ", style(t.rule, t.body));
+            if h.section.is_empty() {
+                head = head.push(format!("lines {}–{}", h.new_start, h.new_end()), style(t.muted, t.body));
+            } else {
+                head = head
                     .push(util::truncate(&h.section, 50), style(t.text2, t.body))
-                    .push(format!(" · {}–{}", h.new_start, h.new_end()), style(t.muted, t.body)),
-            );
+                    .push(format!(" · {}–{}", h.new_start, h.new_end()), style(t.muted, t.body));
+            }
+            rows.push(head);
             for dl in &h.lines {
                 let (sign, bg, sc, tc) = match dl.kind {
                     LineKind::Add => ("+", t.add_bg, t.add, t.text),

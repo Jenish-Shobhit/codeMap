@@ -134,7 +134,8 @@ pub const NOW: i64 = 1_790_027_160;
 /// paneMorph's package as a git repo with history, plus one recorded agent
 /// turn (the real change of commit b8b645e) in codeMorph's shadow store.
 pub struct PmRepo {
-    pub repo: TempDir,
+    pub tmp: TempDir,
+    pub root: PathBuf,
     pub state: TempDir,
     pub store: codemorph::store::Store,
 }
@@ -153,22 +154,24 @@ pub fn copy_tree(from: &Path, to: &Path) {
 }
 
 pub fn panemorph_repo() -> PmRepo {
-    let repo = TempDir::new("pm");
-    let p = repo.path();
+    let tmp = TempDir::new("pm");
+    let root = tmp.path().join("paneMorph");
+    std::fs::create_dir_all(&root).unwrap();
+    let p = root.as_path();
     git(p, &["init", "-q"]);
     let fx = fixtures_dir();
     copy_tree(&fx.join("panemorph"), p);
     copy_tree(&fx.join("panemorph_before"), p);
     // History: two feature commits, a tag and a docs branch.
     let actions = p.join("panemorph/actions");
-    let tmp = TempDir::new("pm-actions");
-    copy_tree(&actions, tmp.path());
+    let stash = TempDir::new("pm-actions");
+    copy_tree(&actions, stash.path());
     std::fs::remove_dir_all(&actions).unwrap();
     write(p, "README.md", "# paneMorph\n\nMove live herdr panes.\n");
     git(p, &["add", "-A"]);
     git(p, &["commit", "-q", "-m", "feat: add Herdr API client and topology planner"]);
     std::fs::create_dir_all(&actions).unwrap();
-    copy_tree(tmp.path(), &actions);
+    copy_tree(stash.path(), &actions);
     git(p, &["add", "-A"]);
     git(p, &["commit", "-q", "-m", "feat: implement pane and tab workflows"]);
     git(p, &["tag", "v0.1.0"]);
@@ -206,7 +209,7 @@ pub fn panemorph_repo() -> PmRepo {
         open: false,
     });
     store.save_pane(&pane).unwrap();
-    PmRepo { repo, state, store }
+    PmRepo { tmp, root, state, store }
 }
 
 pub fn dracula() -> codemorph::theme::Theme {
@@ -229,7 +232,7 @@ pub fn agent_context() -> codemorph::herdr::PluginContext {
 pub fn app_for(pm: &PmRepo, view: codemorph::app::View, with_agent: bool) -> codemorph::app::App {
     codemorph::util::freeze_time(NOW);
     let mut app = codemorph::app::App::new(codemorph::app::Options {
-        path: Some(pm.repo.path().to_path_buf()),
+        path: Some(pm.root.clone()),
         view,
         context: with_agent.then(agent_context),
         client: None,

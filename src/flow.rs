@@ -933,7 +933,9 @@ fn box_blk(title: Option<String>, lines: Vec<FlowLine>, kind: BoxKind, extra_row
     }
     let w = w.max(9);
     let h = lines.len().max(1) + 2 + extra_rows;
-    let bus_row = if kind == BoxKind::Loop { 1 } else { h / 2 };
+    // Loops take the bus on their first row (the second is the loop-back
+    // entry); terminal boxes are entered on their first line.
+    let bus_row = if matches!(kind, BoxKind::Loop | BoxKind::End(_)) { 1 } else { h / 2 };
     let exit = !matches!(kind, BoxKind::End(_));
     Blk {
         w,
@@ -1061,7 +1063,7 @@ fn branch(head: Blk, down: Option<(String, Blk)>, sides: Vec<Side>) -> Blk {
         let sy = bus_row.saturating_sub(sb.bus_row);
         // A side that ends (return, raise...) needs no merge line, so it can
         // sit right beside the head when it stays above the fall-through.
-        let beside = !s.blk.exit && sy + s.blk.h < head_h + 1;
+        let beside = !s.blk.exit && sy + s.blk.h <= head_h + 1;
         let sx = if beside { head_right + 1 + gap } else { right_edge.max(head_right + 1) + gap };
         let s_bus = sy + sb.bus_row;
         out.ops.push(Op::Poly(vec![(head_right, bus_row), (sx - 1, s_bus)]));
@@ -1158,6 +1160,23 @@ fn is_simple(items: &[Flow]) -> Option<Vec<FlowLine>> {
     }
 }
 
+/// A side branch that runs a few statements and then ends (a guard
+/// clause) becomes one terminal box, so it can sit beside its decision.
+fn lay_branch(items: &[Flow]) -> Blk {
+    if let [Flow::Stmts(lines), Flow::End { kind, line }] = items {
+        if lines.len() <= 3 {
+            let mut all: Vec<FlowLine> = lines
+                .iter()
+                .map(|l| fl(util::truncate(&l.text, 48), l.line))
+                .collect();
+            let t = format!("{}{}", end_prefix(*kind), line.text);
+            all.push(fl(util::truncate(&t, 48), line.line));
+            return box_blk(None, all, BoxKind::End(*kind), 0);
+        }
+    }
+    lay(items)
+}
+
 fn lay(items: &[Flow]) -> Blk {
     let blocks: Vec<Blk> = items.iter().map(lay_one).collect();
     seq(blocks)
@@ -1180,7 +1199,7 @@ fn lay_one(f: &Flow) -> Blk {
             let yes_blk = if yes.is_empty() {
                 box_blk(None, vec![fl("pass".into(), cond.line)], BoxKind::Stmt, 0)
             } else {
-                lay(yes)
+                lay_branch(yes)
             };
             let down = if no.is_empty() { None } else { Some(("no".to_string(), lay(no))) };
             let mut b = branch(

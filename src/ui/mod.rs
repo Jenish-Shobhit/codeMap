@@ -194,7 +194,7 @@ impl<'a> Rail<'a> {
 
     pub fn section(&mut self, title: &str) {
         let t = self.t;
-        self.line(Line::new().push(title.to_lowercase(), bold(style(t.text2, t.rail))));
+        self.line(Line::new().push(title.to_string(), bold(style(t.text2, t.rail))));
     }
 
     pub fn line(&mut self, line: Line) {

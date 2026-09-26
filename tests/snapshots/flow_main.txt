@@ -1,0 +1,50 @@
+  map   flow   changes   history                                                                                ○ paneMorph · selector-fix   main   turn 3 · 2m
+
+ flow                                     main()  panemorph/actions/selector.py · lines 75–98   called from __main__
+ panemorph/actions/selector.py                                                                                                     A added  M changed this turn
+ clipped                                                                ╭──────────╮
+ pick                                                                   │ ▶ main() │
+ main                                M                                  ╰─────┬────╯
+                                                                              ▼
+ calls                                                 ┌─────────────────────────────────────────────┐
+ HerdrClient            api.py                         │ mode = os.environ.get("PANEMORPH_MODE", "") │
+ PaneMorphService       service.py                     └──────────────────────┬──────────────────────┘
+ PaneMorphService.curr… service.py                                            ▼
+ caller_pane_id         api.py                               ┌─────────────────────────────────┐           ╭──────────────────────────────────────────────────╮
+ PaneMorphService.snap… service.py                           │ ◇ mode not in {"send", "bring"} ├─── yes ──▶│ print("paneMorph: selector mode is missing", fi… │
+ PaneMorphService.send… service.py                           └────────────────┬────────────────┘           │ ◉ return 2                                       │
+ PaneMorphService.brin… service.py                                            │ no                         ╰──────────────────────────────────────────────────╯
+                                                                              ▼
+                                                  ┌───────────────────────────────────────────────────────┐
+                                          A       │ result_path = os.environ.get("PANEMORPH_RESULT_PATH") │
+                                                  └───────────────────────────┬───────────────────────────┘
+                                                                              ▼
+                                                                    ┌───────────────────┐           ╭──────────────────────────────────────────────────╮
+                                          A                         │ ◇ not result_path ├─── yes ──▶│ print("paneMorph: selector result path is missi… │
+                                          A                         └─────────┬─────────┘           │ ◉ return 2                                       │
+                                                                              │ no                  ╰──────────────────────────────────────────────────╯
+                                                                              ▼
+                                            ┌─ try ────────────────────────────────────────────────────────────┐
+                                            │ client = HerdrClient()                                           │
+                                            │ service = PaneMorphService(client)                               │
+                                            │ pane = service.current(caller_pane_id())                         │
+                                            │ snapshot = service.snapshot_for(pane)                            ├────────────────────────────────────┐
+                                            │ choices = service.send_choices(pane, snapshot) if mode == "send… │                                    │ raises
+                                            │ choice = curses.wrapper(pick, choices, mode)                     │                                    │
+                                          A │ Path(result_path).write_text(json.dumps({"choice": asdict(choic… │                                    │
+                                            └─────────────────────────────────┬────────────────────────────────┘                                    │
+                                                                              │                                                                     ▼
+                                                                              │                                              ┌─────────────────────────────────
+                                                                              │                                              │ except (HerdrError, curses.error
+                                                                              │                                              └──────────────────────┬──────────
+                                                                              │                                                                     ▼
+                                                                              │                                    ┌───────────────────────────────────────────
+                                          A                                   │                                    │ Path(result_path).write_text(json.dumps({"
+                                                                              │                                    │ print(f"paneMorph: {error}", file=sys.stde
+                                                                              │                                    └────────────────────────────────┬──────────
+                                                                              │                                                                     ▼
+                                                                              │                                                              ╭────────────╮
+                                                                              │                                                              │ ◉ return 1 │
+                                                                              │                                                              ╰────────────╯
+ scope  last turn · done 9:44 PM                                              ▼
+ tab functions                            ⏎ open a call in Flow  ⌫ back  e edit at line  1 map  3 changes  ? keys

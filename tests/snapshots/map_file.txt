@@ -1,0 +1,50 @@
+  map   flow   changes   history                                                                                ○ paneMorph · selector-fix   main   turn 3 · 2m
+
+ map                                      panemorph/actions/open_selector.py  python · 3 functions · 101 lines · 3 changed this turn
+ paneMorph/        11 files
+   panemorph/      10 files                                                 ┌─ main ───────┐
+     actions/      4 files                                                  │ lines 62–97  │
+       open_selec… 3 functions                                              │ 8 calls      │
+                                                                            └──┬──┬──┬──┬──┘
+ this turn · 4 functions                                                       │  │  │  │
+ M selector_command   open_selector                   ┌────────────────────────┘  │  └──┼──────┐
+ A finish_selection   open_selector                   │                         ┌─┘     └──────┼─────────┐
+ M main               open_selector                   ▼ selector_command        ▼              │         │
+ M main               selector             ┌─ selector_command ─┐    ┌─ finish_selection ─┐    │         │
+                                           │ lines 16–36        │    │ lines 39–59        │    │         │
+                                           └────────────────────┘    │ 7 calls            │    │         │
+                                                                     └─────┬────┬────┬────┘    │         │
+                                                                           │    │    │         │         │
+                                                      ┌────────────────────┘  ┌─┘    ├─────────┘         └──────────┐
+                                                      │                       │      ├─────────────────────┐        │
+                                                      ▼ Choice                ▼      ▼ HerdrClient +3      ▼        ▼
+                                          ┌─ panemorph/model.py ─┐    ┌─ panemorph/api.py ───┐    ┌─ panemorph/service.py ───┐
+                                          │ Choice               │    │ HerdrClient          │    │ PaneMorphService         │
+                                          └──────────────────────┘    │ HerdrClient.notify   │    │ PaneMorphService.bring   │
+                                                                      │ HerdrClient.snapshot │    │ PaneMorphService.current │
+                                                                      │ HerdrError           │    └──────────────────────────┘
+                                                                      │ caller_pane_id       │
+                                                                      └──────────────────────┘
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ scope  last turn · done 9:44 PM
+ / search  tab list                       ⏎ zoom in  ⌫ zoom out  / search  2 flow of selector_command  ? keys

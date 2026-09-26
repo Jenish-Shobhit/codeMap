@@ -1,0 +1,50 @@
+  map   flow   changes   history                                                                                ○ paneMorph · selector-fix   main   turn 3 · 2m
+
+ agents                                   panemorph/actions/open_selector.py   +50 −13    ✓ 0 of 3
+ ○ claude w1:p2   3 files +62 −26         @@ top level · 1–20
+                                              1  from __future__ import annotations
+ this turn · 3 files                          2
+ panemorph/                                   3  import os
+ M __init__.py          +1 −2                 4+ import json
+ panemorph/actions/                           5  import subprocess
+ M open_selector.py     +50 −13               6  import sys
+ M selector.py          +11 −11               7+ import tempfile
+                                              8+ import time
+                                              9+ from pathlib import Path
+                                             10
+                                             11  from panemorph.api import HerdrClient, HerdrError, caller_pane_id
+                                             12  from panemorph.service import PaneMorphService
+                                             13+ from panemorph.model import Choice
+                                             14
+                                             15
+                                             11− def selector_command(herdr: str, plugin_id: str, source_pane_id: str, mode: str) -> list[str]:
+                                             16+ def selector_command(herdr: str, plugin_id: str, source_pane_id: str, mode: str,
+                                             17+                      result_path: str = "") -> list[str]:
+                                             18      return [
+                                             19          herdr,
+                                             20          "plugin",
+                                          @@ selector_command · 30–64
+                                             30          f"PANEMORPH_MODE={mode}",
+                                             31          "--env",
+                                             32          f"PANEMORPH_SOURCE_PANE_ID={source_pane_id}",
+                                             33+         "--env",
+                                             34+         f"PANEMORPH_RESULT_PATH={result_path}",
+                                             35          "--focus",
+                                             36      ]
+                                             37
+                                             38
+                                             39+ def finish_selection(client: HerdrClient, source_pane_id: str, selector_pane_id: str,
+                                             40+                      result_path: Path, mode: str) -> None:
+                                             41+     # Herdr implements an overlay as a temporary zoomed pane. Wait for its
+                                             42+     # process to exit and Herdr to restore the layout before moving live panes.
+                                             43+     while any(pane.get("pane_id") == selector_pane_id
+                                             44+               for pane in client.snapshot().get("panes", [])):
+                                             45+         time.sleep(0.15)
+                                             46+     if not result_path.exists():
+                                             47+         raise HerdrError("The selector exited without a result; check its terminal error")
+                                             48+     result = json.loads(result_path.read_text())
+                                             49+     if "error" in result:
+                                             50+         raise HerdrError(result["error"])
+                                             51+     if result.get("choice") is None:
+ scope  last turn · done 9:44 PM             52+         return
+ tab files                                ] [ hunk  space reviewed  v select  c comment  P send  s scope  ? keys

@@ -1,0 +1,50 @@
+  map   flow   changes   history                                                                                4 commits · 2 branches · 1 worktree · HEAD main
+
+ history                                                                                          058bf10
+ ●   058bf10 Merge branch 'docs'  main                                                            Merge branch 'docs'
+ ├─╮                                                                                              Test · 21 Sep 2026, 9:44 PM   main
+ │ ● 2144159 docs: describe workflows  docs
+ ├─╯                                                                                              M README.md                                    +1 −1
+ ●   ab0eaac feat: implement pane and tab workflows  tag: v0.1.0
+ ●   faa2961 feat: add Herdr API client and topology planner
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ worktrees
+ <tmp>/paneMorph  main
+
+ j k commit                                                                                       ⏎ diff  1 map of this commit  ? keys
