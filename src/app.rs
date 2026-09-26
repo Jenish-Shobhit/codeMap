@@ -1400,6 +1400,9 @@ impl App {
             Err(e) if e.code == "agent_blocked" => {
                 Err("agent is waiting on a question · P pastes instead".into())
             }
+            Err(e) if e.code == "agent_not_ready" || e.code == "agent_not_found" => {
+                Err(format!("the agent is not ready ({}) · P pastes instead", e.code))
+            }
             Err(e) => Err(format!("send failed: {e}")),
         }
     }

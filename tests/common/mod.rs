@@ -1,6 +1,8 @@
 //! Helpers shared by the integration tests: temp dirs and throwaway repos.
 #![allow(dead_code)]
 
+pub mod pty;
+
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
