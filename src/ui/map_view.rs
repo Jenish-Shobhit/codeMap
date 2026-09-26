@@ -80,10 +80,17 @@ fn rail(buf: &mut Buffer, area: Rect, app: &App) {
                 let file = hit.file.rsplit('/').next().unwrap_or(&hit.file).to_string();
                 let mut line = Line::new().bg(bg);
                 if hit.sym.is_some() {
-                    line = line
-                        .push(util::pad(&hit.label, 22), style(t.text, bg))
-                        .push(" ", style(t.muted, bg))
-                        .push(file, style(t.branch, bg));
+                    let room = (area.width as usize).saturating_sub(2);
+                    let fits = util::width(&hit.label) + 2 + util::width(&file) <= room;
+                    if fits {
+                        let name_w = room.saturating_sub(util::width(&file) + 1);
+                        line = line
+                            .push(util::pad(&hit.label, name_w), style(t.text, bg))
+                            .push(" ", style(t.muted, bg))
+                            .push(file, style(t.branch, bg));
+                    } else {
+                        line = line.push(hit.label.clone(), style(t.text, bg));
+                    }
                 } else {
                     line = line.push(hit.label.clone(), style(t.text2, bg));
                 }

@@ -400,18 +400,18 @@ fn hints_line(buf: &mut Buffer, a: &Areas, app: &App) {
     }
     let r = a.hints;
     if let Some(input) = &app.input {
-        let (prompt, text) = match &input.kind {
-            InputKind::Search => ("/ ".to_string(), input.text.clone()),
+        let (prompt, text, keys) = match &input.kind {
+            InputKind::Search => ("/ ".to_string(), input.text.clone(), "   ↑↓ pick  ⏎ go  ⎋ cancel"),
             InputKind::Comment { path, start, end, .. } => {
                 let anchor = if end > start { format!("{path}:{start}-{end}") } else { format!("{path}:{start}") };
-                (format!("comment on {anchor} › "), input.text.clone())
+                (format!("comment on {anchor} › "), input.text.clone(), "   ⏎ save  ⎋ cancel")
             }
         };
         let line = Line::new()
             .push(prompt, style(t.text2, t.body))
             .push(text, style(t.text, t.body))
             .push("█", style(t.text, t.body))
-            .push("   ⏎ save  ⎋ cancel", style(t.muted, t.body));
+            .push(keys, style(t.muted, t.body));
         line.draw(buf, r.x, r.y, r.width);
         return;
     }
