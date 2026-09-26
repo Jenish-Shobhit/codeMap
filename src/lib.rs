@@ -5,3 +5,5 @@
 
 pub mod util;
 pub mod herdr;
+pub mod git;
+pub mod store;
