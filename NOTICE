@@ -1,0 +1,7 @@
+codeMorph
+Copyright (c) 2026 Jenish Shobhit. Licensed under the MIT License.
+
+This product includes colour palettes and theme name aliases ported from
+herdr (https://github.com/herdrdev/herdr), src/app/state.rs and
+src/config/theme.rs at v0.9.0, Copyright the herdr authors, licensed under
+the Apache License, Version 2.0.
