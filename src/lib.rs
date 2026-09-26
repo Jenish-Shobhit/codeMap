@@ -4,3 +4,4 @@
 //! plugin `dev.codemorph` and runnable on its own as `codemorph [path]`.
 
 pub mod util;
+pub mod herdr;

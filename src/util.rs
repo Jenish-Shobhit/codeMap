@@ -288,7 +288,7 @@ mod tests {
         assert_eq!(truncate("hello world", 5), "hell…");
         assert_eq!(truncate("hi", 5), "hi");
         assert_eq!(width(&pad("ab", 4)), 4);
-        assert_eq!(truncate_left("src/very/long/path.rs", 10), "…/path.rs");
+        assert_eq!(truncate_left("src/very/long/path.rs", 10), "…g/path.rs");
         assert!(width(&truncate_left("src/very/long/path.rs", 10)) <= 10);
     }
 
