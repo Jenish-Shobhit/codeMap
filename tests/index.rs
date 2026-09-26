@@ -288,3 +288,43 @@ fn real_rust_source_parses() {
     assert!(quals.contains(&"Store.from_env".to_string()));
     assert!(quals.contains(&"format_comments".to_string()));
 }
+
+#[test]
+fn bare_names_do_not_jump_across_unrelated_folders() {
+    let t = TempDir::new("scope");
+    write(
+        t.path(),
+        "Cargo.toml",
+        "[package]\nname = \"my-tool\"\nversion = \"0.1.0\"\n",
+    );
+    write(
+        t.path(),
+        "src/lib.rs",
+        "pub mod layout;\npub fn place() -> usize { 1 }\n",
+    );
+    // `key` here is a local closure, not a function.
+    write(
+        t.path(),
+        "src/layout.rs",
+        "pub fn run() -> usize { let key = |x: usize| x; key(1) }\n",
+    );
+    write(
+        t.path(),
+        "tests/views.rs",
+        "use my_tool::place;\nfn key() {}\n#[test]\nfn t() { key(); place(); }\n",
+    );
+    let files = git::walk_files(t.path(), 100);
+    let mut index = Index::new(t.path(), files);
+    index.ensure_parsed_under("", 100);
+    index.resolve();
+    assert!(
+        edge_names(&index, "src/layout.rs", "run").is_empty(),
+        "a closure call must not resolve to tests/views.rs::key"
+    );
+    // The crate's own name resolves from tests/.
+    assert_eq!(
+        edge_names(&index, "tests/views.rs", "t"),
+        vec!["views.rs:key", "lib.rs:place"]
+    );
+    assert!(index.imports["tests/views.rs"].contains("src/lib.rs"));
+}

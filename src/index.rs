@@ -336,6 +336,40 @@ struct Resolver<'a> {
     /// (container, method) -> symbols
     methods: HashMap<(&'a str, &'a str), Vec<SymId>>,
     files: BTreeSet<&'a str>,
+    /// Rust crates in the repo: (source root holding lib.rs/main.rs, name).
+    crates: Vec<(String, String)>,
+}
+
+/// Rust crates declared by Cargo.toml files: their `src` dir and name.
+fn rust_crates(index: &Index) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for f in index.files.iter().filter(|f| f.ends_with("Cargo.toml")) {
+        let dir = parent_dir(f);
+        let Ok(text) = std::fs::read_to_string(index.root.join(f)) else {
+            continue;
+        };
+        let mut in_package = false;
+        for line in text.lines() {
+            let l = line.trim();
+            if l.starts_with('[') {
+                in_package = l == "[package]";
+                continue;
+            }
+            if in_package {
+                if let Some(v) = l.strip_prefix("name") {
+                    let v = v
+                        .trim_start()
+                        .trim_start_matches('=')
+                        .trim()
+                        .trim_matches('"');
+                    let src = join_path(dir, "src");
+                    out.push((src, v.replace('-', "_")));
+                    break;
+                }
+            }
+        }
+    }
+    out
 }
 
 impl<'a> Resolver<'a> {
@@ -373,6 +407,7 @@ impl<'a> Resolver<'a> {
             by_name,
             methods,
             files: index.files.iter().map(String::as_str).collect(),
+            crates: rust_crates(index),
         }
     }
 
@@ -426,10 +461,16 @@ impl<'a> Resolver<'a> {
                     }
                 }
             }
+            let imported_files = imports.get(file.as_str()).cloned();
             for call in &syms.calls {
-                if let Some(to) =
-                    self.resolve_call(file, syms, call, &module_alias, &imported_names)
-                {
+                if let Some(to) = self.resolve_call(
+                    file,
+                    syms,
+                    call,
+                    &module_alias,
+                    &imported_names,
+                    imported_files.as_ref(),
+                ) {
                     // Skip a function "calling" its own definition line.
                     if to.file == *file
                         && Some(to.idx) == call.caller
@@ -460,6 +501,7 @@ impl<'a> Resolver<'a> {
         call: &lang::CallRef,
         module_alias: &HashMap<String, Vec<String>>,
         imported_names: &HashMap<String, (Vec<String>, String)>,
+        imported_files: Option<&BTreeSet<String>>,
     ) -> Option<SymId> {
         let name = call.name.as_str();
         let candidates = self.by_name.get(name)?;
@@ -482,13 +524,20 @@ impl<'a> Resolver<'a> {
                         }
                     }
                 }
-                // 3. Unique non-method definition in the repo.
-                let globals: Vec<&SymId> = candidates
+                // 3. A unique definition the caller can see without naming
+                //    it: the same directory (a Go package, a Python
+                //    package's siblings through `*`), or a file it imports.
+                let dir = parent_dir(file);
+                let visible: Vec<&SymId> = candidates
                     .iter()
                     .filter(|c| self.sym(c).kind != SymKind::Method)
+                    .filter(|c| {
+                        parent_dir(&c.file) == dir
+                            || imported_files.is_some_and(|i| i.contains(&c.file))
+                    })
                     .collect();
-                if globals.len() == 1 && !GENERIC_METHODS.contains(&name) {
-                    return Some(globals[0].clone());
+                if visible.len() == 1 && !GENERIC_METHODS.contains(&name) {
+                    return Some(visible[0].clone());
                 }
                 None
             }
@@ -702,7 +751,12 @@ impl<'a> Resolver<'a> {
             }
             Some(&"super") => (parent_dir(dir).to_string(), &segs[1..]),
             Some(&"self") => (dir.to_string(), &segs[1..]),
-            _ => return Vec::new(),
+            // `use codemorph::app::View` from tests/, examples/ or another crate.
+            Some(first) => match self.crates.iter().find(|(_, name)| name == first) {
+                Some((src, _)) => (src.clone(), &segs[1..]),
+                None => return Vec::new(),
+            },
+            None => return Vec::new(),
         };
         // Longest prefix of segments that names a file.
         for n in (1..=rest.len()).rev() {
@@ -715,7 +769,12 @@ impl<'a> Resolver<'a> {
                 return found;
             }
         }
-        Vec::new()
+        // Otherwise the items live in the module file itself.
+        self.first_existing(&[
+            join_path(&base, "lib.rs"),
+            join_path(&base, "main.rs"),
+            join_path(&base, "mod.rs"),
+        ])
     }
 }
 

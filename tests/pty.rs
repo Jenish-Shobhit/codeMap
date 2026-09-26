@@ -135,3 +135,36 @@ fn q_quits_and_ctrl_c_quits() {
         "ctrl-c quits"
     );
 }
+
+/// Smoke run on codeMorph's own repository (Rust); prints each view.
+/// `CODEMORPH_BIN=target/release/codemorph cargo test --test pty smoke -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn smoke_own_repo() {
+    let state = TempDir::new("smoke-state");
+    let state_s = state.path().display().to_string();
+    let root = env!("CARGO_MANIFEST_DIR");
+    let trace = state.path().join("trace.txt");
+    let trace_s = trace.display().to_string();
+    let mut p = spawn(
+        &[root],
+        &[
+            ("CODEMORPH_STATE_DIR", &state_s),
+            ("CODEMORPH_TRACE_FILE", &trace_s),
+        ],
+        180,
+        52,
+    );
+    p.wait_for("history", 0, Duration::from_secs(5))
+        .expect("paint");
+    std::thread::sleep(Duration::from_millis(1500));
+    println!("{}\n", p.screen());
+    for (k, name) in [(b"3", "changes"), (b"4", "history"), (b"1", "map")] {
+        p.send(k);
+        std::thread::sleep(Duration::from_millis(700));
+        println!("===== {name}\n{}\n", p.screen());
+    }
+    p.send(b"\x1b");
+    p.wait_exit(Duration::from_secs(5));
+    println!("{}", std::fs::read_to_string(&trace).unwrap_or_default());
+}
