@@ -369,3 +369,89 @@ fn live_hook_checkpoints_and_comment_delivery() {
     assert_eq!(before.0, after.0, ".git changed");
     println!("live: repository .git unchanged");
 }
+
+/// Pinned mode follows the focused pane: focusing a pane in another
+/// repository retargets the UI.
+#[test]
+#[ignore]
+fn live_follow_mode_retargets_on_focus() {
+    let Some(sock) = live_socket() else {
+        eprintln!("CODEMORPH_LIVE_SOCKET not set: skipping live test");
+        return;
+    };
+    let client = Client::new(&sock);
+    let tmp = TempDir::new("follow");
+    let a = tmp.path().join("alpha-repo");
+    let b = tmp.path().join("beta-repo");
+    for (dir, file) in [(&a, "alpha.py"), (&b, "beta.py")] {
+        std::fs::create_dir_all(dir).unwrap();
+        common::git(dir, &["init", "-q"]);
+        write(dir, file, "def f():\n    return 1\n");
+        common::git(dir, &["add", "-A"]);
+        common::git(dir, &["commit", "-q", "-m", "init"]);
+    }
+    let ws_a = client
+        .call(
+            "workspace.create",
+            json!({"cwd": a, "label": "cmtest-alpha", "focus": true}),
+        )
+        .unwrap();
+    let ws_b = client
+        .call(
+            "workspace.create",
+            json!({"cwd": b, "label": "cmtest-beta", "focus": false}),
+        )
+        .unwrap();
+    let pane_a = ws_a
+        .pointer("/root_pane/pane_id")
+        .and_then(Value::as_str)
+        .unwrap()
+        .to_string();
+    let pane_b = ws_b
+        .pointer("/root_pane/pane_id")
+        .and_then(Value::as_str)
+        .unwrap()
+        .to_string();
+    let ctx = json!({"focused_pane_id": pane_a, "focused_pane_cwd": a, "workspace_label": "cmtest-alpha"});
+    let state = TempDir::new("follow-state");
+    let state_s = state.path().display().to_string();
+    let ctx_s = ctx.to_string();
+    let mut ui = spawn(
+        &["ui"],
+        &[
+            ("HERDR_ENV", "1"),
+            ("HERDR_SOCKET_PATH", &sock),
+            ("HERDR_PLUGIN_STATE_DIR", &state_s),
+            ("HERDR_PLUGIN_CONTEXT_JSON", &ctx_s),
+            ("CODEMORPH_PINNED", "1"),
+            ("CODEMORPH_VIEW", "map"),
+        ],
+        140,
+        40,
+    );
+    ui.wait_for("alpha.py", 0, Duration::from_secs(10))
+        .unwrap_or_else(|| panic!("alpha map:\n{}", ui.screen()));
+    std::thread::sleep(Duration::from_millis(300));
+    client
+        .call("pane.focus", json!({"pane_id": pane_b}))
+        .unwrap();
+    ui.wait_for("beta.py", 0, Duration::from_secs(10))
+        .unwrap_or_else(|| {
+            panic!(
+                "after focusing {pane_b}, expected beta's map:\n{}",
+                ui.screen()
+            )
+        });
+    println!("live: pinned codeMorph followed focus from {pane_a} to {pane_b}");
+    ui.send(b"q");
+    assert!(ui.wait_exit(Duration::from_secs(5)).is_some());
+    for ws in [&ws_a, &ws_b] {
+        let id = ws
+            .pointer("/workspace/workspace_id")
+            .and_then(Value::as_str)
+            .unwrap();
+        client
+            .call("workspace.close", json!({"workspace_id": id}))
+            .unwrap();
+    }
+}
