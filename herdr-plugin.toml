@@ -1,0 +1,53 @@
+id = "dev.codemorph"
+name = "codeMorph"
+version = "0.1.0"
+min_herdr_version = "0.9.0"
+description = "See your code as a map, and what your agents changed on it: map, flow, changes and history in one popup."
+platforms = ["macos", "linux"]
+
+# GitHub installs build the binary. `herdr plugin link` skips build steps,
+# so run `cargo build --release` yourself before linking.
+[[build]]
+command = ["cargo", "build", "--release"]
+
+# Relative argv paths that contain a slash resolve against the plugin root
+# (herdr src/plugin_command.rs `program_for_cwd`, and plugin.pane.open does the
+# same for pane entrypoints), so these run the binary that cargo built here.
+[[actions]]
+id = "open"
+title = "codeMorph: open the map of the focused agent's worktree"
+contexts = ["global", "workspace", "tab", "pane"]
+command = ["target/release/codemorph", "open", "--view", "map"]
+
+[[actions]]
+id = "flow"
+title = "codeMorph: flow of the function under the cursor"
+contexts = ["global", "workspace", "tab", "pane"]
+command = ["target/release/codemorph", "open", "--view", "flow"]
+
+[[actions]]
+id = "changes"
+title = "codeMorph: review the focused agent's last turn"
+contexts = ["global", "workspace", "tab", "pane"]
+command = ["target/release/codemorph", "open", "--view", "changes"]
+
+[[actions]]
+id = "history"
+title = "codeMorph: git history and worktrees"
+contexts = ["global", "workspace", "tab", "pane"]
+command = ["target/release/codemorph", "open", "--view", "history"]
+
+# Turn checkpoints: snapshot the agent's worktree into codeMorph's own shadow
+# store whenever an agent starts or finishes a turn. Nothing is written to your
+# repository.
+[[events]]
+on = "pane.agent_status_changed"
+command = ["target/release/codemorph", "hook"]
+
+[[panes]]
+id = "ui"
+title = "codeMorph"
+placement = "popup"
+width = "94%"
+height = "92%"
+command = ["target/release/codemorph", "ui"]
