@@ -57,6 +57,13 @@ pub fn git(dir: &Path, args: &[&str]) -> String {
             "commit.gpgsign=false",
             "-c",
             "tag.gpgsign=false",
+            // No background `maintenance run --auto` after commits: its
+            // transient objects/maintenance.lock would show up in the
+            // fingerprints the tests take of .git.
+            "-c",
+            "maintenance.auto=false",
+            "-c",
+            "gc.auto=0",
         ])
         .args(args)
         .output()
