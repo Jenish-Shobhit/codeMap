@@ -45,6 +45,7 @@ use serde_json::{json, Value};
 /// Popup sizes (columns, rows) per view: roughly 94% x 92% of a 150 x 50
 /// terminal, and wider for Flow so the whole chart fits.
 const MAP: (u16, u16) = (140, 46);
+const MAP_FILE: (u16, u16) = (140, 34);
 const FLOW: (u16, u16) = (176, 50);
 const CHANGES: (u16, u16) = (150, 46);
 const HISTORY: (u16, u16) = (140, 42);
@@ -95,9 +96,14 @@ fn main() {
     app.view = View::Map;
     shots.push(("map", "Map", frame(&mut app, MAP)));
 
-    // Flow: finish_selection(), the function this turn added.
+    // Map, zoomed in: select open_selector.py in its folder, then ⏎.
     let file = "panemorph/actions/open_selector.py";
     app.reveal(file, None);
+    frame(&mut app, MAP);
+    key(&mut app, KeyCode::Enter);
+    shots.push(("map-file", "Map", frame(&mut app, MAP_FILE)));
+
+    // Flow: finish_selection(), the function this turn added.
     frame(&mut app, FLOW);
     let idx = app
         .index
@@ -209,6 +215,10 @@ fn git(dir: &Path, date: &str, args: &[&str]) {
             "commit.gpgsign=false",
             "-c",
             "tag.gpgsign=false",
+            "-c",
+            "maintenance.auto=false",
+            "-c",
+            "gc.auto=0",
         ])
         .args(args)
         .output()
