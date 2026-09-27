@@ -132,13 +132,15 @@ pub fn spawn(args: &[&str], envs: &[(&str, &str)], cols: u16, rows: u16) -> Pty 
         ws_ypixel: 0,
     };
     // SAFETY: openpty fills the two descriptors; we own them afterwards.
+    // A raw pointer for the window size: glibc declares it `*const`, macOS
+    // `*mut`, and `&raw mut` fits both.
     let rc = unsafe {
         libc::openpty(
             &mut master,
             &mut slave,
             std::ptr::null_mut(),
             std::ptr::null_mut(),
-            &mut ws,
+            &raw mut ws,
         )
     };
     assert_eq!(rc, 0, "openpty failed");
