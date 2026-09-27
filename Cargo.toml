@@ -2,12 +2,19 @@
 name = "codemap"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.85"
-description = "See your code as a map, and what your agents changed on it. A herdr plugin."
+# Checked by the MSRV job in CI. tree-sitter-language 0.1.8 needs 1.90.
+rust-version = "1.90"
+description = "herdr plugin that shows your code as a map and flowcharts, and reviews what your agents changed"
+authors = ["Jenish Shobhit"]
 license = "MIT"
+repository = "https://github.com/Jenish-Shobhit/codeMap"
+homepage = "https://github.com/Jenish-Shobhit/codeMap#readme"
 readme = "README.md"
-keywords = ["herdr", "tui", "code-map", "flowchart", "review"]
-categories = ["command-line-utilities", "development-tools"]
+keywords = ["herdr", "tui", "tree-sitter", "code-review", "visualization"]
+categories = ["command-line-utilities", "development-tools", "visualization"]
+# A herdr plugin, installed with `herdr plugin install`; the crates.io name
+# `codemap` belongs to another project.
+publish = false
 
 [[bin]]
 name = "codemap"

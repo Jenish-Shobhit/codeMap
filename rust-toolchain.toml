@@ -1,0 +1,6 @@
+# The toolchain used for development and CI. The minimum supported Rust
+# version is `rust-version` in Cargo.toml, checked by the MSRV job in CI.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]
+profile = "minimal"
