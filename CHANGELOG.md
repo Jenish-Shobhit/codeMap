@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Upgraded `tree-sitter` from 0.25 to 0.27. The grammar crates stay on
+  their latest releases (`tree-sitter-python` 0.25, `tree-sitter-rust` 0.24,
+  `tree-sitter-typescript` 0.23, `tree-sitter-javascript` 0.25,
+  `tree-sitter-go` 0.25), whose ABIs (14 and 15) tree-sitter 0.27 supports.
+  Symbols, calls, imports and flowcharts are unchanged.
+- Upgraded `toml` from 0.8 to 1.1. herdr's `[theme]` settings resolve as
+  before; `config.toml` files that use TOML 1.1 syntax, such as multi-line
+  inline tables, are now read instead of falling back to the default theme.
+
 ## [0.1.0] - 2026-09-27
 
 First public release. codeMap was developed under the working names Loupe
