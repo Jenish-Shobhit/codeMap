@@ -134,6 +134,46 @@ fn shadow_store_writes_nothing_into_the_repo() {
     assert!(objects > 2, "the shadow holds its own objects");
 }
 
+fn set_mtime(path: &std::path::Path, t: std::time::SystemTime) {
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(path)
+        .unwrap()
+        .set_modified(t)
+        .unwrap();
+}
+
+/// git trusts an entry's cached stat data unless the file is at least as new
+/// as the index file ("racily clean"), and then compares content. "Since
+/// HEAD" diffs against a private copy of the index, so the copy has to keep
+/// the index's mtime; a fresh one would hide a same-size edit made in the
+/// second the index was written. Linux builds of git compare whole seconds,
+/// which is what `core.checkStat = minimal` makes git do here on any system.
+#[test]
+fn since_head_sees_same_size_edits_from_the_second_the_index_was_written() {
+    let repo = repo_with(&[("a.py", "x = 1\n"), ("b.py", "y = 1\n")]);
+    let p = repo.path();
+    git(p, &["config", "core.checkStat", "minimal"]);
+    git(p, &["config", "core.trustctime", "false"]);
+    let t = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_790_000_000);
+    set_mtime(&p.join("a.py"), t);
+    git(p, &["update-index", "--refresh"]);
+    // Same size, same mtime second, and an index written in that second.
+    write(p, "a.py", "x = 2\n");
+    set_mtime(&p.join("a.py"), t);
+    set_mtime(&p.join(".git/index"), t);
+
+    let state = TempDir::new("racy-state");
+    let store = store_in(&state);
+    let info = git::discover(p).unwrap();
+    let diff = git::diff_head(&info, &store.shadow(&info).dir).unwrap();
+    let paths: Vec<&str> = diff.iter().map(|f| f.path.as_str()).collect();
+    assert_eq!(paths, vec!["a.py"]);
+    assert_eq!(diff[0].status, FileStatus::Modified);
+    // git itself agrees on the user's own index.
+    assert_eq!(git(p, &["diff", "--name-only", "HEAD"]).trim(), "a.py");
+}
+
 #[test]
 fn empty_repo_snapshots_against_the_empty_tree() {
     let t = TempDir::new("empty");

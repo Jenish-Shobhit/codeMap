@@ -260,6 +260,18 @@ pub fn diff_head(info: &RepoInfo, scratch: &Path) -> Result<Vec<FileDiff>, GitEr
     let _ = std::fs::remove_file(&index_copy);
     if theirs.is_file() {
         std::fs::copy(&theirs, &index_copy).map_err(|e| GitError(e.to_string()))?;
+        // git re-reads an entry whose file is not older than the index file
+        // ("racily clean"). Give the copy the index's mtime, as macOS's copy
+        // already does and Linux's does not; a newer copy would make git trust
+        // stale stat data and miss same-size edits from that second.
+        let mtime = std::fs::metadata(&theirs)
+            .and_then(|m| m.modified())
+            .map_err(|e| GitError(e.to_string()))?;
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&index_copy)
+            .and_then(|f| f.set_modified(mtime))
+            .map_err(|e| GitError(e.to_string()))?;
     }
     let with_index = |args: &[&str]| -> Result<Vec<u8>, GitError> {
         let mut cmd = git_cmd(&info.root);
