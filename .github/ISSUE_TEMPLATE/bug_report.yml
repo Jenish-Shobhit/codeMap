@@ -1,0 +1,80 @@
+name: Bug report
+description: Something in codeMap does not work as documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please search [existing issues](https://github.com/Jenish-Shobhit/codeMap/issues) first.
+        Security problems go through [private reporting](https://github.com/Jenish-Shobhit/codeMap/security/advisories/new), not here.
+        Before you paste output, remove private code, repository paths and names you would not share publicly.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what codeMap did instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The smallest steps that show it. A tiny public repository or a code snippet helps most.
+      placeholder: |
+        1. Open codeMap with ⌃⌥M over an agent pane
+        2. Press 2 on a Go function with a select statement
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: view
+    attributes:
+      label: Where
+      options:
+        - Map
+        - Flow
+        - Changes
+        - History
+        - Turn checkpoints (the hook)
+        - Install or keybinding
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How codeMap is installed
+      options:
+        - herdr plugin install from GitHub
+        - herdr plugin link of a local build
+        - Release archive
+        - Standalone (codemap [path])
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Output of `codemap --version` and `herdr --version`.
+      placeholder: codemap 0.1.0, herdr 0.9.1
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: OS and terminal
+      placeholder: macOS 15.5, Ghostty 1.2
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: codemap doctor
+      description: Run `codemap doctor` in the repository (inside herdr if the problem is there).
+      render: text
+  - type: textarea
+    id: logs
+    attributes:
+      label: Plugin log
+      description: For install, action or hook problems, the output of `herdr plugin log list --plugin dev.codemap`.
+      render: text

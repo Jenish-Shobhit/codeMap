@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/Jenish-Shobhit/codeMap/security/advisories/new
+    about: Report privately; please do not open a public issue.
+  - name: herdr documentation
+    url: https://herdr.dev/docs/
+    about: Questions about herdr itself, plugins in general, or key bindings.
