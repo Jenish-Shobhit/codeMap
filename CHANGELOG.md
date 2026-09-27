@@ -1,26 +1,43 @@
 # Changelog
 
-All notable changes to codeMap will be documented here.
+All notable changes to codeMap are documented in this file.
 
-## 0.1.0 — 2026-09-27
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-- One herdr popup (94% × 92%) with four views on the focused agent's
-  worktree: Map, Flow, Changes and History, switched with 1–4. Also runs on
-  its own as `codemap [path]`.
-- Map: folders, files and functions as boxes, calls and imports as lines in a
-  layered (Sugiyama) layout drawn with box characters; zoom with ⏎ and ⌫,
-  search with /, move with the arrow keys; functions changed in the agent's
-  last turn marked M or A.
-- Flow: flowcharts of Python, Rust, TypeScript/JavaScript and Go functions
-  (decisions, loops, try/except, match, returns) with changed lines marked;
-  ⏎ opens a call, ⌫ goes back.
-- Changes: hunks since the last turn, the agent's session or HEAD; reviewed
-  marks that persist; comments sent to the agent with P (paste) or S
-  (`agent.prompt`).
-- History: commit graph with branches, tags and HEAD, worktrees with their
-  agents, and commit diffs.
+## [Unreleased]
+
+## [0.1.0] - 2026-09-27
+
+First public release. codeMap was developed under the working names Loupe
+and codeMorph.
+
+### Added
+
+- One herdr popup (94% × 92%) over the focused agent's worktree, opened
+  with a key bound to `dev.codemap.open`, with four views switched by
+  `1`–`4`. The same views run outside herdr as `codemap [path]`.
+- **Map**: folders, files, classes and functions as boxes, calls and imports
+  as lines, in a layered (Sugiyama) layout drawn with box characters. Zoom
+  with `⏎` and `⌫`, search with `/`, move with the arrow keys. Functions the
+  agent's last turn changed are marked `M`, added ones `A`.
+- **Flow**: flowcharts of Python, Rust, TypeScript/JavaScript and Go
+  functions (decisions, loops, try/except, match, returns), with changed
+  lines marked. `⏎` opens a call, `⌫` goes back.
+- **Changes**: hunks since the last turn, the agent's session or `HEAD`.
+  Reviewed marks persist until a hunk changes; line comments go to the
+  agent's prompt with `P` (paste) or `S` (herdr's `agent.prompt`).
+- **History**: the commit graph with branches, tags and `HEAD`, the
+  worktrees with the agents working in them, and commit diffs.
 - Turn checkpoints from the `pane.agent_status_changed` hook, stored in a
-  shadow git dir in the plugin state directory; nothing is written into the
-  repository.
-- herdr's theme (all 18 palettes, `[theme.custom]` overrides), states for
-  loading, no repo, empty repo, huge repo and unsupported languages.
+  shadow git directory in the plugin's state directory. Nothing is written
+  into the repository.
+- herdr's theme: all 18 built-in palettes and `[theme.custom]` overrides.
+- States for loading, not a repository, an empty repository, huge
+  repositories (lazy parsing, paged folders) and unsupported languages.
+- `codemap doctor`, which prints where codeMap looks for herdr, its theme
+  and its state.
+- Prebuilt binaries for macOS and Linux on x86_64 and aarch64.
+
+[Unreleased]: https://github.com/Jenish-Shobhit/codeMap/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/Jenish-Shobhit/codeMap/releases/tag/v0.1.0

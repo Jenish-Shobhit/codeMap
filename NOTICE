@@ -1,7 +1,74 @@
 codeMap
-Copyright (c) 2026 Jenish Shobhit. Licensed under the MIT License.
+Copyright (c) 2026 Jenish Shobhit
+Licensed under the MIT License; see LICENSE.
 
-This product includes colour palettes and theme name aliases ported from
-herdr (https://github.com/herdrdev/herdr), src/app/state.rs and
-src/config/theme.rs at v0.9.0, Copyright the herdr authors, licensed under
-the Apache License, Version 2.0.
+This product includes third-party material, listed below with its license.
+
+-------------------------------------------------------------------------------
+herdr colour palettes (Apache License 2.0)
+-------------------------------------------------------------------------------
+
+src/theme.rs contains colour palettes and theme name aliases ported from herdr
+(https://github.com/herdrdev/herdr), files src/app/state.rs and
+src/config/theme.rs at v0.9.0. Copyright the herdr authors. Licensed under the
+Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0).
+
+Changes: the palette values and aliases were re-expressed as Rust constants
+and a lookup function for codeMap's own theme resolution.
+
+-------------------------------------------------------------------------------
+tree-sitter and grammars (MIT License)
+-------------------------------------------------------------------------------
+
+codeMap binaries statically link the tree-sitter runtime and these grammars,
+each distributed under the MIT License:
+
+  tree-sitter             Copyright (c) 2018 Max Brunsfeld
+                          https://github.com/tree-sitter/tree-sitter
+  tree-sitter-python      Copyright (c) 2016 Max Brunsfeld
+                          https://github.com/tree-sitter/tree-sitter-python
+  tree-sitter-rust        Copyright (c) 2017 Maxim Sokolov
+                          https://github.com/tree-sitter/tree-sitter-rust
+  tree-sitter-typescript  Copyright (c) 2017 Max Brunsfeld
+                          https://github.com/tree-sitter/tree-sitter-typescript
+  tree-sitter-javascript  Copyright (c) 2014 Max Brunsfeld
+                          https://github.com/tree-sitter/tree-sitter-javascript
+  tree-sitter-go          Copyright (c) 2014 Max Brunsfeld
+                          https://github.com/tree-sitter/tree-sitter-go
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to
+  deal in the Software without restriction, including without limitation the
+  rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+  sell copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in
+  all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+  FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+  IN THE SOFTWARE.
+
+-------------------------------------------------------------------------------
+Other Rust crates
+-------------------------------------------------------------------------------
+
+Binaries also include ratatui, crossterm, serde, serde_json, toml,
+unicode-width, libc and their dependencies, under the MIT or Apache-2.0
+licenses (Unicode-3.0 for Unicode data tables). Cargo.lock lists the exact
+versions; `cargo deny check licenses`, configured in deny.toml, enforces the
+allowed licenses in CI.
+
+-------------------------------------------------------------------------------
+Test fixtures and screenshots
+-------------------------------------------------------------------------------
+
+tests/fixtures/panemorph and tests/fixtures/panemorph_before hold Python
+source from paneMorph (https://github.com/Jenish-Shobhit/paneMorph),
+Copyright (c) 2026 Jenish Shobhit, MIT License. The snapshot tests and the
+README screenshots render it.
