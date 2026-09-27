@@ -3,7 +3,13 @@
 //! ```sh
 //! cargo run --example screenshots            # writes docs/assets/*.svg
 //! cargo run --example screenshots -- --text  # also prints each frame as text
+//! cargo build --release && cargo run --example screenshots -- --herdr
+//!                                            # also docs/assets/herdr.svg
 //! ```
+//!
+//! `herdr.svg`, the README's hero image, is a capture of a real herdr client
+//! (see `herdr.rs`); it needs herdr installed, so CI does not regenerate it.
+//! The other images are rendered in-process, and CI checks they are current.
 //!
 //! The example builds a throwaway workspace in the system temp directory:
 //!
@@ -23,13 +29,16 @@
 //! written to SVG in herdr's Dracula theme. The output is deterministic:
 //! commit dates and the clock are fixed. The example reads `tests/fixtures/`,
 //! writes `docs/assets/`, and touches nothing else outside its temp directory.
+//!
+//! `--herdr` also captures the popup over a real herdr client; see `herdr.rs`.
 
+mod demo;
+mod herdr;
 mod svg;
 
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use codemap::app::{App, Options, View};
 use codemap::herdr::{Client, PluginContext};
@@ -54,6 +63,7 @@ const NOW: i64 = 1_790_027_160;
 
 fn main() {
     let print_text = std::env::args().any(|a| a == "--text");
+    let with_herdr = std::env::args().any(|a| a == "--herdr");
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let out_dir = manifest.join("docs/assets");
     std::fs::create_dir_all(&out_dir).expect("create docs/assets");
@@ -67,9 +77,11 @@ fn main() {
     // Paths print as ~/code/paneMorph instead of the temp directory.
     std::env::set_var("HOME", &home);
 
-    let demo = build_demo(&manifest.join("tests/fixtures"), &home, &base);
+    let fixtures = manifest.join("tests/fixtures");
+    let repo = demo::build_repo(&fixtures, &home);
+    let store = record_turn(&fixtures, &repo, &base);
     let socket = base.join("herdr.sock");
-    serve_mock_herdr(&socket, &demo);
+    serve_mock_herdr(&socket, &repo);
 
     codemap::util::freeze_time(NOW);
     let mut app = App::new(Options {
@@ -79,22 +91,23 @@ fn main() {
             workspace_label: Some("paneMorph".into()),
             tab_label: Some("selector-fix".into()),
             focused_pane_id: Some("w1:p2".into()),
-            focused_pane_cwd: Some(demo.root.display().to_string()),
+            focused_pane_cwd: Some(repo.root.display().to_string()),
             focused_pane_agent: Some("claude".into()),
             focused_pane_status: Some("idle".into()),
             ..Default::default()
         }),
         client: Some(Client::new(&socket)),
-        store: demo.store.clone(),
+        store,
         theme: dracula(),
     });
     app.load_blocking();
 
     let mut shots: Vec<(&str, &str, Buffer)> = Vec::new();
 
-    // Map: the package folder, with the functions this turn changed.
+    // Map at folder level: the README's hero image shows it inside herdr
+    // (`--herdr`), so it is only drawn here, to build the scene.
     app.view = View::Map;
-    shots.push(("map", "Map", frame(&mut app, MAP)));
+    frame(&mut app, MAP);
 
     // Map, zoomed in: select open_selector.py in its folder, then ⏎.
     let file = "panemorph/actions/open_selector.py";
@@ -164,6 +177,17 @@ fn main() {
         );
     }
     let _ = std::fs::remove_dir_all(&base);
+
+    if with_herdr {
+        let path = out_dir.join("herdr.svg");
+        match herdr::capture(&manifest, &fixtures, &path) {
+            Ok(()) => println!("wrote docs/assets/herdr.svg"),
+            Err(e) => {
+                eprintln!("herdr capture failed: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
 }
 
 /// herdr's dracula theme, as a user would set it in herdr's config.toml.
@@ -186,209 +210,16 @@ fn key(app: &mut App, code: KeyCode) {
     app.drain();
 }
 
-// ---- the demo workspace ---------------------------------------------------
+// ---- the recorded turn ----------------------------------------------------
 
-struct Demo {
-    root: PathBuf,
-    worktree: PathBuf,
-    store: Store,
-}
-
-fn git(dir: &Path, date: &str, args: &[&str]) {
-    let out = Command::new("git")
-        .current_dir(dir)
-        .env("GIT_AUTHOR_NAME", "Example Dev")
-        .env("GIT_AUTHOR_EMAIL", "dev@example.com")
-        .env("GIT_COMMITTER_NAME", "Example Dev")
-        .env("GIT_COMMITTER_EMAIL", "dev@example.com")
-        .env("GIT_AUTHOR_DATE", date)
-        .env("GIT_COMMITTER_DATE", date)
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
-        .env_remove("GIT_DIR")
-        .env_remove("GIT_WORK_TREE")
-        .env_remove("GIT_INDEX_FILE")
-        .args([
-            "-c",
-            "init.defaultBranch=main",
-            "-c",
-            "commit.gpgsign=false",
-            "-c",
-            "tag.gpgsign=false",
-            "-c",
-            "maintenance.auto=false",
-            "-c",
-            "gc.auto=0",
-        ])
-        .args(args)
-        .output()
-        .expect("git runs");
-    assert!(
-        out.status.success(),
-        "git {args:?}: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-}
-
-fn copy_tree(from: &Path, to: &Path) {
-    std::fs::create_dir_all(to).unwrap();
-    for entry in std::fs::read_dir(from).unwrap().flatten() {
-        let p = entry.path();
-        let dest = to.join(entry.file_name());
-        if p.is_dir() {
-            copy_tree(&p, &dest);
-        } else {
-            std::fs::copy(&p, &dest).unwrap();
-        }
-    }
-}
-
-fn copy(fx: &Path, root: &Path, rel: &str) {
-    let dest = root.join(rel);
-    std::fs::create_dir_all(dest.parent().unwrap()).unwrap();
-    // The code before the agent's turn, where the fixtures keep it.
-    let before = fx.join("panemorph_before").join(rel);
-    let src = if before.exists() {
-        before
-    } else {
-        fx.join("panemorph").join(rel)
-    };
-    std::fs::copy(src, dest).unwrap();
-}
-
-fn write(root: &Path, rel: &str, text: &str) {
-    std::fs::write(root.join(rel), text).unwrap();
-}
-
-fn build_demo(fx: &Path, home: &Path, base: &Path) -> Demo {
-    let code = home.join("code");
-    let root = code.join("paneMorph");
-    std::fs::create_dir_all(&root).unwrap();
-    let r = root.as_path();
-    let day = |d: u32, h: u32| format!("2026-09-{d:02}T{h:02}:12:00Z");
-
-    let commit = |date: &str, msg: &str| {
-        git(r, date, &["add", "-A"]);
-        git(r, date, &["commit", "-q", "-m", msg]);
-    };
-    git(r, &day(12, 10), &["init", "-q"]);
-    write(r, "README.md", "# paneMorph\n\nMove live herdr panes.\n");
-    write(r, ".gitignore", "__pycache__/\n*.pyc\n");
-    copy(fx, r, "panemorph/__init__.py");
-    commit(&day(12, 10), "chore: scaffold the package");
-    write(r, "LICENSE", "MIT License\n");
-    commit(&day(12, 11), "chore: add the MIT license");
-    for f in ["api.py", "model.py"] {
-        copy(fx, r, &format!("panemorph/{f}"));
-    }
-    commit(&day(13, 9), "feat: add the herdr API client");
-    copy(fx, r, "panemorph/topology.py");
-    commit(&day(14, 15), "feat: plan tab merges from the layout tree");
-    for f in ["service.py", "doctor.py"] {
-        copy(fx, r, &format!("panemorph/{f}"));
-    }
-    commit(&day(15, 14), "feat: add the pane service and doctor");
-
-    git(r, &day(16, 9), &["checkout", "-q", "-b", "workflows"]);
-    for f in [
-        "__init__.py",
-        "extract.py",
-        "open_selector.py",
-        "selector.py",
-    ] {
-        copy(fx, r, &format!("panemorph/actions/{f}"));
-    }
-    commit(&day(16, 10), "feat: implement pane and tab workflows");
-    write(
-        r,
-        "herdr-plugin.toml",
-        "id = \"dev.panemorph\"\nname = \"paneMorph\"\n",
-    );
-    commit(&day(16, 16), "feat: add the herdr plugin manifest");
-    git(r, &day(16, 17), &["checkout", "-q", "main"]);
-    write(
-        r,
-        "README.md",
-        "# paneMorph\n\nMove live herdr panes between tabs without restarting them.\n",
-    );
-    commit(&day(16, 18), "docs: describe the selector");
-    git(
-        r,
-        &day(17, 10),
-        &[
-            "merge",
-            "-q",
-            "--no-ff",
-            "workflows",
-            "-m",
-            "Merge branch 'workflows'",
-        ],
-    );
-    git(r, &day(17, 10), &["tag", "v0.1.0"]);
-
-    git(
-        r,
-        &day(18, 9),
-        &["checkout", "-q", "-b", "overlay-selector"],
-    );
-    write(
-        r,
-        "herdr-plugin.toml",
-        "id = \"dev.panemorph\"\nname = \"paneMorph\"\nplacement = \"overlay\"\n",
-    );
-    commit(&day(18, 11), "fix: open the selector as an overlay");
-    git(r, &day(18, 12), &["checkout", "-q", "main"]);
-    write(
-        r,
-        "CHANGELOG.md",
-        "# Changelog\n\n## 0.1.0\n\n- Send and bring panes.\n",
-    );
-    commit(&day(19, 15), "chore: add a changelog");
-    git(
-        r,
-        &day(20, 10),
-        &[
-            "merge",
-            "-q",
-            "--no-ff",
-            "overlay-selector",
-            "-m",
-            "Merge branch 'overlay-selector'",
-        ],
-    );
-    git(r, &day(20, 10), &["branch", "-q", "-D", "overlay-selector"]);
-
-    // A second worktree, where another agent writes docs.
-    let worktree = code.join("paneMorph-docs");
-    git(
-        r,
-        &day(21, 9),
-        &[
-            "worktree",
-            "add",
-            "-q",
-            "-b",
-            "docs-examples",
-            worktree.to_str().unwrap(),
-        ],
-    );
-    write(
-        &worktree,
-        "README.md",
-        "# paneMorph\n\nMove live herdr panes between tabs without restarting them.\n\n## Examples\n",
-    );
-    git(
-        &worktree,
-        &day(21, 20),
-        &["commit", "-q", "-am", "docs: add usage examples"],
-    );
-
-    // The agent's turn, recorded the way `codemap hook` records one.
+/// Apply the agent's turn to the demo repository and record it in a side
+/// store the way `codemap hook` does: a snapshot before and one after.
+fn record_turn(fixtures: &Path, repo: &demo::Repo, base: &Path) -> Store {
     let store = Store::new(base.join("state"));
-    let info = codemap::git::discover(r).unwrap();
+    let info = codemap::git::discover(&repo.root).unwrap();
     let shadow = store.shadow(&info);
     let mut start = shadow.snapshot("turn 3 start").unwrap();
-    copy_tree(&fx.join("panemorph"), r);
+    demo::apply_turn(fixtures, &repo.root);
     let mut end = shadow.snapshot("turn 3 end").unwrap();
     start.at = NOW - 420;
     end.at = NOW - 120;
@@ -409,18 +240,14 @@ fn build_demo(fx: &Path, home: &Path, base: &Path) -> Demo {
         }],
     };
     store.save_pane(&pane).unwrap();
-    Demo {
-        root: info.root,
-        worktree: worktree.canonicalize().unwrap(),
-        store,
-    }
+    store
 }
 
 /// A stand-in for herdr's socket: the two read-only calls the UI makes.
-fn serve_mock_herdr(socket: &Path, demo: &Demo) {
+fn serve_mock_herdr(socket: &Path, repo: &demo::Repo) {
     let listener = UnixListener::bind(socket).expect("bind mock socket");
-    let root = demo.root.display().to_string();
-    let worktree = demo.worktree.display().to_string();
+    let root = repo.root.display().to_string();
+    let worktree = repo.worktree.display().to_string();
     std::thread::spawn(move || {
         for stream in listener.incoming().flatten() {
             let mut reader = BufReader::new(stream.try_clone().unwrap());

@@ -15,7 +15,9 @@
 </div>
 
 <p align="center">
-  <img src="docs/assets/map.svg" width="100%" alt="codeMap's Map view: a Python package drawn as boxes joined by call lines. The left rail lists the four functions the agent's last turn changed, marked M for changed and A for added.">
+  <img src="docs/assets/herdr.svg" width="100%" alt="codeMap's popup over an agent's pane in herdr. The Map view draws a Python package as boxes joined by call lines, and its rail lists the four functions the agent's last turn changed, marked M for changed and A for added. herdr's sidebar shows the workspace and the agent.">
+  <br>
+  <sub>codeMap over an agent's pane, captured from a real herdr client.</sub>
 </p>
 
 ## Why
@@ -164,7 +166,9 @@ workspace, tab, branch and turn, as in `○ paneMorph · selector-fix  main  tur
 
 The screenshots show [paneMorph](https://github.com/Jenish-Shobhit/paneMorph)'s
 code with one recorded agent turn. They are rendered from the real UI by
-`cargo run --example screenshots`, and CI checks that they are current.
+`cargo run --example screenshots`, and CI checks that they are current. The
+image at the top is a capture of a real herdr client in a throwaway session
+(`-- --herdr`).
 
 ### Map
 

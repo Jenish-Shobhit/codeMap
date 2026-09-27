@@ -82,6 +82,18 @@ cargo run --example screenshots -- --text   # also prints each frame
 If your change alters a view, regenerate them and commit the result; CI fails
 when they are stale.
 
+The README's hero image, `docs/assets/herdr.svg`, is a capture of a real herdr
+client, so it needs herdr installed and CI does not check it:
+
+```sh
+cargo build --release
+cargo run --example screenshots -- --herdr
+```
+
+It runs a throwaway herdr session whose `HOME` and XDG directories live in
+`/tmp/cmtest-shot-<pid>`, registers codeMap only there, and removes it all
+afterwards. It refuses to write an image that shows your user or host name.
+
 ### Ignored tests
 
 Some tests are `#[ignore]` because they need a release build, time, or a herdr

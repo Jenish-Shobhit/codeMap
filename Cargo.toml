@@ -45,3 +45,8 @@ opt-level = 3
 codegen-units = 4
 debug = false
 strip = true
+
+[dev-dependencies]
+# The README capture of the popup over a real herdr client
+# (`cargo run --example screenshots -- --herdr`).
+vt100 = "0.16"
