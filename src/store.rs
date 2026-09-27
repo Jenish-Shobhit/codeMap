@@ -250,7 +250,7 @@ impl PaneState {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Reviews {
-    /// "<path>\u{0}<hunk hash>"
+    /// Reviewed hunks, each keyed `"<path>\u{0}<hunk hash>"`.
     #[serde(default)]
     pub hunks: std::collections::BTreeSet<String>,
 }
