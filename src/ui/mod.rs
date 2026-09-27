@@ -72,7 +72,7 @@ pub fn render_buf(buf: &mut Buffer, area: Rect, app: &mut App) {
             buf,
             area.x,
             area.y,
-            "codeMorph: window too small",
+            "codeMap: window too small",
             Style::default().fg(t.muted).bg(t.body),
             area.width,
         );

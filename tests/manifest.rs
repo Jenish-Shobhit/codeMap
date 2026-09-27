@@ -74,9 +74,7 @@ fn version_tuple(v: &str) -> (u32, u32, u32) {
 /// root (plugin_command::program_for_cwd); a bare name is looked up on PATH.
 fn resolves_to_our_binary(cmd: &[String]) -> bool {
     let program = &cmd[0];
-    program.contains('/')
-        && Path::new(program).is_relative()
-        && program == "target/release/codemorph"
+    program.contains('/') && Path::new(program).is_relative() && program == "target/release/codemap"
 }
 
 #[test]
@@ -84,9 +82,9 @@ fn manifest_passes_herdr_validation() {
     let text =
         std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/herdr-plugin.toml")).unwrap();
     let m: Manifest = toml::from_str(&text).unwrap();
-    assert_eq!(m.id, "dev.codemorph");
+    assert_eq!(m.id, "dev.codemap");
     assert!(plugin_id_ok(&m.id));
-    assert_eq!(m.name, "codeMorph");
+    assert_eq!(m.name, "codeMap");
     assert!(!m.version.trim().is_empty());
     assert_eq!(
         m.version,
@@ -137,17 +135,14 @@ fn manifest_passes_herdr_validation() {
     // The checkpoint hook listens to a known event name.
     assert_eq!(m.events.len(), 1);
     assert_eq!(m.events[0].on, "pane.agent_status_changed");
-    assert_eq!(
-        m.events[0].command,
-        vec!["target/release/codemorph", "hook"]
-    );
+    assert_eq!(m.events[0].command, vec!["target/release/codemap", "hook"]);
 
     // The popup entrypoint at 94% x 92%; width/height only valid on popups.
     assert_eq!(m.panes.len(), 1);
     let p = &m.panes[0];
     assert!(local_id_ok(&p.id));
     assert_eq!(p.id, "ui");
-    assert_eq!(p.title, "codeMorph");
+    assert_eq!(p.title, "codeMap");
     assert_eq!(p.placement.as_deref(), Some("popup"));
     assert_eq!(p.width.as_ref().and_then(|v| v.as_str()), Some("94%"));
     assert_eq!(p.height.as_ref().and_then(|v| v.as_str()), Some("92%"));
@@ -165,18 +160,18 @@ fn manifest_passes_herdr_validation() {
 
 #[test]
 fn binary_answers_version_and_help() {
-    let out = std::process::Command::new(env!("CARGO_BIN_EXE_codemorph"))
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_codemap"))
         .arg("--version")
         .output()
         .unwrap();
-    assert!(String::from_utf8_lossy(&out.stdout).starts_with("codemorph "));
-    let out = std::process::Command::new(env!("CARGO_BIN_EXE_codemorph"))
+    assert!(String::from_utf8_lossy(&out.stdout).starts_with("codemap "));
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_codemap"))
         .arg("--help")
         .output()
         .unwrap();
-    assert!(String::from_utf8_lossy(&out.stderr).contains("codemorph open"));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("codemap open"));
     // `open` outside herdr fails cleanly instead of hanging.
-    let out = std::process::Command::new(env!("CARGO_BIN_EXE_codemorph"))
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_codemap"))
         .arg("open")
         .env_remove("HERDR_SOCKET_PATH")
         .output()

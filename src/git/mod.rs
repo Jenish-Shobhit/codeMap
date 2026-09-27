@@ -1,8 +1,8 @@
 //! Git through the `git` CLI. Every command that touches the user's repository
 //! is read-only: `GIT_OPTIONAL_LOCKS=0` stops `git status`-style commands from
-//! refreshing (writing) the index, and codeMorph never runs a command that
+//! refreshing (writing) the index, and codeMap never runs a command that
 //! creates refs, stashes or index entries there. Checkpoints live in a shadow
-//! repository in codeMorph's own state directory (see `store`).
+//! repository in codeMap's own state directory (see `store`).
 
 pub mod diff;
 pub mod graph;

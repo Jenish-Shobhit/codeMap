@@ -8,10 +8,10 @@
 
 mod common;
 
-use codemorph::app::{App, Focus, InputKind, Options, Scope, View};
-use codemorph::keys::{self, Action};
-use codemorph::map::Level;
-use codemorph::ui;
+use codemap::app::{App, Focus, InputKind, Options, Scope, View};
+use codemap::keys::{self, Action};
+use codemap::map::Level;
+use codemap::ui;
 use common::*;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::backend::TestBackend;
@@ -143,7 +143,7 @@ fn map_zooms_into_files_and_back() {
     assert_eq!(app.map_level(), Level::Dir("panemorph/actions".into()));
     let scene = app.map.scene.as_ref().unwrap();
     assert!(
-        matches!(&scene.nodes[app.map.cursor.node].kind, codemorph::map::NodeKind::File(f) if f.ends_with("open_selector.py"))
+        matches!(&scene.nodes[app.map.cursor.node].kind, codemap::map::NodeKind::File(f) if f.ends_with("open_selector.py"))
     );
 }
 
@@ -168,7 +168,7 @@ fn map_arrow_keys_move_between_boxes() {
         .iter()
         .position(|n| n.title.starts_with("service.py"))
         .unwrap();
-    app.map.cursor = codemorph::map::Cursor {
+    app.map.cursor = codemap::map::Cursor {
         node: svc,
         row: None,
     };
@@ -199,7 +199,7 @@ fn flow_view() {
         .unwrap()
         .find("main")
         .unwrap();
-    app.open_flow(codemorph::index::SymId {
+    app.open_flow(codemap::index::SymId {
         file: "panemorph/actions/selector.py".into(),
         idx: main,
     });
@@ -367,7 +367,7 @@ fn not_a_git_repo_state() {
         view: View::Map,
         context: None,
         client: None,
-        store: codemorph::store::Store::new(state.path()),
+        store: codemap::store::Store::new(state.path()),
         theme: dracula(),
     });
     app.load_blocking();
@@ -402,7 +402,7 @@ fn empty_repo_state() {
         view: View::Changes,
         context: None,
         client: None,
-        store: codemorph::store::Store::new(state.path()),
+        store: codemap::store::Store::new(state.path()),
         theme: dracula(),
     });
     app.load_blocking();
@@ -417,7 +417,7 @@ fn empty_repo_state() {
 #[test]
 fn loading_state_paints_the_frame_first() {
     let pm = panemorph_repo();
-    codemorph::util::freeze_time(NOW);
+    codemap::util::freeze_time(NOW);
     let mut app = App::new(Options {
         path: Some(pm.root.clone()),
         view: View::Map,
@@ -457,7 +457,7 @@ fn unsupported_language_and_big_folders() {
         view: View::Map,
         context: None,
         client: None,
-        store: codemorph::store::Store::new(state.path()),
+        store: codemap::store::Store::new(state.path()),
         theme: dracula(),
     });
     app.load_blocking();
@@ -478,7 +478,7 @@ fn unsupported_language_and_big_folders() {
         app.message
     );
     // Flow on a non-code file explains itself.
-    app.open_flow(codemorph::index::SymId {
+    app.open_flow(codemap::index::SymId {
         file: "pkg/README.md".into(),
         idx: 0,
     });

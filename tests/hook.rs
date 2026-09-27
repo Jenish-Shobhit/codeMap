@@ -8,9 +8,9 @@ use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixListener;
 use std::process::Command;
 
-use codemorph::herdr::{AgentStatusEvent, Client, PluginContext};
-use codemorph::hook;
-use codemorph::store::{PaneState, Store, MAX_TURNS};
+use codemap::herdr::{AgentStatusEvent, Client, PluginContext};
+use codemap::hook;
+use codemap::store::{PaneState, Store, MAX_TURNS};
 use common::*;
 use serde_json::{json, Value};
 
@@ -64,7 +64,7 @@ fn turns_start_and_end_on_status_changes() {
     assert_eq!(out.turn, Some(1));
     let end = out.checkpoint.unwrap();
 
-    let info = codemorph::git::discover(repo.path()).unwrap();
+    let info = codemap::git::discover(repo.path()).unwrap();
     let shadow = store.shadow(&info);
     let diff = shadow.diff(&start.tree, &end.tree).unwrap();
     assert_eq!(diff.len(), 1);
@@ -126,7 +126,7 @@ fn retention_keeps_the_last_fifty_turns() {
     let pane = store.load_pane(&PaneState::key_for(None, "w1:p3", Some("claude")));
     assert_eq!(pane.turns.len(), MAX_TURNS);
     assert_eq!(pane.turns[0].n, 4);
-    let info = codemorph::git::discover(repo.path()).unwrap();
+    let info = codemap::git::discover(repo.path()).unwrap();
     let refs = store.shadow(&info).refs();
     assert_eq!(refs.len(), MAX_TURNS * 2, "old refs are deleted");
     assert!(!refs.iter().any(|r| r.ends_with("/1-start")));
@@ -139,7 +139,7 @@ fn fake_herdr(_dir: &std::path::Path, cwd: &std::path::Path) -> std::path::PathB
     let sock = std::path::PathBuf::from(format!(
         "/tmp/cmh-{}-{}.sock",
         std::process::id(),
-        codemorph::util::now_unix_ms()
+        codemap::util::now_unix_ms()
     ));
     let _ = std::fs::remove_file(&sock);
     let listener = UnixListener::bind(&sock).unwrap();
@@ -199,7 +199,7 @@ fn the_binary_runs_as_herdr_runs_it() {
             "type": "pane_agent_status_changed", "pane_id": "w1:p7", "workspace_id": "w1",
             "agent_status": status, "agent": "claude", "title": null, "display_agent": null,
             "state_labels": {}}});
-        let out = Command::new(env!("CARGO_BIN_EXE_codemorph"))
+        let out = Command::new(env!("CARGO_BIN_EXE_codemap"))
             .arg("hook")
             .current_dir(state.path())
             .env_remove("HERDR_SOCKET_PATH")

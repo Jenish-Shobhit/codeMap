@@ -751,7 +751,7 @@ impl<'a> Resolver<'a> {
             }
             Some(&"super") => (parent_dir(dir).to_string(), &segs[1..]),
             Some(&"self") => (dir.to_string(), &segs[1..]),
-            // `use codemorph::app::View` from tests/, examples/ or another crate.
+            // `use codemap::app::View` from tests/, examples/ or another crate.
             Some(first) => match self.crates.iter().find(|(_, name)| name == first) {
                 Some((src, _)) => (src.clone(), &segs[1..]),
                 None => return Vec::new(),

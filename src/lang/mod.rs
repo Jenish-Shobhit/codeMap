@@ -89,7 +89,7 @@ impl Lang {
     }
 }
 
-/// Extensions codeMorph can parse, for "grammar missing" messages.
+/// Extensions codeMap can parse, for "grammar missing" messages.
 pub fn supported_extensions() -> &'static str {
     ".py .rs .ts .tsx .js .jsx .go"
 }

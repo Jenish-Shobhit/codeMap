@@ -7,8 +7,8 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 use std::time::Instant;
 
-use codemorph::app::{App, Options, View};
-use codemorph::git;
+use codemap::app::{App, Options, View};
+use codemap::git;
 use common::*;
 
 /// 2,000 commits with a branch merged every 50, written with fast-import.
@@ -82,12 +82,12 @@ fn history_of_2000_commits_renders_within_150ms() {
         view: View::History,
         context: None,
         client: None,
-        store: codemorph::store::Store::new(state.path()),
+        store: codemap::store::Store::new(state.path()),
         theme: dracula(),
     });
     app.load_blocking();
     let t1 = Instant::now();
-    let _ = codemorph::ui::render_text(&mut app, 180, 50);
+    let _ = codemap::ui::render_text(&mut app, 180, 50);
     let t_render = t1.elapsed();
     println!(
         "perf: git log 2000 commits {:.1} ms, lanes {:.1} ms ({} rows), frame {:.1} ms; log+lanes+frame {:.1} ms",
@@ -124,20 +124,20 @@ fn huge_repo_paints_first_and_parses_lazily() {
             view: View::Map,
             context: None,
             client: None,
-            store: codemorph::store::Store::new(state.path()),
+            store: codemap::store::Store::new(state.path()),
             theme: dracula(),
         })
     };
     // First paint: nothing loaded yet.
     let t0 = Instant::now();
     let mut app = mk();
-    let _ = codemorph::ui::render_text(&mut app, 180, 50);
+    let _ = codemap::ui::render_text(&mut app, 180, 50);
     let first = t0.elapsed();
     // Full load (listing, folder-level parse, diff, history) synchronously.
     let t1 = Instant::now();
     let mut app = mk();
     app.load_blocking();
-    let screen = codemorph::ui::render_text(&mut app, 180, 50);
+    let screen = codemap::ui::render_text(&mut app, 180, 50);
     app.drain();
     let loaded = t1.elapsed();
     assert!(screen.contains("page 1 of"), "{screen}");
@@ -148,10 +148,10 @@ fn huge_repo_paints_first_and_parses_lazily() {
     );
     // Zooming into a folder parses just that folder.
     let t2 = Instant::now();
-    app.zoom_to(codemorph::map::Level::Dir("pkg150".into()), None);
-    let _ = codemorph::ui::render_text(&mut app, 180, 50);
+    app.zoom_to(codemap::map::Level::Dir("pkg150".into()), None);
+    let _ = codemap::ui::render_text(&mut app, 180, 50);
     app.drain();
-    let screen = codemorph::ui::render_text(&mut app, 180, 50);
+    let screen = codemap::ui::render_text(&mut app, 180, 50);
     let zoom = t2.elapsed();
     assert!(screen.contains("mod00.py"), "{screen}");
     assert!(

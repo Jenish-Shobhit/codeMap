@@ -1,4 +1,4 @@
-//! `codemorph hook`: herdr runs it on `pane.agent_status_changed`.
+//! `codemap hook`: herdr runs it on `pane.agent_status_changed`.
 //!
 //! A change to `working` starts a turn and a change from `working` to
 //! `idle`, `done` or `blocked` ends it; each boundary snapshots the agent's
@@ -29,7 +29,7 @@ pub struct HookOutcome {
 /// Entry point: read the event from the environment herdr set.
 pub fn run() -> i32 {
     let Ok(json) = std::env::var("HERDR_PLUGIN_EVENT_JSON") else {
-        eprintln!("codemorph hook: HERDR_PLUGIN_EVENT_JSON is not set");
+        eprintln!("codemap hook: HERDR_PLUGIN_EVENT_JSON is not set");
         return 0;
     };
     let Some(event) = parse_status_event(&json) else {
@@ -54,7 +54,7 @@ pub fn run() -> i32 {
             0
         }
         Err(e) => {
-            eprintln!("codemorph hook: {e}");
+            eprintln!("codemap hook: {e}");
             1
         }
     }
@@ -140,9 +140,9 @@ pub fn handle(
         } else {
             let n = state.turns.last().map(|t| t.n + 1).unwrap_or(1);
             let cp = shadow
-                .snapshot(&format!("codeMorph: {key} turn {n} start"))
+                .snapshot(&format!("codeMap: {key} turn {n} start"))
                 .map_err(|e| e.0)?;
-            let _ = shadow.update_ref(&format!("refs/codemorph/{key}/{n}-start"), &cp.commit);
+            let _ = shadow.update_ref(&format!("refs/codemap/{key}/{n}-start"), &cp.commit);
             state.turns.push(Turn {
                 n,
                 repo_root: root_s,
@@ -164,9 +164,9 @@ pub fn handle(
         if let Some(t) = open {
             let n = t.n;
             let cp = shadow
-                .snapshot(&format!("codeMorph: {key} turn {n} end"))
+                .snapshot(&format!("codeMap: {key} turn {n} end"))
                 .map_err(|e| e.0)?;
-            let _ = shadow.update_ref(&format!("refs/codemorph/{key}/{n}-end"), &cp.commit);
+            let _ = shadow.update_ref(&format!("refs/codemap/{key}/{n}-end"), &cp.commit);
             t.end = Some(cp.clone());
             t.end_status = Some(new.clone());
             t.open = false;
@@ -178,8 +178,8 @@ pub fn handle(
     // Retention: keep the last MAX_TURNS turns.
     while state.turns.len() > MAX_TURNS {
         let old = state.turns.remove(0);
-        let _ = shadow.delete_ref(&format!("refs/codemorph/{key}/{}-start", old.n));
-        let _ = shadow.delete_ref(&format!("refs/codemorph/{key}/{}-end", old.n));
+        let _ = shadow.delete_ref(&format!("refs/codemap/{key}/{}-start", old.n));
+        let _ = shadow.delete_ref(&format!("refs/codemap/{key}/{}-end", old.n));
     }
     store.save_pane(&state).map_err(|e| e.to_string())?;
     Ok(out)

@@ -1,12 +1,12 @@
 # Changelog
 
-All notable changes to codeMorph will be documented here.
+All notable changes to codeMap will be documented here.
 
 ## 0.1.0 — 2026-09-27
 
 - One herdr popup (94% × 92%) with four views on the focused agent's
   worktree: Map, Flow, Changes and History, switched with 1–4. Also runs on
-  its own as `codemorph [path]`.
+  its own as `codemap [path]`.
 - Map: folders, files and functions as boxes, calls and imports as lines in a
   layered (Sugiyama) layout drawn with box characters; zoom with ⏎ and ⌫,
   search with /, move with the arrow keys; functions changed in the agent's

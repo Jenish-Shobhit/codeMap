@@ -2,7 +2,7 @@
 //! popup does, measures open-to-first-paint, drives keys and checks that Esc
 //! closes it.
 //!
-//! `CODEMORPH_BIN=target/release/codemorph cargo test --test pty -- --nocapture`
+//! `CODEMAP_BIN=target/release/codemap cargo test --test pty -- --nocapture`
 //! measures a release build.
 
 mod common;
@@ -37,8 +37,8 @@ fn keys_first_paint_and_escape() {
     let mut p = spawn(
         &[&root],
         &[
-            ("CODEMORPH_STATE_DIR", &state),
-            ("CODEMORPH_TRACE_FILE", &trace_s),
+            ("CODEMAP_STATE_DIR", &state),
+            ("CODEMAP_TRACE_FILE", &trace_s),
             ("HERDR_CONFIG_PATH", &cfg_s),
         ],
         160,
@@ -73,7 +73,7 @@ fn keys_first_paint_and_escape() {
         p.child.try_wait().unwrap().is_none(),
         "Esc on help must not quit"
     );
-    // Esc closes codeMorph.
+    // Esc closes codeMap.
     p.send(b"\x1b");
     let status = p
         .wait_exit(Duration::from_secs(5))
@@ -118,7 +118,7 @@ fn q_quits_and_ctrl_c_quits() {
     write(t.path(), "a.py", "def f():\n    return 1\n");
     let root = t.path().display().to_string();
     let state = t.path().join(".st").display().to_string();
-    let mut p = spawn(&[&root], &[("CODEMORPH_STATE_DIR", &state)], 100, 30);
+    let mut p = spawn(&[&root], &[("CODEMAP_STATE_DIR", &state)], 100, 30);
     p.wait_for("a.py", 0, Duration::from_secs(5))
         .expect("map of a plain folder");
     p.send(b"q");
@@ -127,7 +127,7 @@ fn q_quits_and_ctrl_c_quits() {
         .expect("q quits")
         .success());
 
-    let mut p = spawn(&[&root], &[("CODEMORPH_STATE_DIR", &state)], 100, 30);
+    let mut p = spawn(&[&root], &[("CODEMAP_STATE_DIR", &state)], 100, 30);
     p.wait_for("a.py", 0, Duration::from_secs(5)).expect("map");
     p.send(b"\x03");
     assert!(
@@ -136,8 +136,8 @@ fn q_quits_and_ctrl_c_quits() {
     );
 }
 
-/// Smoke run on codeMorph's own repository (Rust); prints each view.
-/// `CODEMORPH_BIN=target/release/codemorph cargo test --test pty smoke -- --ignored --nocapture`
+/// Smoke run on codeMap's own repository (Rust); prints each view.
+/// `CODEMAP_BIN=target/release/codemap cargo test --test pty smoke -- --ignored --nocapture`
 #[test]
 #[ignore]
 fn smoke_own_repo() {
@@ -149,8 +149,8 @@ fn smoke_own_repo() {
     let mut p = spawn(
         &[root],
         &[
-            ("CODEMORPH_STATE_DIR", &state_s),
-            ("CODEMORPH_TRACE_FILE", &trace_s),
+            ("CODEMAP_STATE_DIR", &state_s),
+            ("CODEMAP_TRACE_FILE", &trace_s),
         ],
         180,
         52,

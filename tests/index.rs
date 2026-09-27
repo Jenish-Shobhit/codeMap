@@ -3,9 +3,9 @@
 
 mod common;
 
-use codemorph::git;
-use codemorph::index::{Index, SymId};
-use codemorph::lang::{self, Lang, SymKind};
+use codemap::git;
+use codemap::index::{Index, SymId};
+use codemap::lang::{self, Lang, SymKind};
 use common::*;
 
 fn panemorph_index() -> Index {
@@ -278,7 +278,7 @@ fn search_finds_symbols_and_files() {
 
 #[test]
 fn real_rust_source_parses() {
-    // codeMorph's own source doubles as a Rust fixture.
+    // codeMap's own source doubles as a Rust fixture.
     let src =
         std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/store.rs")).unwrap();
     let fs = lang::extract(Lang::Rust, &src);

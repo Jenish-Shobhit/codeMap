@@ -1,7 +1,7 @@
-//! codeMorph: see your code as a map, and what your agents changed on it.
+//! codeMap: see your code as a map, and what your agents changed on it.
 //!
 //! One binary, four views (Map, Flow, Changes, History), shipped as the herdr
-//! plugin `dev.codemorph` and runnable on its own as `codemorph [path]`.
+//! plugin `dev.codemap` and runnable on its own as `codemap [path]`.
 
 pub mod app;
 pub mod canvas;

@@ -298,7 +298,7 @@ mod tests {
 
     #[test]
     fn fnv_is_stable() {
-        assert_eq!(fnv_hex(b"codemorph"), fnv_hex(b"codemorph"));
+        assert_eq!(fnv_hex(b"codemap"), fnv_hex(b"codemap"));
         assert_ne!(fnv64(b"a"), fnv64(b"b"));
     }
 

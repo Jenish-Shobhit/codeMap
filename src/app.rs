@@ -73,7 +73,7 @@ pub enum Scope {
     Commit(String),
 }
 
-/// The agent codeMorph follows (inside herdr).
+/// The agent codeMap follows (inside herdr).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct AgentInfo {
     pub pane_id: Option<String>,
@@ -1003,7 +1003,7 @@ impl App {
                     self.zoom_to(Level::File(f.clone()), sel);
                 } else {
                     self.message = Some(format!(
-                        "no grammar for {} · codeMorph reads {}",
+                        "no grammar for {} · codeMap reads {}",
                         f,
                         lang::supported_extensions()
                     ));
@@ -1114,7 +1114,7 @@ impl App {
         };
         let Some(lang) = Lang::from_path(&target.file) else {
             self.flow.error = Some(format!(
-                "no flow for {} · codeMorph has grammars for {}",
+                "no flow for {} · codeMap has grammars for {}",
                 target.file,
                 lang::supported_extensions()
             ));
@@ -1783,7 +1783,7 @@ pub fn compute_changes(
     let mut now_tree: Option<String> = None;
     let mut now = |shadow: &crate::store::Shadow| -> Option<String> {
         if now_tree.is_none() {
-            now_tree = shadow.snapshot("codeMorph: now").ok().map(|c| c.tree);
+            now_tree = shadow.snapshot("codeMap: now").ok().map(|c| c.tree);
         }
         now_tree.clone()
     };

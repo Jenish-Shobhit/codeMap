@@ -15,7 +15,7 @@ impl TempDir {
     pub fn new(name: &str) -> Self {
         let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let base = std::env::temp_dir().join(format!(
-            "codemorph-test-{name}-{}-{n}-{}",
+            "codemap-test-{name}-{}-{n}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -91,7 +91,7 @@ pub fn repo_with(files: &[(&str, &str)]) -> TempDir {
 }
 
 /// Fingerprint of everything under `.git` (path -> size, mtime, content hash)
-/// plus `git status` output. Any write codeMorph made to the repo shows up.
+/// plus `git status` output. Any write codeMap made to the repo shows up.
 pub fn fingerprint(repo: &Path) -> (BTreeMap<String, (u64, u128, u64)>, String) {
     let mut map = BTreeMap::new();
     let git_dir = repo.join(".git");
@@ -112,7 +112,7 @@ pub fn fingerprint(repo: &Path) -> (BTreeMap<String, (u64, u128, u64)>, String) 
                     .as_nanos();
                 map.insert(
                     path.strip_prefix(&git_dir).unwrap().display().to_string(),
-                    (meta.len(), mtime, codemorph::util::fnv64(&bytes)),
+                    (meta.len(), mtime, codemap::util::fnv64(&bytes)),
                 );
             }
         }
@@ -141,12 +141,12 @@ pub fn fixtures_dir() -> PathBuf {
 pub const NOW: i64 = 1_790_027_160;
 
 /// paneMorph's package as a git repo with history, plus one recorded agent
-/// turn (the real change of commit b8b645e) in codeMorph's shadow store.
+/// turn (the real change of commit b8b645e) in codeMap's shadow store.
 pub struct PmRepo {
     pub tmp: TempDir,
     pub root: PathBuf,
     pub state: TempDir,
-    pub store: codemorph::store::Store,
+    pub store: codemap::store::Store,
 }
 
 pub fn copy_tree(from: &Path, to: &Path) {
@@ -222,15 +222,15 @@ pub fn panemorph_repo() -> PmRepo {
 
     // The agent's turn, recorded the way the hook records it.
     let state = TempDir::new("pm-state");
-    let store = codemorph::store::Store::new(state.path());
-    let info = codemorph::git::discover(p).unwrap();
+    let store = codemap::store::Store::new(state.path());
+    let info = codemap::git::discover(p).unwrap();
     let shadow = store.shadow(&info);
     let mut start = shadow.snapshot("turn 1 start").unwrap();
     copy_tree(&fx.join("panemorph"), p);
     let mut end = shadow.snapshot("turn 1 end").unwrap();
     start.at = NOW - 420;
     end.at = NOW - 120;
-    let mut pane = codemorph::store::PaneState {
+    let mut pane = codemap::store::PaneState {
         pane_key: "term_1-claude".into(),
         pane_id: "w1:p2".into(),
         terminal_id: Some("term_1".into()),
@@ -239,7 +239,7 @@ pub fn panemorph_repo() -> PmRepo {
         updated: NOW - 120,
         turns: Vec::new(),
     };
-    pane.turns.push(codemorph::store::Turn {
+    pane.turns.push(codemap::store::Turn {
         n: 3,
         repo_root: info.root.to_string_lossy().into_owned(),
         start: Some(start),
@@ -256,14 +256,14 @@ pub fn panemorph_repo() -> PmRepo {
     }
 }
 
-pub fn dracula() -> codemorph::theme::Theme {
-    codemorph::theme::Theme::from_config_text(
+pub fn dracula() -> codemap::theme::Theme {
+    codemap::theme::Theme::from_config_text(
         "[theme]\nname = \"dracula\"\n[theme.custom]\npanel_bg = \"#000000\"\nsidebar_bg = \"#000000\"\nactive_row_bg = \"#141414\"\nselection_bg = \"#1a1a1a\"\n",
     )
 }
 
-pub fn agent_context() -> codemorph::herdr::PluginContext {
-    codemorph::herdr::PluginContext {
+pub fn agent_context() -> codemap::herdr::PluginContext {
+    codemap::herdr::PluginContext {
         workspace_label: Some("paneMorph".into()),
         tab_label: Some("selector-fix".into()),
         focused_pane_id: Some("w1:p2".into()),
@@ -273,9 +273,9 @@ pub fn agent_context() -> codemorph::herdr::PluginContext {
     }
 }
 
-pub fn app_for(pm: &PmRepo, view: codemorph::app::View, with_agent: bool) -> codemorph::app::App {
-    codemorph::util::freeze_time(NOW);
-    let mut app = codemorph::app::App::new(codemorph::app::Options {
+pub fn app_for(pm: &PmRepo, view: codemap::app::View, with_agent: bool) -> codemap::app::App {
+    codemap::util::freeze_time(NOW);
+    let mut app = codemap::app::App::new(codemap::app::Options {
         path: Some(pm.root.clone()),
         view,
         context: with_agent.then(agent_context),

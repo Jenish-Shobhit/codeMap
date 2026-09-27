@@ -1,4 +1,4 @@
-//! Everything codeMorph says to herdr goes through this module.
+//! Everything codeMap says to herdr goes through this module.
 
 pub mod client;
 pub mod context;
@@ -7,7 +7,7 @@ pub use client::{Client, HerdrError, PaneOpen};
 pub use context::{AgentStatusEvent, PluginContext, WorktreeCtx};
 
 /// The plugin id declared in `herdr-plugin.toml`.
-pub const PLUGIN_ID: &str = "dev.codemorph";
+pub const PLUGIN_ID: &str = "dev.codemap";
 
 /// True when we were started by herdr (plugin action, pane or hook).
 pub fn inside_herdr() -> bool {
@@ -16,7 +16,7 @@ pub fn inside_herdr() -> bool {
 
 /// Wrap multi-line text in bracketed-paste markers so an agent prompt (or a
 /// shell) receives it as one paste instead of submitting at each newline.
-/// `pane.send_text` writes raw bytes, so codeMorph adds the markers itself.
+/// `pane.send_text` writes raw bytes, so codeMap adds the markers itself.
 pub fn paste_payload(text: &str) -> String {
     if text.contains('\n') {
         format!("\x1b[200~{text}\x1b[201~")

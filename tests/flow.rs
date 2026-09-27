@@ -6,10 +6,10 @@ mod common;
 
 use std::collections::BTreeMap;
 
-use codemorph::flow::{self, EndKind, Flow};
-use codemorph::git;
-use codemorph::index::Index;
-use codemorph::lang::{self, Lang};
+use codemap::flow::{self, EndKind, Flow};
+use codemap::git;
+use codemap::index::Index;
+use codemap::lang::{self, Lang};
 use common::*;
 
 fn chart(lang: Lang, src: &str, name: &str) -> flow::FlowChart {

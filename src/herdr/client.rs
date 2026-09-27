@@ -77,7 +77,7 @@ impl Client {
 
     /// Send one request and return its `result` object.
     pub fn call(&self, method: &str, params: Value) -> Result<Value, HerdrError> {
-        let id = format!("codemorph-{}", NEXT_ID.fetch_add(1, Ordering::Relaxed));
+        let id = format!("codemap-{}", NEXT_ID.fetch_add(1, Ordering::Relaxed));
         let request = json!({ "id": id, "method": method, "params": params });
         let mut stream = self.connect()?;
         let mut line = serde_json::to_string(&request).map_err(HerdrError::io)?;
@@ -108,7 +108,7 @@ impl Client {
     /// Open an event subscription. Events arrive on the returned channel until
     /// the connection closes. The first acknowledgement is consumed here.
     pub fn subscribe(&self, subscriptions: Value) -> Result<mpsc::Receiver<Value>, HerdrError> {
-        let id = format!("codemorph-sub-{}", NEXT_ID.fetch_add(1, Ordering::Relaxed));
+        let id = format!("codemap-sub-{}", NEXT_ID.fetch_add(1, Ordering::Relaxed));
         let request = json!({
             "id": id,
             "method": "events.subscribe",
@@ -201,7 +201,7 @@ impl Client {
             .map(|_| ())
     }
 
-    /// Open codeMorph's UI pane entrypoint.
+    /// Open codeMap's UI pane entrypoint.
     pub fn plugin_pane_open(&self, request: &PaneOpen) -> Result<Value, HerdrError> {
         self.call("plugin.pane.open", request.params())
     }
@@ -335,7 +335,7 @@ mod tests {
         assert_eq!(result["protocol"], 22);
         let request = seen.recv().unwrap();
         assert_eq!(request["method"], "ping");
-        assert!(request["id"].as_str().unwrap().starts_with("codemorph-"));
+        assert!(request["id"].as_str().unwrap().starts_with("codemap-"));
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -355,14 +355,14 @@ mod tests {
     #[test]
     fn pane_open_params_match_schema() {
         let open = PaneOpen {
-            plugin_id: "dev.codemorph".into(),
+            plugin_id: "dev.codemap".into(),
             entrypoint: "ui".into(),
             placement: "popup".into(),
             width: Some("94%".into()),
             height: Some("92%".into()),
             target_pane_id: Some("w1:p1".into()),
             cwd: None,
-            env: vec![("CODEMORPH_VIEW".into(), "map".into())],
+            env: vec![("CODEMAP_VIEW".into(), "map".into())],
             focus: true,
         };
         let p = open.params();
@@ -370,7 +370,7 @@ mod tests {
         assert_eq!(p["height"], "92%");
         // popups target the active pane; herdr rejects target_pane_id there
         assert!(p.get("target_pane_id").is_none());
-        assert_eq!(p["env"]["CODEMORPH_VIEW"], "map");
+        assert_eq!(p["env"]["CODEMAP_VIEW"], "map");
 
         let split = PaneOpen {
             placement: "split".into(),

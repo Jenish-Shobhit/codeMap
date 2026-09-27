@@ -56,10 +56,10 @@ impl PluginContext {
         serde_json::from_str(json).ok()
     }
 
-    /// Read the context herdr injected, preferring the copy `codemorph open`
+    /// Read the context herdr injected, preferring the copy `codemap open`
     /// forwarded to the popup (it was taken at the moment of the keypress).
     pub fn from_env() -> Option<Self> {
-        for key in ["CODEMORPH_CONTEXT_JSON", "HERDR_PLUGIN_CONTEXT_JSON"] {
+        for key in ["CODEMAP_CONTEXT_JSON", "HERDR_PLUGIN_CONTEXT_JSON"] {
             if let Ok(json) = std::env::var(key) {
                 if let Some(ctx) = Self::parse(&json) {
                     return Some(ctx);

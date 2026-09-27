@@ -6,12 +6,12 @@
 //! B=/tmp/cmtest-$(date +%s); mkdir -p $B/cfg $B/state
 //! env -u HERDR_SOCKET_PATH -u HERDR_ENV XDG_CONFIG_HOME=$B/cfg XDG_STATE_HOME=$B/state \
 //!     SHELL=/bin/sh herdr --session cmtest-x server &
-//! CODEMORPH_LIVE_SOCKET=$B/cfg/herdr/sessions/cmtest-x/herdr.sock \
+//! CODEMAP_LIVE_SOCKET=$B/cfg/herdr/sessions/cmtest-x/herdr.sock \
 //!     cargo test --test live_herdr -- --ignored --nocapture
 //! ```
 //!
 //! The hook is driven the way herdr drives it: a `pane.agent_status_changed`
-//! event from the server's own event stream is handed to `codemorph hook`
+//! event from the server's own event stream is handed to `codemap hook`
 //! with herdr's hook environment. Comments go to a dummy agent pane running
 //! `cat`, through the real popup UI on a pty and through `agent.prompt`.
 
@@ -21,16 +21,16 @@ use std::process::Command;
 use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant};
 
-use codemorph::app::{App, Options, View};
-use codemorph::herdr::{Client, PluginContext};
-use codemorph::store::{Comment, PaneState, Store};
+use codemap::app::{App, Options, View};
+use codemap::herdr::{Client, PluginContext};
+use codemap::store::{Comment, PaneState, Store};
 use common::pty::*;
 use common::*;
 use serde_json::{json, Value};
 
 /// The isolated socket, after refusing anything that could be the user's.
 fn live_socket() -> Option<String> {
-    let sock = std::env::var("CODEMORPH_LIVE_SOCKET").ok()?;
+    let sock = std::env::var("CODEMAP_LIVE_SOCKET").ok()?;
     let home = std::env::var("HOME").unwrap_or_default();
     assert!(
         sock.contains("/cmtest-"),
@@ -82,15 +82,15 @@ fn wait_pane_text(client: &Client, pane: &str, needle: &str) -> String {
     }
 }
 
-/// Run `codemorph hook` with the environment herdr gives event hooks.
+/// Run `codemap hook` with the environment herdr gives event hooks.
 fn run_hook(sock: &str, state: &std::path::Path, event: &Value, ctx: &Value) -> (String, Duration) {
     let t = Instant::now();
-    let out = Command::new(env!("CARGO_BIN_EXE_codemorph"))
+    let out = Command::new(env!("CARGO_BIN_EXE_codemap"))
         .arg("hook")
         .current_dir(state)
         .env("HERDR_ENV", "1")
         .env("HERDR_SOCKET_PATH", sock)
-        .env("HERDR_PLUGIN_ID", "dev.codemorph")
+        .env("HERDR_PLUGIN_ID", "dev.codemap")
         .env("HERDR_PLUGIN_STATE_DIR", state)
         .env("HERDR_PLUGIN_EVENT", "pane.agent_status_changed")
         .env("HERDR_PLUGIN_EVENT_JSON", event.to_string())
@@ -125,7 +125,7 @@ fn context_for(client: &Client, pane: &str) -> Value {
 #[ignore]
 fn live_hook_checkpoints_and_comment_delivery() {
     let Some(sock) = live_socket() else {
-        eprintln!("CODEMORPH_LIVE_SOCKET not set: skipping live test");
+        eprintln!("CODEMAP_LIVE_SOCKET not set: skipping live test");
         return;
     };
     let client = Client::new(&sock);
@@ -208,7 +208,7 @@ fn live_hook_checkpoints_and_comment_delivery() {
     let ps = store.load_pane(&key);
     assert_eq!(ps.turns.len(), 1);
     let turn = &ps.turns[0];
-    let info = codemorph::git::discover(repo.path()).unwrap();
+    let info = codemap::git::discover(repo.path()).unwrap();
     let diff = store
         .shadow(&info)
         .diff(
@@ -258,7 +258,7 @@ fn live_hook_checkpoints_and_comment_delivery() {
             ("HERDR_SOCKET_PATH", &sock),
             ("HERDR_PLUGIN_STATE_DIR", &state_s),
             ("HERDR_PLUGIN_CONTEXT_JSON", &ctx_json),
-            ("CODEMORPH_VIEW", "changes"),
+            ("CODEMAP_VIEW", "changes"),
             ("HERDR_CONFIG_PATH", &cfg_s),
         ],
         160,
@@ -289,7 +289,7 @@ fn live_hook_checkpoints_and_comment_delivery() {
     );
     let text = wait_pane_text(&client, &pane, "helper() needs a docstring");
     assert!(
-        text.contains("Review comments from codeMorph:"),
+        text.contains("Review comments from codeMap:"),
         "pane shows:\n{text}"
     );
     assert!(
@@ -346,9 +346,9 @@ fn live_hook_checkpoints_and_comment_delivery() {
     assert!(err.contains("waiting on a question"), "{err}");
     assert_eq!(app.drafts.len(), 1);
 
-    // `codemorph open` reaches plugin.pane.open (the plugin is not linked in
+    // `codemap open` reaches plugin.pane.open (the plugin is not linked in
     // this throwaway server, so herdr answers plugin_not_found).
-    let out = Command::new(env!("CARGO_BIN_EXE_codemorph"))
+    let out = Command::new(env!("CARGO_BIN_EXE_codemap"))
         .args(["open", "--view", "map"])
         .env("HERDR_ENV", "1")
         .env("HERDR_SOCKET_PATH", &sock)
@@ -376,7 +376,7 @@ fn live_hook_checkpoints_and_comment_delivery() {
 #[ignore]
 fn live_follow_mode_retargets_on_focus() {
     let Some(sock) = live_socket() else {
-        eprintln!("CODEMORPH_LIVE_SOCKET not set: skipping live test");
+        eprintln!("CODEMAP_LIVE_SOCKET not set: skipping live test");
         return;
     };
     let client = Client::new(&sock);
@@ -423,8 +423,8 @@ fn live_follow_mode_retargets_on_focus() {
             ("HERDR_SOCKET_PATH", &sock),
             ("HERDR_PLUGIN_STATE_DIR", &state_s),
             ("HERDR_PLUGIN_CONTEXT_JSON", &ctx_s),
-            ("CODEMORPH_PINNED", "1"),
-            ("CODEMORPH_VIEW", "map"),
+            ("CODEMAP_PINNED", "1"),
+            ("CODEMAP_VIEW", "map"),
         ],
         140,
         40,
@@ -442,7 +442,7 @@ fn live_follow_mode_retargets_on_focus() {
                 ui.screen()
             )
         });
-    println!("live: pinned codeMorph followed focus from {pane_a} to {pane_b}");
+    println!("live: pinned codeMap followed focus from {pane_a} to {pane_b}");
     ui.send(b"q");
     assert!(ui.wait_exit(Duration::from_secs(5)).is_some());
     for ws in [&ws_a, &ws_b] {

@@ -34,7 +34,7 @@ pub fn run(opts: Options, trace: Trace) -> io::Result<i32> {
     let t_setup = trace.t0.elapsed();
     let mut app = App::new(opts);
     app.started = trace.t0;
-    app.pinned = std::env::var("CODEMORPH_PINNED").is_ok_and(|v| v == "1");
+    app.pinned = std::env::var("CODEMAP_PINNED").is_ok_and(|v| v == "1");
     app.start();
 
     let default_hook = std::panic::take_hook();
@@ -111,14 +111,14 @@ pub fn run(opts: Options, trace: Trace) -> io::Result<i32> {
     restore();
     if trace.enabled {
         let line = format!(
-            "codemorph trace: setup {:.1} ms, first paint {:.1} ms, content {} ms\n",
+            "codemap trace: setup {:.1} ms, first paint {:.1} ms, content {} ms\n",
             t_setup.as_secs_f64() * 1000.0,
             first_paint.as_secs_f64() * 1000.0,
             content_ms
                 .map(|m| format!("{m:.1}"))
                 .unwrap_or_else(|| "-".into())
         );
-        if let Ok(path) = std::env::var("CODEMORPH_TRACE_FILE") {
+        if let Ok(path) = std::env::var("CODEMAP_TRACE_FILE") {
             if let Ok(mut f) = std::fs::OpenOptions::new()
                 .create(true)
                 .append(true)
@@ -202,12 +202,12 @@ fn retarget(app: &mut App, ctx: herdr::PluginContext) {
 fn pin(app: &App, placement: &'static str) -> Result<(), String> {
     let client = app.client.clone().ok_or("pinning needs herdr")?;
     let mut env = vec![
-        ("CODEMORPH_VIEW".to_string(), app.view.name().to_string()),
-        ("CODEMORPH_PINNED".to_string(), "1".to_string()),
+        ("CODEMAP_VIEW".to_string(), app.view.name().to_string()),
+        ("CODEMAP_PINNED".to_string(), "1".to_string()),
     ];
     if let Some(ctx) = &app.context {
         if let Ok(json) = serde_json::to_string(ctx) {
-            env.push(("CODEMORPH_CONTEXT_JSON".to_string(), json));
+            env.push(("CODEMAP_CONTEXT_JSON".to_string(), json));
         }
     }
     let req = PaneOpen {

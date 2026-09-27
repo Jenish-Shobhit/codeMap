@@ -1,5 +1,5 @@
-id = "dev.codemorph"
-name = "codeMorph"
+id = "dev.codemap"
+name = "codeMap"
 version = "0.1.0"
 min_herdr_version = "0.9.0"
 description = "See your code as a map, and what your agents changed on it: map, flow, changes and history in one popup."
@@ -15,39 +15,39 @@ command = ["cargo", "build", "--release"]
 # same for pane entrypoints), so these run the binary that cargo built here.
 [[actions]]
 id = "open"
-title = "codeMorph: open the map of the focused agent's worktree"
+title = "codeMap: open the map of the focused agent's worktree"
 contexts = ["global", "workspace", "tab", "pane"]
-command = ["target/release/codemorph", "open", "--view", "map"]
+command = ["target/release/codemap", "open", "--view", "map"]
 
 [[actions]]
 id = "flow"
-title = "codeMorph: flow of the function under the cursor"
+title = "codeMap: flow of the function under the cursor"
 contexts = ["global", "workspace", "tab", "pane"]
-command = ["target/release/codemorph", "open", "--view", "flow"]
+command = ["target/release/codemap", "open", "--view", "flow"]
 
 [[actions]]
 id = "changes"
-title = "codeMorph: review the focused agent's last turn"
+title = "codeMap: review the focused agent's last turn"
 contexts = ["global", "workspace", "tab", "pane"]
-command = ["target/release/codemorph", "open", "--view", "changes"]
+command = ["target/release/codemap", "open", "--view", "changes"]
 
 [[actions]]
 id = "history"
-title = "codeMorph: git history and worktrees"
+title = "codeMap: git history and worktrees"
 contexts = ["global", "workspace", "tab", "pane"]
-command = ["target/release/codemorph", "open", "--view", "history"]
+command = ["target/release/codemap", "open", "--view", "history"]
 
-# Turn checkpoints: snapshot the agent's worktree into codeMorph's own shadow
+# Turn checkpoints: snapshot the agent's worktree into codeMap's own shadow
 # store whenever an agent starts or finishes a turn. Nothing is written to your
 # repository.
 [[events]]
 on = "pane.agent_status_changed"
-command = ["target/release/codemorph", "hook"]
+command = ["target/release/codemap", "hook"]
 
 [[panes]]
 id = "ui"
-title = "codeMorph"
+title = "codeMap"
 placement = "popup"
 width = "94%"
 height = "92%"
-command = ["target/release/codemorph", "ui"]
+command = ["target/release/codemap", "ui"]

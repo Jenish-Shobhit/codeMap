@@ -3,8 +3,8 @@
 
 mod common;
 
-use codemorph::git::{self, FileStatus};
-use codemorph::store::{PaneState, Store, Turn};
+use codemap::git::{self, FileStatus};
+use codemap::store::{PaneState, Store, Turn};
 use common::*;
 
 fn store_in(t: &TempDir) -> Store {
@@ -77,13 +77,13 @@ fn turn_diff_shows_only_the_turn() {
 
     // Refs live in the shadow only.
     shadow
-        .update_ref("refs/codemorph/p1/1-start", &start.commit)
+        .update_ref("refs/codemap/p1/1-start", &start.commit)
         .unwrap();
     assert!(shadow
         .refs()
-        .contains(&"refs/codemorph/p1/1-start".to_string()));
+        .contains(&"refs/codemap/p1/1-start".to_string()));
     let user_refs = common::git(repo.path(), &["for-each-ref", "--format=%(refname)"]);
-    assert!(!user_refs.contains("codemorph"));
+    assert!(!user_refs.contains("codemap"));
 }
 
 #[test]
@@ -103,7 +103,7 @@ fn shadow_store_writes_nothing_into_the_repo() {
     write(repo.path(), "b/c.py", "def f():\n    return 1\n");
     let b = shadow.snapshot("end").unwrap();
     shadow
-        .update_ref("refs/codemorph/x/1-end", &b.commit)
+        .update_ref("refs/codemap/x/1-end", &b.commit)
         .unwrap();
     let _ = shadow.diff(&a.commit, &b.commit).unwrap();
     let _ = shadow.diff(info.head.as_deref().unwrap(), &b.tree).unwrap();
@@ -121,7 +121,7 @@ fn shadow_store_writes_nothing_into_the_repo() {
     let after = fingerprint(repo.path());
     assert_eq!(
         before.0, after.0,
-        ".git changed: codeMorph wrote into the repo"
+        ".git changed: codeMap wrote into the repo"
     );
     assert_eq!(before.1, after.1, "git status changed");
     // The shadow really has its own objects and index.

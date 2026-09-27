@@ -80,7 +80,7 @@ impl Screen {
                 '\n' => self.y = (self.y + 1).min(self.rows - 1),
                 c if c.is_control() => {}
                 c => {
-                    let w = codemorph::util::char_width(c).max(1);
+                    let w = codemap::util::char_width(c).max(1);
                     if self.y < self.rows && self.x < self.cols {
                         self.cells[self.y][self.x] = c;
                         if w == 2 && self.x + 1 < self.cols {
@@ -119,7 +119,7 @@ pub struct Pty {
 }
 
 pub fn binary() -> String {
-    std::env::var("CODEMORPH_BIN").unwrap_or_else(|_| env!("CARGO_BIN_EXE_codemorph").to_string())
+    std::env::var("CODEMAP_BIN").unwrap_or_else(|_| env!("CARGO_BIN_EXE_codemap").to_string())
 }
 
 pub fn spawn(args: &[&str], envs: &[(&str, &str)], cols: u16, rows: u16) -> Pty {
@@ -164,7 +164,7 @@ pub fn spawn(args: &[&str], envs: &[(&str, &str)], cols: u16, rows: u16) -> Pty 
         });
     }
     let started = Instant::now();
-    let child = cmd.spawn().expect("spawn codemorph");
+    let child = cmd.spawn().expect("spawn codemap");
     let master = unsafe { File::from_raw_fd(master) };
     let writer = master.try_clone().unwrap();
     let out = Arc::new(Mutex::new(Vec::new()));

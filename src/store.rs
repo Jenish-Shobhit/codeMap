@@ -1,4 +1,4 @@
-//! codeMorph's side store. Everything codeMorph remembers lives here, in the
+//! codeMap's side store. Everything codeMap remembers lives here, in the
 //! plugin state directory, never in the user's repository:
 //!
 //! - `repos/<repo-key>/shadow.git`: a private git dir whose work tree is the
@@ -47,10 +47,10 @@ impl Store {
     }
 
     /// Resolve the state directory: an explicit override, herdr's plugin
-    /// state dir, or the path herdr would give `dev.codemorph` so that the
+    /// state dir, or the path herdr would give `dev.codemap` so that the
     /// standalone binary sees the checkpoints the hook wrote.
     pub fn from_env() -> Self {
-        if let Some(dir) = env_path("CODEMORPH_STATE_DIR") {
+        if let Some(dir) = env_path("CODEMAP_STATE_DIR") {
             return Store::new(dir);
         }
         if let Some(dir) = env_path("HERDR_PLUGIN_STATE_DIR") {
@@ -298,7 +298,7 @@ impl Comment {
 
 /// The text P and S send to the agent: one `path:lines — note` per comment.
 pub fn format_comments(comments: &[Comment]) -> String {
-    let mut out = String::from("Review comments from codeMorph:\n");
+    let mut out = String::from("Review comments from codeMap:\n");
     for c in comments {
         out.push('\n');
         out.push_str(&c.anchor());
@@ -331,10 +331,10 @@ impl Shadow {
         cmd.env("GIT_DIR", &self.git_dir)
             .env("GIT_WORK_TREE", &self.work_tree)
             .env("GIT_INDEX_FILE", self.index_file())
-            .env("GIT_AUTHOR_NAME", "codeMorph")
-            .env("GIT_AUTHOR_EMAIL", "codemorph@localhost")
-            .env("GIT_COMMITTER_NAME", "codeMorph")
-            .env("GIT_COMMITTER_EMAIL", "codemorph@localhost")
+            .env("GIT_AUTHOR_NAME", "codeMap")
+            .env("GIT_AUTHOR_EMAIL", "codemap@localhost")
+            .env("GIT_COMMITTER_NAME", "codeMap")
+            .env("GIT_COMMITTER_EMAIL", "codemap@localhost")
             .env_remove("GIT_OBJECT_DIRECTORY")
             .env_remove("GIT_ALTERNATE_OBJECT_DIRECTORIES");
         cmd

@@ -1,8 +1,8 @@
 //! Layered layout: boxes never overlap and edges never cross a box, on
 //! hand-made and pseudo-random graphs.
 
-use codemorph::canvas::{Canvas, Tone};
-use codemorph::layout::{layout, LEdge, LNode, Layout, Options};
+use codemap::canvas::{Canvas, Tone};
+use codemap::layout::{layout, LEdge, LNode, Layout, Options};
 
 /// Tiny deterministic PRNG (xorshift) so the test needs no dependencies.
 struct Rng(u64);
@@ -41,7 +41,7 @@ pub fn draw(nodes: &[LNode], l: &Layout, names: &[String]) -> String {
     for r in &l.routes {
         let (x, y) = r.points[0];
         if y > 0 {
-            c.bits(x, y - 1, codemorph::canvas::DOWN, Tone::Rule);
+            c.bits(x, y - 1, codemap::canvas::DOWN, Tone::Rule);
         }
         let (x, y) = r.points[r.points.len() - 1];
         let _ = (x, y);

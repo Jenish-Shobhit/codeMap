@@ -1,4 +1,4 @@
-//! Colours from herdr's theme. herdr has no theme API, so codeMorph reads
+//! Colours from herdr's theme. herdr has no theme API, so codeMap reads
 //! `[theme]` from herdr's `config.toml` and resolves it the way herdr does:
 //! built-in palette by name, then `[theme.custom]`, then the dark or light
 //! mode overrides. The palettes are ported from herdr's `src/app/state.rs`
@@ -688,7 +688,7 @@ pub fn parse_theme_config(toml_text: &str) -> ThemeConfig {
 }
 
 /// Resolve the palette herdr would use for a config. With `auto_switch`
-/// codeMorph cannot see the host appearance, so it assumes dark.
+/// codeMap cannot see the host appearance, so it assumes dark.
 pub fn resolve_palette(cfg: &ThemeConfig) -> (Palette, String) {
     let (name, mode) = if cfg.auto_switch {
         (
@@ -714,7 +714,7 @@ pub fn resolve_palette(cfg: &ThemeConfig) -> (Palette, String) {
     (palette, canonical.to_string())
 }
 
-/// codeMorph's design tokens, resolved to colours.
+/// codeMap's design tokens, resolved to colours.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Theme {
     pub name: &'static str,
