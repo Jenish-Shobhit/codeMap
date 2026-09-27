@@ -102,10 +102,10 @@ Each archive is a ready-to-link plugin directory. Extract it somewhere
 permanent, since herdr runs the binary from there:
 
 ```sh
-v=v0.1.0 t=aarch64-apple-darwin
-curl -LO "https://github.com/Jenish-Shobhit/codeMap/releases/download/$v/codemap-$v-$t.tar.gz"
-curl -LO "https://github.com/Jenish-Shobhit/codeMap/releases/download/$v/codemap-$v-$t.tar.gz.sha256"
-shasum -a 256 -c "codemap-$v-$t.tar.gz.sha256"      # sha256sum -c on Linux
+v=v0.1.0 t=aarch64-apple-darwin      # or x86_64-apple-darwin, *-unknown-linux-musl
+u=https://github.com/Jenish-Shobhit/codeMap/releases/download/$v
+curl -LO "$u/codemap-$v-$t.tar.gz" -LO "$u/codemap-$v-$t.tar.gz.sha256"
+shasum -a 256 -c "codemap-$v-$t.tar.gz.sha256"   # sha256sum -c on Linux
 tar -xzf "codemap-$v-$t.tar.gz"
 herdr plugin link "$PWD/codemap-$v-$t"
 ```

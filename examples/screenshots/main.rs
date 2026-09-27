@@ -42,13 +42,13 @@ use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier};
 use serde_json::{json, Value};
 
-/// Popup sizes (columns, rows) per view: roughly 94% x 92% of a 150 x 50
-/// terminal, and wider for Flow so the whole chart fits.
-const MAP: (u16, u16) = (140, 46);
-const MAP_FILE: (u16, u16) = (140, 34);
+/// Popup sizes (columns, rows) per view. Each view gets the width its content
+/// needs and no more, so the text stays as large as possible in the README.
+const MAP: (u16, u16) = (128, 46);
+const MAP_FILE: (u16, u16) = (136, 34);
 const FLOW: (u16, u16) = (176, 50);
 const CHANGES: (u16, u16) = (150, 46);
-const HISTORY: (u16, u16) = (140, 42);
+const HISTORY: (u16, u16) = (128, 40);
 /// "Now" for relative times: 21 Sep 2026 21:46 UTC.
 const NOW: i64 = 1_790_027_160;
 
