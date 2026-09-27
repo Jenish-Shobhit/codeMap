@@ -2,7 +2,8 @@
 name = "codemap"
 version = "0.1.0"
 edition = "2021"
-# Checked by the MSRV job in CI. tree-sitter-language 0.1.8 needs 1.90.
+# Checked by the MSRV job in CI. tree-sitter 0.27 and tree-sitter-language
+# 0.1.8 need 1.90.
 rust-version = "1.90"
 description = "herdr plugin that shows your code as a map and flowcharts, and reviews what your agents changed"
 authors = ["Jenish Shobhit"]
@@ -33,7 +34,7 @@ serde_json = "1"
 toml = "1"
 unicode-width = "0.2"
 libc = "0.2"
-tree-sitter = "0.25"
+tree-sitter = "0.27"
 tree-sitter-python = "0.25"
 tree-sitter-rust = "0.24"
 tree-sitter-typescript = "0.23"

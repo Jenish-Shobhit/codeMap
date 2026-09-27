@@ -312,7 +312,7 @@ pub fn extract_tree(lang: Lang, src: &str, tree: &Tree) -> FileSymbols {
         let mut name_node: Option<Node> = None;
         let mut recv_node: Option<Node> = None;
         let mut call_node: Option<Node> = None;
-        for cap in m.captures {
+        for cap in m.captures() {
             let cname = names[cap.index as usize];
             match cname {
                 "name" => name_node = Some(cap.node),
@@ -479,6 +479,23 @@ mod tests {
     fn every_query_compiles() {
         for lang in Lang::ALL {
             let _ = lang.query();
+        }
+    }
+
+    /// `parse` turns a grammar the runtime cannot load into "no tree", so a
+    /// tree-sitter upgrade that drops a grammar's ABI must fail here instead.
+    #[test]
+    fn every_grammar_loads() {
+        let supported =
+            tree_sitter::MIN_COMPATIBLE_LANGUAGE_VERSION..=tree_sitter::LANGUAGE_VERSION;
+        for lang in Lang::ALL {
+            let abi = lang.language().abi_version();
+            assert!(
+                supported.contains(&abi),
+                "{} grammar has ABI {abi}, tree-sitter supports {supported:?}",
+                lang.name()
+            );
+            assert!(parse(lang, "").is_some(), "{} did not parse", lang.name());
         }
     }
 
