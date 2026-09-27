@@ -431,7 +431,7 @@ fn find_middle_split(body: &str) -> Option<usize> {
     // body = "<p> b/<p>"; if the two paths are identical the split is exactly
     // in the middle.
     let len = body.len();
-    if len < 4 || (len - 3) % 2 != 0 {
+    if len < 4 || !(len - 3).is_multiple_of(2) {
         return None;
     }
     let half = (len - 3) / 2;
@@ -590,6 +590,23 @@ Binary files a/logo.png and b/logo.png differ
         let text = "diff --git \"a/sp\\303\\244ce.py\" \"b/sp\\303\\244ce.py\"\nnew file mode 100644\n--- /dev/null\n+++ \"b/sp\\303\\244ce.py\"\n@@ -0,0 +1 @@\n+x\n";
         let files = parse(text);
         assert_eq!(files[0].path, "späce.py");
+    }
+
+    #[test]
+    fn unquoted_header_splits_in_the_middle() {
+        // A path that itself contains " b/" only splits correctly at the
+        // middle; odd lengths and different halves fall back to " b/".
+        assert_eq!(
+            split_git_header("a/x b/y.py b/x b/y.py"),
+            ("x b/y.py".to_string(), "x b/y.py".to_string())
+        );
+        assert_eq!(
+            split_git_header("a/old.py b/new.py"),
+            ("old.py".to_string(), "new.py".to_string())
+        );
+        assert_eq!(find_middle_split("ab b/ab"), Some(2));
+        assert_eq!(find_middle_split("ab b/abc"), None);
+        assert_eq!(find_middle_split("a b"), None);
     }
 
     #[test]
