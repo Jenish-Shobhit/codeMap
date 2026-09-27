@@ -1,0 +1,149 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check-version:
+    name: Tag matches the manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Compare the tag with Cargo.toml, herdr-plugin.toml and CHANGELOG.md
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          cargo_version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
+          plugin_version=$(sed -n 's/^version = "\(.*\)"/\1/p' herdr-plugin.toml | head -n1)
+          echo "tag=$tag Cargo.toml=$cargo_version herdr-plugin.toml=$plugin_version"
+          test "$tag" = "$cargo_version"
+          test "$tag" = "$plugin_version"
+          grep -q "^## \[$tag\]" CHANGELOG.md
+
+  build:
+    name: Build ${{ matrix.target }}
+    needs: check-version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          # Static musl binaries run on any Linux distribution.
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-24.04-arm
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      # The tree-sitter grammars are C: build them with musl's compiler
+      # wrapper so they link into the static binary.
+      - name: Install musl tools
+        if: contains(matrix.target, 'musl')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+          target_env=$(echo "${{ matrix.target }}" | tr '-' '_')
+          echo "CC_${target_env}=musl-gcc" >> "$GITHUB_ENV"
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+      - name: Package
+        id: package
+        shell: bash
+        run: |
+          name="codemap-${GITHUB_REF_NAME}-${{ matrix.target }}"
+          # The archive is a ready-to-link plugin directory: the manifest
+          # runs target/release/codemap relative to the plugin root.
+          mkdir -p "dist/$name/target/release"
+          cp herdr-plugin.toml README.md CHANGELOG.md LICENSE NOTICE "dist/$name/"
+          cp "target/${{ matrix.target }}/release/codemap" "dist/$name/target/release/"
+          bin="dist/$name/target/release/codemap"
+          file "$bin"
+          "$bin" --version || arch -x86_64 "$bin" --version || echo "cannot run ${{ matrix.target }} on this runner"
+          cd dist
+          tar -czf "$name.tar.gz" "$name"
+          if command -v sha256sum >/dev/null; then
+            sha256sum "$name.tar.gz" > "$name.tar.gz.sha256"
+          else
+            shasum -a 256 "$name.tar.gz" > "$name.tar.gz.sha256"
+          fi
+          cat "$name.tar.gz.sha256"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.package.outputs.name }}
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+          if-no-files-found: error
+
+  release:
+    name: Publish the GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Release notes from CHANGELOG.md
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v heading="## [$version]" '
+            index($0, heading) == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found && /^\[[^]]+\]: / { next }
+            found { print }
+          ' CHANGELOG.md > notes.md
+          test -s notes.md
+          cat >> notes.md <<NOTES
+
+          ## Install
+
+          From GitHub (herdr builds it with \`cargo\`, so Rust 1.90+ and a C compiler are needed):
+
+          \`\`\`sh
+          herdr plugin install Jenish-Shobhit/codeMap --ref ${GITHUB_REF_NAME}
+          \`\`\`
+
+          Or, without a Rust toolchain: download the archive for your platform below,
+          check it against its \`.sha256\` file, extract it, and link the extracted
+          directory with \`herdr plugin link <dir>\`. The binary inside,
+          \`target/release/codemap\`, also runs on its own: \`codemap [path]\`.
+
+          Then bind a key to \`dev.codemap.open\`; see
+          [Keybindings](https://github.com/${GITHUB_REPOSITORY}#keybindings).
+          NOTES
+          cat notes.md
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -l dist
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+            gh release edit "$GITHUB_REF_NAME" --notes-file notes.md
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* \
+              --title "codeMap ${GITHUB_REF_NAME}" \
+              --notes-file notes.md \
+              --verify-tag
+          fi
