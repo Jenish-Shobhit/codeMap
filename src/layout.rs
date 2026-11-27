@@ -1,8 +1,3 @@
-//! Layered graph layout after Sugiyama: break cycles, assign layers, insert
-//! dummy nodes for long edges, reduce crossings with barycenter sweeps, place
-//! nodes horizontally, then route edges orthogonally through the channels
-//! between layers on non-overlapping tracks. Coordinates are terminal cells.
-
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,10 +38,6 @@ impl Rect {
     }
 }
 
-/// An edge drawn as an orthogonal polyline. The first point is the cell just
-/// below the source box, the last is the cell just above the target box
-/// (where the arrowhead goes). For edges that point up the layers (cycles),
-/// `reversed` is set and the arrowhead belongs at the first point instead.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Route {
     pub edge: LEdge,
@@ -60,17 +51,13 @@ pub struct Layout {
     pub routes: Vec<Route>,
     pub width: usize,
     pub height: usize,
-    /// Layer index per node (isolated nodes get usize::MAX).
     pub layer: Vec<usize>,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct Options {
-    /// Columns between neighbouring boxes in a layer.
     pub node_gap: usize,
-    /// Wrap width for the grid of unconnected boxes.
     pub max_width: usize,
-    /// Sweeps of barycenter crossing reduction.
     pub sweeps: usize,
 }
 
@@ -84,7 +71,6 @@ impl Default for Options {
     }
 }
 
-/// An item in a layer: a real node or a dummy on a long edge.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Item {
     Node(usize),
@@ -101,7 +87,6 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
     if n == 0 {
         return out;
     }
-    // 1. Clean edges: no self loops, no duplicates.
     let mut edge_set: BTreeSet<LEdge> = BTreeSet::new();
     for e in edges {
         if e.from != e.to && e.from < n && e.to < n {
@@ -115,12 +100,11 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
         connected[e.to] = true;
     }
 
-    // 2. Break cycles: reverse DFS back edges.
     let mut adj: Vec<Vec<usize>> = vec![Vec::new(); n];
     for e in &edges {
         adj[e.from].push(e.to);
     }
-    let mut state = vec![0u8; n]; // 0 new, 1 on stack, 2 done
+    let mut state = vec![0u8; n];
     let mut back: BTreeSet<LEdge> = BTreeSet::new();
     for start in 0..n {
         if state[start] != 0 || !connected[start] {
@@ -148,7 +132,6 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
             }
         }
     }
-    // Directed edges used for layering (u above v).
     let dag: Vec<(usize, usize, LEdge, bool)> = edges
         .iter()
         .map(|e| {
@@ -160,7 +143,6 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
         })
         .collect();
 
-    // 3. Longest-path layering.
     let mut indeg = vec![0usize; n];
     let mut succ: Vec<Vec<usize>> = vec![Vec::new(); n];
     for &(u, v, _, _) in &dag {
@@ -181,7 +163,6 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
             }
         }
     }
-    // Pull sources down next to their first successor to shorten edges.
     for &u in queue.iter().rev() {
         let has_pred = dag.iter().any(|&(_, v, _, _)| v == u);
         if !has_pred && !succ[u].is_empty() {
@@ -195,13 +176,10 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
         .max()
         .unwrap_or(0);
 
-    // 4. Dummy chains for long edges.
     let mut layers: Vec<Vec<Item>> = vec![Vec::new(); n_layers];
-    // Initial order: BFS discovery order for stability.
     for &v in &queue {
         layers[layer[v]].push(Item::Node(v));
     }
-    // chains[i] = items from upper to lower for dag edge i
     let mut dummies = 0usize;
     let mut chains: Vec<Vec<Item>> = Vec::with_capacity(dag.len());
     for &(u, v, _, _) in &dag {
@@ -225,7 +203,6 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
     }
     let _ = dummy_layer;
 
-    // Adjacency between consecutive-layer items.
     let key = |it: Item| -> usize {
         match it {
             Item::Node(v) => v,
@@ -243,7 +220,6 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
         }
     }
 
-    // 5. Crossing reduction by barycenters.
     let mut pos = vec![0f64; total];
     let set_pos = |layers: &Vec<Vec<Item>>, pos: &mut Vec<f64>| {
         for items in layers {
@@ -317,7 +293,6 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
     let layers = best;
     set_pos(&layers, &mut pos);
 
-    // 6. Horizontal placement: pack, then pull towards neighbour centres.
     let width_of = |it: Item| -> usize {
         match it {
             Item::Node(v) => nodes[v].w.max(3),
@@ -392,7 +367,6 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
             for i in 0..m {
                 x[key(items[i])] = ((fwd[i] + bwd[i]) / 2.0).round();
             }
-            // Averaging keeps order but can still violate gaps after rounding.
             for i in 1..m {
                 let min_x = x[key(items[i - 1])] + widths[i - 1] + gap as f64;
                 if x[key(items[i])] < min_x {
@@ -408,8 +382,6 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
     let shift = if min_x.is_finite() { -min_x } else { 0.0 };
     let xi: Vec<usize> = x.iter().map(|v| (v + shift).max(0.0) as usize).collect();
 
-    // 7. Ports and channel tracks.
-    // Segments per channel l (between layer l and l+1): (edge idx, from item, to item)
     let mut seg_by_channel: Vec<Vec<(usize, Item, Item)>> = vec![Vec::new(); layers.len()];
     for (ei, chain) in chains.iter().enumerate() {
         for pair in chain.windows(2) {
@@ -424,8 +396,7 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
         }
     }
     let item_x = |it: Item| -> usize { xi[key(it)] };
-    // Port positions: bottom ports for sources, top ports for targets.
-    let mut bottom_port: HashMap<(usize, usize), usize> = HashMap::new(); // (edge, node) -> x
+    let mut bottom_port: HashMap<(usize, usize), usize> = HashMap::new();
     let mut top_port: HashMap<(usize, usize), usize> = HashMap::new();
     for v in 0..n {
         if !connected[v] {
@@ -433,7 +404,6 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
         }
         let w = nodes[v].w.max(3);
         let place = |mut list: Vec<(usize, usize)>| -> Vec<(usize, usize)> {
-            // list of (edge, other x) -> (edge, port x)
             list.sort_by_key(|&(e, ox)| (ox, e));
             let k = list.len();
             let interior = w.saturating_sub(2).max(1);
@@ -495,8 +465,7 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
         };
         (x1, x2)
     };
-    // Track assignment per channel.
-    let mut track_of: HashMap<(usize, usize), usize> = HashMap::new(); // (channel, seg idx) -> track
+    let mut track_of: HashMap<(usize, usize), usize> = HashMap::new();
     let mut tracks_in: Vec<usize> = vec![0; layers.len()];
     for (l, segs) in seg_by_channel.iter().enumerate() {
         let mut spans: Vec<(usize, usize, usize)> = segs
@@ -523,7 +492,6 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
         tracks_in[l] = track_end.len();
     }
 
-    // 8. Vertical placement.
     let layer_h: Vec<usize> = layers
         .iter()
         .map(|items| {
@@ -562,7 +530,6 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
         }
     }
 
-    // 9. Routes.
     for (ei, chain) in chains.iter().enumerate() {
         let (_, _, orig, reversed) = dag[ei];
         let mut points: Vec<(usize, usize)> = Vec::new();
@@ -585,7 +552,6 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
             let y_end = layer_y[l + 1] - 1;
             let y_end = match b {
                 Item::Node(_) => y_end,
-                // dummies pass straight through their layer band
                 Item::Dummy(_) => layer_y[l + 1] + layer_h[l + 1] - 1,
             };
             if points.is_empty() || points.last() != Some(&(x1, y_start)) {
@@ -599,7 +565,6 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
             }
             points.push((x2, y_end));
         }
-        // Remove collinear duplicates.
         let mut clean: Vec<(usize, usize)> = Vec::new();
         for p in points {
             if clean.last() == Some(&p) {
@@ -621,7 +586,6 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
         });
     }
 
-    // 10. Unconnected nodes in a grid below.
     let mut max_right = (0..n)
         .filter(|&v| connected[v])
         .map(|v| out.nodes[v].right())
@@ -676,7 +640,6 @@ pub fn layout(nodes: &[LNode], edges: &[LEdge], opts: &Options) -> Layout {
 }
 
 impl Layout {
-    /// Pairs of boxes that overlap (should always be empty).
     pub fn overlaps(&self) -> Vec<(usize, usize)> {
         let mut bad = Vec::new();
         for i in 0..self.nodes.len() {
@@ -689,7 +652,6 @@ impl Layout {
         bad
     }
 
-    /// Route cells that pass through a box (should always be empty).
     pub fn route_collisions(&self) -> Vec<(usize, (usize, usize))> {
         let mut bad = Vec::new();
         for (ri, r) in self.routes.iter().enumerate() {
@@ -710,7 +672,6 @@ impl Layout {
         bad
     }
 
-    /// Number of layers used by connected nodes.
     pub fn layer_count(&self) -> usize {
         self.layer
             .iter()
@@ -720,7 +681,6 @@ impl Layout {
             .unwrap_or(0)
     }
 
-    /// Nodes grouped by their row (for keyboard navigation).
     pub fn rows(&self) -> BTreeMap<usize, Vec<usize>> {
         let mut rows: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
         for (i, r) in self.nodes.iter().enumerate() {
@@ -733,7 +693,6 @@ impl Layout {
     }
 }
 
-/// The nearest node from `from` in a direction (dx, dy), for arrow keys.
 pub fn neighbor(layout: &Layout, from: usize, dx: i32, dy: i32) -> Option<usize> {
     let a = layout.nodes.get(from)?;
     let (ax, ay) = (a.x as i64 + a.w as i64 / 2, a.y as i64 + a.h as i64 / 2);
@@ -746,7 +705,6 @@ pub fn neighbor(layout: &Layout, from: usize, dx: i32, dy: i32) -> Option<usize>
         let (ddx, ddy) = (bx - ax, by - ay);
         let primary = ddx * dx as i64 + ddy * dy as i64;
         if dy != 0 {
-            // must be in another row in that direction
             let beyond = if dy > 0 {
                 b.y as i64 >= a.bottom() as i64
             } else {
@@ -795,7 +753,6 @@ mod tests {
         assert!(l.nodes[0].y < l.nodes[1].y && l.nodes[1].y < l.nodes[2].y);
         assert!(l.overlaps().is_empty());
         assert!(l.route_collisions().is_empty());
-        // straight edges
         assert_eq!(l.routes[0].points.len(), 2);
     }
 
@@ -815,7 +772,6 @@ mod tests {
 
     #[test]
     fn long_edges_get_dummies_and_avoid_boxes() {
-        // 0 -> 1 -> 2 -> 3 and a long edge 0 -> 3 that must go around 1 and 2
         let ns = nodes(&[(20, 4), (30, 5), (30, 5), (20, 3), (12, 3)]);
         let es = vec![
             LEdge { from: 0, to: 1 },

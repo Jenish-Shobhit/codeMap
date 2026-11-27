@@ -1,20 +1,3 @@
-//! Live tests against a real, isolated herdr server. Ignored by default.
-//!
-//! Start a throwaway server first (never your own session), for example:
-//!
-//! ```sh
-//! B=/tmp/cmtest-$(date +%s); mkdir -p $B/cfg $B/state
-//! env -u HERDR_SOCKET_PATH -u HERDR_ENV XDG_CONFIG_HOME=$B/cfg XDG_STATE_HOME=$B/state \
-//!     SHELL=/bin/sh herdr --session cmtest-x server &
-//! CODEMAP_LIVE_SOCKET=$B/cfg/herdr/sessions/cmtest-x/herdr.sock \
-//!     cargo test --test live_herdr -- --ignored --nocapture
-//! ```
-//!
-//! The hook is driven the way herdr drives it: a `pane.agent_status_changed`
-//! event from the server's own event stream is handed to `codemap hook`
-//! with herdr's hook environment. Comments go to a dummy agent pane running
-//! `cat`, through the real popup UI on a pty and through `agent.prompt`.
-
 mod common;
 
 use std::process::Command;
@@ -28,7 +11,6 @@ use common::pty::*;
 use common::*;
 use serde_json::{json, Value};
 
-/// The isolated socket, after refusing anything that could be the user's.
 fn live_socket() -> Option<String> {
     let sock = std::env::var("CODEMAP_LIVE_SOCKET").ok()?;
     let home = std::env::var("HOME").unwrap_or_default();
@@ -82,7 +64,6 @@ fn wait_pane_text(client: &Client, pane: &str, needle: &str) -> String {
     }
 }
 
-/// Run `codemap hook` with the environment herdr gives event hooks.
 fn run_hook(sock: &str, state: &std::path::Path, event: &Value, ctx: &Value) -> (String, Duration) {
     let t = Instant::now();
     let out = Command::new(env!("CARGO_BIN_EXE_codemap"))
@@ -106,7 +87,6 @@ fn run_hook(sock: &str, state: &std::path::Path, event: &Value, ctx: &Value) -> 
     (String::from_utf8_lossy(&out.stdout).trim().to_string(), dt)
 }
 
-/// herdr's plugin_context_for_event for a pane event: that pane's details.
 fn context_for(client: &Client, pane: &str) -> Value {
     let p = client.pane_get(pane).unwrap();
     json!({
@@ -140,7 +120,6 @@ fn live_hook_checkpoints_and_comment_delivery() {
     let state = TempDir::new("live-state");
     let before = fingerprint(repo.path());
 
-    // A throwaway workspace whose shell stands in for an agent.
     let ws = client
         .call(
             "workspace.create",
@@ -176,7 +155,6 @@ fn live_hook_checkpoints_and_comment_delivery() {
             .unwrap();
     };
 
-    // --- Hook: turn start and end, from herdr's own events --------------------
     report("working");
     let ev = next_event(&events, "working");
     let (out, t_start) = run_hook(&sock, state.path(), &ev, &context_for(&client, &pane));
@@ -184,7 +162,6 @@ fn live_hook_checkpoints_and_comment_delivery() {
         out.starts_with(&format!("start {terminal_id}-claude turn 1")),
         "{out}"
     );
-    // The "agent" edits during its turn.
     write(
         repo.path(),
         "app.py",
@@ -219,9 +196,6 @@ fn live_hook_checkpoints_and_comment_delivery() {
     let paths: Vec<&str> = diff.iter().map(|d| d.path.as_str()).collect();
     assert_eq!(paths, vec!["app.py", "notes.md"]);
 
-    // --- The popup UI, inside herdr, on a pty: review and send with P --------
-    // The dummy agent: a copy of `cat` named `claude`, so herdr sees an agent
-    // process in the foreground and whatever is typed into it shows up.
     let bin = TempDir::new("live-bin");
     let dummy = bin.path().join("claude");
     let example = std::env::current_exe()
@@ -269,7 +243,6 @@ fn live_hook_checkpoints_and_comment_delivery() {
     let screen = ui.screen();
     assert!(screen.contains("cmtest-agent"), "{screen}");
     assert!(screen.contains("turn 1"), "{screen}");
-    // A comment on the first hunk, then P.
     let from = ui.len();
     ui.send(b"c");
     ui.wait_for("comment on app.py", from, Duration::from_secs(5))
@@ -302,8 +275,6 @@ fn live_hook_checkpoints_and_comment_delivery() {
     );
     println!("live: P typed the draft into {pane}");
 
-    // --- S: submit with agent.prompt ----------------------------------------
-    // Report the (dummy) agent as ready.
     report("working");
     let _ = next_event(&events, "working");
     report("idle");
@@ -332,7 +303,6 @@ fn live_hook_checkpoints_and_comment_delivery() {
     );
     println!("live: S submitted the draft with agent.prompt");
 
-    // A blocked agent refuses a submit; the draft stays.
     report("blocked");
     let _ = next_event(&events, "blocked");
     app.drafts = vec![Comment {
@@ -346,8 +316,6 @@ fn live_hook_checkpoints_and_comment_delivery() {
     assert!(err.contains("waiting on a question"), "{err}");
     assert_eq!(app.drafts.len(), 1);
 
-    // `codemap open` reaches plugin.pane.open (the plugin is not linked in
-    // this throwaway server, so herdr answers plugin_not_found).
     let out = Command::new(env!("CARGO_BIN_EXE_codemap"))
         .args(["open", "--view", "map"])
         .env("HERDR_ENV", "1")
@@ -358,7 +326,6 @@ fn live_hook_checkpoints_and_comment_delivery() {
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(err.contains("plugin_not_found"), "{err}");
 
-    // Clean up the throwaway workspace; the repository is untouched.
     client.send_text(&pane, "\x04").ok();
     client
         .call("workspace.close", json!({"workspace_id": ws_id}))
@@ -370,8 +337,6 @@ fn live_hook_checkpoints_and_comment_delivery() {
     println!("live: repository .git unchanged");
 }
 
-/// Pinned mode follows the focused pane: focusing a pane in another
-/// repository retargets the UI.
 #[test]
 #[ignore]
 fn live_follow_mode_retargets_on_focus() {

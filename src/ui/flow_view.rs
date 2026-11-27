@@ -1,6 +1,3 @@
-//! Flow view: the function list and its calls on the rail, the flowchart in
-//! the body.
-
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
@@ -38,7 +35,6 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
         return;
     };
     let sym = app.flow_symbol().cloned();
-    // Header: name, where, called from.
     let mut head = Line::new();
     if let Some(s) = &sym {
         head = head
@@ -53,7 +49,6 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
         head = head.push(format!("   called from {callers}"), style(t.muted, t.body));
     }
     head.draw(buf, body.x, body.y, body.width);
-    // Legend when anything is marked.
     let marks = app.flow_line_marks();
     let view = Rect::new(
         body.x,
@@ -77,7 +72,6 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
             (canvas.w, canvas.h),
         );
     }
-    // Keep the change-mark gutter visible when the chart fits.
     if canvas.w <= view.width as usize {
         scroll.0 = 0;
     }

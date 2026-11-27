@@ -1,17 +1,3 @@
-//! codeMap's side store. Everything codeMap remembers lives here, in the
-//! plugin state directory, never in the user's repository:
-//!
-//! - `repos/<repo-key>/shadow.git`: a private git dir whose work tree is the
-//!   user's checkout. Turn checkpoints are `git add -A` + `write-tree` +
-//!   `commit-tree` with that private dir and its own index, so objects, refs
-//!   and the index all stay here. Commands that write objects never see the
-//!   user's object store (git would otherwise "freshen", i.e. touch, objects
-//!   it finds there). Read-only commands such as `diff` borrow it for the
-//!   process only, through `GIT_ALTERNATE_OBJECT_DIRECTORIES`.
-//! - `panes/<pane-key>.json`: last agent status and the turn list per pane.
-//! - `reviews/<repo-key>.json`: reviewed hunk hashes.
-//! - `drafts/<repo-key>.json`: unsent review comments.
-
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -23,7 +9,6 @@ use serde::{Deserialize, Serialize};
 use crate::git::{self, FileDiff, GitError, RepoInfo};
 use crate::util;
 
-/// How many turns to keep per pane before old checkpoints are dropped.
 pub const MAX_TURNS: usize = 50;
 
 #[derive(Debug, Clone)]
@@ -34,8 +19,6 @@ pub struct Store {
 impl Store {
     pub fn new(root: impl Into<PathBuf>) -> Self {
         let root: PathBuf = root.into();
-        // git runs with the work tree as its cwd, so the store must not be
-        // relative to ours.
         let root = if root.is_relative() {
             std::env::current_dir()
                 .map(|d| d.join(&root))
@@ -46,9 +29,6 @@ impl Store {
         Store { root }
     }
 
-    /// Resolve the state directory: an explicit override, herdr's plugin
-    /// state dir, or the path herdr would give `dev.codemap` so that the
-    /// standalone binary sees the checkpoints the hook wrote.
     pub fn from_env() -> Self {
         if let Some(dir) = env_path("CODEMAP_STATE_DIR") {
             return Store::new(dir);
@@ -106,8 +86,6 @@ impl Store {
         fs::rename(tmp, path)
     }
 
-    // ---- panes and turns ----------------------------------------------
-
     pub fn load_pane(&self, pane_key: &str) -> PaneState {
         let mut state: PaneState = self.read_json(&self.json_path("panes", pane_key));
         if state.pane_key.is_empty() {
@@ -120,7 +98,6 @@ impl Store {
         self.write_json(&self.json_path("panes", &state.pane_key), state)
     }
 
-    /// Every pane state that has turns in this repository, newest first.
     pub fn panes_for_repo(&self, root: &Path) -> Vec<PaneState> {
         let dir = self.root.join("panes");
         let Ok(entries) = fs::read_dir(&dir) else {
@@ -136,8 +113,6 @@ impl Store {
         out.sort_by_key(|p| std::cmp::Reverse(p.updated));
         out
     }
-
-    // ---- reviews and drafts -------------------------------------------
 
     pub fn load_reviews(&self, repo_key: &str) -> Reviews {
         self.read_json(&self.json_path("reviews", repo_key))
@@ -162,7 +137,6 @@ fn env_path(key: &str) -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
-/// Keep file names portable: letters, digits, dot, dash, underscore.
 pub fn sanitize(s: &str) -> String {
     let out: String = s
         .chars()
@@ -182,7 +156,6 @@ pub fn sanitize(s: &str) -> String {
     }
 }
 
-/// A checkpoint: a commit in the shadow repository.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Checkpoint {
     pub commit: String,
@@ -198,7 +171,6 @@ pub struct Turn {
     pub start: Option<Checkpoint>,
     #[serde(default)]
     pub end: Option<Checkpoint>,
-    /// The status that ended the turn (idle, done or blocked).
     #[serde(default)]
     pub end_status: Option<String>,
     #[serde(default)]
@@ -250,7 +222,6 @@ impl PaneState {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Reviews {
-    /// Reviewed hunks, each keyed `"<path>\u{0}<hunk hash>"`.
     #[serde(default)]
     pub hunks: std::collections::BTreeSet<String>,
 }
@@ -275,7 +246,6 @@ impl Reviews {
     }
 }
 
-/// A review comment anchored to lines of the new file.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Comment {
     pub path: String,
@@ -296,7 +266,6 @@ impl Comment {
     }
 }
 
-/// The text P and S send to the agent: one `path:lines — note` per comment.
 pub fn format_comments(comments: &[Comment]) -> String {
     let mut out = String::from("Review comments from codeMap:\n");
     for c in comments {
@@ -308,7 +277,6 @@ pub fn format_comments(comments: &[Comment]) -> String {
     out
 }
 
-/// The shadow repository for one checkout.
 #[derive(Debug, Clone)]
 pub struct Shadow {
     pub dir: PathBuf,
@@ -323,9 +291,6 @@ impl Shadow {
         self.git_dir.join("index")
     }
 
-    /// A git command bound to the shadow dir, its index and the user's
-    /// checkout as the work tree. It can write objects, so it must not see
-    /// the user's object store.
     pub fn git(&self) -> Command {
         let mut cmd = git::git_cmd(&self.work_tree);
         cmd.env("GIT_DIR", &self.git_dir)
@@ -340,8 +305,6 @@ impl Shadow {
         cmd
     }
 
-    /// A read-only git command that can also resolve the user's commits
-    /// (HEAD, history) through a per-process alternate object directory.
     pub fn git_read(&self) -> Command {
         let mut cmd = self.git();
         cmd.env("GIT_ALTERNATE_OBJECT_DIRECTORIES", &self.repo_objects);
@@ -364,7 +327,6 @@ impl Shadow {
         self.git_dir.join("HEAD").is_file()
     }
 
-    /// Create the shadow dir on first use.
     pub fn ensure(&self) -> Result<(), GitError> {
         fs::create_dir_all(&self.dir).map_err(|e| GitError(e.to_string()))?;
         if !self.exists() {
@@ -385,10 +347,7 @@ impl Shadow {
                 git::run_cmd(cmd)?;
             }
         }
-        // Never keep a persistent alternates file: writes would freshen
-        // (touch) the user's objects through it.
         let _ = fs::remove_file(self.git_dir.join("objects").join("info").join("alternates"));
-        // Mirror the repo's own excludes so snapshots match what git shows.
         let info = self.git_dir.join("info");
         fs::create_dir_all(&info).map_err(|e| GitError(e.to_string()))?;
         let mut exclude = fs::read_to_string(self.repo_common_dir.join("info").join("exclude"))
@@ -398,7 +357,6 @@ impl Shadow {
         Ok(())
     }
 
-    /// Serialise snapshot work between concurrent hook runs.
     fn lock(&self) -> Result<LockGuard, GitError> {
         let path = self.dir.join("snapshot.lock");
         let deadline = Instant::now() + Duration::from_secs(5);
@@ -431,13 +389,9 @@ impl Shadow {
         }
     }
 
-    /// Record the work tree as it is now. Returns (commit, tree).
     pub fn snapshot(&self, message: &str) -> Result<Checkpoint, GitError> {
         self.ensure()?;
         let _guard = self.lock()?;
-        // Our own index: its stat cache makes later snapshots cheap. It is
-        // never seeded from the user's index, whose entries point at objects
-        // this store does not have.
         let add = self.run(&["add", "-A", "--ignore-errors", "--", "."]);
         if add.is_err() {
             let _ = fs::remove_file(self.index_file());
@@ -469,8 +423,6 @@ impl Shadow {
             .unwrap_or_default()
     }
 
-    /// Diff two tree-ish objects (checkpoint commits, trees, or commits of the
-    /// user's repo, which are reachable through alternates).
     pub fn diff(&self, from: &str, to: &str) -> Result<Vec<FileDiff>, GitError> {
         let out = self.run_read(&[
             "diff",
@@ -487,7 +439,6 @@ impl Shadow {
         Ok(git::diff::parse(&out))
     }
 
-    /// The empty tree, for diffs against "nothing" (an empty repository).
     pub fn empty_tree(&self) -> Result<String, GitError> {
         let mut cmd = self.git();
         cmd.args(["hash-object", "-t", "tree", "--stdin"]);
@@ -501,7 +452,6 @@ impl Shadow {
         Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
     }
 
-    /// Contents of a file at a checkpoint.
     pub fn read_file(&self, commit: &str, path: &str) -> Option<String> {
         self.run_read(&["show", &format!("{commit}:{path}")]).ok()
     }

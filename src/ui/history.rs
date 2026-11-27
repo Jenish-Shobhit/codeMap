@@ -1,7 +1,3 @@
-//! History view: the commit graph (lanes, branches, tags, HEAD) and the
-//! worktrees with their agents on a wide rail; the selected commit, or its
-//! diff, in the body.
-
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Color;
@@ -148,7 +144,6 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
         body.width,
     );
     y += 1;
-    // Subject, wrapped.
     for chunk in wrap(&c.subject, body.width as usize) {
         put(
             buf,
@@ -241,7 +236,6 @@ fn rail(buf: &mut Buffer, area: Rect, app: &mut App) {
         app.history.worktrees.len().min(4) + 2
     };
     let graph_h = (area.height as usize).saturating_sub(1 + wt_rows);
-    // Scroll the graph so the selected commit stays visible.
     let sel_row = app
         .history
         .rows
@@ -277,7 +271,6 @@ fn rail(buf: &mut Buffer, area: Rect, app: &mut App) {
         let sel = row.commit == Some(app.history.sel);
         let bg = if sel { t.active_row } else { t.rail };
         let mut line = Line::new().bg(bg);
-        // lanes, coloured per lane
         let cells: String = row.cells.iter().collect();
         let mut lane = String::new();
         let mut last_color = None;

@@ -1,12 +1,3 @@
-//! codeMap: see your code as a map, and what your agents changed on it.
-//!
-//! Subcommands:
-//!   codemap [PATH] [--view V]     standalone, or the popup UI inside herdr
-//!   codemap ui [--view V]         the herdr pane entrypoint
-//!   codemap open [--view V]       the herdr action: opens the popup
-//!   codemap hook                  the pane.agent_status_changed hook
-//!   codemap doctor                where codeMap looks for things
-
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -137,7 +128,6 @@ fn ui(args: Args, t0: Instant) -> i32 {
     }
 }
 
-/// The herdr action: open the UI entrypoint as a popup at 94% x 92%.
 fn open(args: &Args) -> i32 {
     let Some(client) = Client::from_env() else {
         eprintln!("codemap open: HERDR_SOCKET_PATH is not set (run it from herdr)");
@@ -145,7 +135,6 @@ fn open(args: &Args) -> i32 {
     };
     let view = view_from(args);
     let mut env = vec![("CODEMAP_VIEW".to_string(), view.name().to_string())];
-    // Forward the context taken at the keypress to the popup.
     let ctx_json = std::env::var("HERDR_PLUGIN_CONTEXT_JSON").ok();
     if let Some(json) = &ctx_json {
         env.push(("CODEMAP_CONTEXT_JSON".to_string(), json.clone()));
@@ -166,7 +155,6 @@ fn open(args: &Args) -> i32 {
     match client.plugin_pane_open(&req) {
         Ok(_) => 0,
         Err(e) if e.code == "ui_busy" && placement == "popup" => {
-            // Another modal is open: fall back to a temporary zoomed overlay.
             req.placement = "overlay".into();
             match client.plugin_pane_open(&req) {
                 Ok(_) => 0,

@@ -1,11 +1,3 @@
-//! Flow: the control flow of one function as a flowchart.
-//!
-//! The syntax tree becomes a small structured tree (statement groups,
-//! decisions, loops, try/except, match, returns), which is laid out
-//! recursively: a sequence runs down one spine; a branch puts its head on
-//! the spine, the fall-through path below it, and the other paths in columns
-//! to the right that merge back (or loop back) below.
-
 use std::collections::BTreeMap;
 
 use tree_sitter::Node;
@@ -21,7 +13,6 @@ const MAX_BOX_LINES: usize = 8;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FlowLine {
     pub text: String,
-    /// 1-based source line.
     pub line: u32,
 }
 
@@ -72,7 +63,6 @@ pub struct FlowChart {
 }
 
 impl FlowChart {
-    /// Counts of each construct, for tests and the header.
     pub fn stats(&self) -> BTreeMap<&'static str, usize> {
         fn walk(items: &[Flow], m: &mut BTreeMap<&'static str, usize>) {
             for f in items {
@@ -135,7 +125,6 @@ fn line_of(n: Node) -> u32 {
     n.start_position().row as u32 + 1
 }
 
-/// One-line text of a node: whitespace collapsed, cut to MAX_LINE.
 fn one_line(n: Node, src: &str) -> String {
     let t: String = text(n, src)
         .split_whitespace()
@@ -148,7 +137,6 @@ fn fl(text: String, line: u32) -> FlowLine {
     FlowLine { text, line }
 }
 
-/// A statement as up to three display lines, dedented.
 fn stmt_lines(n: Node, src: &str) -> Vec<FlowLine> {
     let raw = text(n, src);
     let first = line_of(n);
@@ -182,12 +170,10 @@ fn stmt_lines(n: Node, src: &str) -> Vec<FlowLine> {
     out
 }
 
-/// Find the function's syntax node and build its flow.
 pub fn build(lang: Lang, src: &str, sym: &Symbol) -> Option<FlowChart> {
     let tree = lang::parse(lang, src)?;
     let root = tree.root_node();
     let mut node = root.descendant_for_byte_range(sym.start_byte, sym.end_byte)?;
-    // Walk up until the node covers the whole definition.
     while node.start_byte() > sym.start_byte || node.end_byte() < sym.end_byte {
         node = node.parent()?;
     }
@@ -229,7 +215,6 @@ fn function_body(lang: Lang, node: Node) -> Option<Node> {
     if let Some(b) = node.child_by_field_name("body") {
         return Some(b);
     }
-    // JS `const f = () => ...`: the value holds the function.
     if matches!(lang, Lang::TypeScript | Lang::Tsx | Lang::JavaScript) {
         if let Some(v) = node.child_by_field_name("value") {
             return v.child_by_field_name("body");
@@ -238,7 +223,6 @@ fn function_body(lang: Lang, node: Node) -> Option<Node> {
     None
 }
 
-/// Merge consecutive statement groups into boxes of up to MAX_BOX_LINES.
 fn merge_stmts(items: Vec<Flow>) -> Vec<Flow> {
     let mut out: Vec<Flow> = Vec::new();
     for item in items {
@@ -258,8 +242,6 @@ fn named_children<'t>(n: Node<'t>) -> Vec<Node<'t>> {
     let mut c = n.walk();
     n.named_children(&mut c).collect()
 }
-
-// ---- Python ------------------------------------------------------------
 
 fn py_block(block: Node, src: &str) -> Vec<Flow> {
     let mut out = Vec::new();
@@ -338,7 +320,6 @@ fn py_stmt(st: Node, src: &str, out: &mut Vec<Flow>) {
                         let head = match ch.child_by_field_name("value") {
                             Some(v) => format!("except {}", one_line(v, src)),
                             None => {
-                                // older grammars: the first non-block child
                                 let first =
                                     named_children(ch).into_iter().find(|c| c.kind() != "block");
                                 match first {
@@ -497,8 +478,6 @@ fn py_alternatives(alts: &[Node], src: &str) -> Vec<Flow> {
     }
 }
 
-// ---- Rust --------------------------------------------------------------
-
 fn rs_is_control(kind: &str) -> bool {
     matches!(
         kind,
@@ -527,8 +506,6 @@ fn rs_block(block: Node, src: &str, tail_returns: bool) -> Vec<Flow> {
         match st.kind() {
             "expression_statement" => {
                 let inner = st.named_child(0);
-                // A block-like tail expression (`if`/`match` without `;`) is
-                // still the block's value: it returns from the function.
                 let tail_value = i + 1 == n && !text(st, src).trim_end().ends_with(';');
                 match inner {
                     Some(e) if rs_is_control(e.kind()) => {
@@ -667,8 +644,6 @@ fn rs_expr(e: Node, src: &str, tail_returns: bool, out: &mut Vec<Flow>) {
     }
 }
 
-// ---- JavaScript / TypeScript ------------------------------------------
-
 fn js_block(block: Node, src: &str) -> Vec<Flow> {
     let mut out = Vec::new();
     if block.kind() == "statement_block" {
@@ -690,7 +665,6 @@ fn strip_parens(s: String) -> String {
     }
 }
 
-/// Text of a statement up to its body (a loop header).
 fn head_text(st: Node, body: Option<Node>, src: &str) -> String {
     let end = body.map(|b| b.start_byte()).unwrap_or(st.end_byte());
     let t = src.get(st.start_byte()..end).unwrap_or("");
@@ -832,8 +806,6 @@ fn js_stmt(st: Node, src: &str, out: &mut Vec<Flow>) {
     }
 }
 
-// ---- Go ----------------------------------------------------------------
-
 fn go_block(block: Node, src: &str) -> Vec<Flow> {
     let mut out = Vec::new();
     let mut stmts = Vec::new();
@@ -947,7 +919,6 @@ fn go_stmt(st: Node, src: &str, out: &mut Vec<Flow>) {
         }
         "block" => out.extend(go_block(st, src)),
         _ => {
-            // panic(...) ends the path like a raise
             let t = one_line(st, src);
             if t.starts_with("panic(") {
                 out.push(Flow::End {
@@ -960,8 +931,6 @@ fn go_stmt(st: Node, src: &str, out: &mut Vec<Flow>) {
         }
     }
 }
-
-// ---- Layout ------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BoxKind {
@@ -983,7 +952,6 @@ pub struct FlowBox {
     pub title: Option<String>,
     pub lines: Vec<FlowLine>,
     pub kind: BoxKind,
-    /// Row of the box used by an outgoing bus (branches).
     pub bus_row: usize,
 }
 
@@ -1000,7 +968,6 @@ impl FlowBox {
 enum Op {
     Poly(Vec<(usize, usize)>),
     Arrow(usize, usize, char),
-    /// A text label; `true` when it may sit on a horizontal line (a bus).
     Label(usize, usize, String, bool),
 }
 
@@ -1042,7 +1009,6 @@ impl Blk {
         self.ops.extend(other.ops);
     }
 
-    /// A single box with nothing else in it (for inline side placement).
     fn is_single_box(&self) -> bool {
         self.boxes.len() == 1 && self.ops.is_empty()
     }
@@ -1069,8 +1035,6 @@ fn box_blk(title: Option<String>, lines: Vec<FlowLine>, kind: BoxKind, extra_row
     }
     let w = w.max(9);
     let h = lines.len().max(1) + 2 + extra_rows;
-    // Loops take the bus on their first row (the second is the loop-back
-    // entry); terminal boxes are entered on their first line.
     let bus_row = if matches!(kind, BoxKind::Loop | BoxKind::End(_)) {
         1
     } else {
@@ -1107,7 +1071,6 @@ fn empty_blk() -> Blk {
     }
 }
 
-/// Stack blocks on one spine with ▼ connectors.
 fn seq(blocks: Vec<Blk>) -> Blk {
     let blocks: Vec<Blk> = blocks.into_iter().filter(|b| b.h > 0).collect();
     if blocks.is_empty() {
@@ -1127,12 +1090,10 @@ fn seq(blocks: Vec<Blk>) -> Blk {
     for b in blocks {
         if let Some(pe) = prev_exit {
             if pe {
-                // from the previous block's bottom row into an arrow
                 out.ops.push(Op::Poly(vec![(spine, y - 1), (spine, y)]));
                 out.ops.push(Op::Arrow(spine, y, '▼'));
                 y += 1;
             } else {
-                // unreachable code after a return: leave a gap, no arrow
                 y += 1;
             }
         }
@@ -1156,7 +1117,6 @@ struct Side {
     back_edge: bool,
 }
 
-/// A head box with a fall-through path below and side paths to the right.
 fn branch(head: Blk, down: Option<(String, Blk)>, sides: Vec<Side>) -> Blk {
     let head_box = head.boxes[0].clone();
     let bus_row = head_box.bus_row;
@@ -1177,9 +1137,8 @@ fn branch(head: Blk, down: Option<(String, Blk)>, sides: Vec<Side>) -> Blk {
     let head_right = head_x + head.w - 1;
     out.absorb(head.shift(head_x, 0));
     let mut right_edge = head_right + 1;
-    let mut bottom = head_h - 1; // last used row
-                                 // The fall-through path.
-    let mut down_end: Option<usize> = Some(head_h - 1); // row where the spine path ends
+    let mut bottom = head_h - 1;
+    let mut down_end: Option<usize> = Some(head_h - 1);
     if let Some((label, d)) = down {
         let dx = spine - d.spine;
         let dy = head_h + 1;
@@ -1196,16 +1155,13 @@ fn branch(head: Blk, down: Option<(String, Blk)>, sides: Vec<Side>) -> Blk {
     }
     let has_back = sides.iter().any(|s| s.back_edge);
     let inline = sides.len() == 1 && !has_back && sides[0].blk.is_single_box();
-    let mut merges: Vec<(usize, usize)> = Vec::new(); // (x, bottom row) of side exits
+    let mut merges: Vec<(usize, usize)> = Vec::new();
     if inline {
-        // One small side box on the same rows as the head.
         let s = sides.into_iter().next().unwrap();
         let sb = &s.blk.boxes[0];
         let label = format!(" {} ", s.label);
         let gap = util::width(&label) + 6;
         let sy = bus_row.saturating_sub(sb.bus_row);
-        // A side that ends (return, raise...) needs no merge line, so it can
-        // sit right beside the head when it stays above the fall-through.
         let beside = !s.blk.exit && sy + s.blk.h <= head_h + 1;
         let sx = if beside {
             head_right + 1 + gap
@@ -1237,7 +1193,6 @@ fn branch(head: Blk, down: Option<(String, Blk)>, sides: Vec<Side>) -> Blk {
         for s in sides {
             let spine_i = sx + s.blk.spine;
             spines.push(spine_i);
-            // drop from the bus into the side
             out.ops
                 .push(Op::Poly(vec![(spine_i, bus_row), (spine_i, side_top - 1)]));
             out.ops.push(Op::Arrow(spine_i, side_top - 1, '▼'));
@@ -1253,7 +1208,6 @@ fn branch(head: Blk, down: Option<(String, Blk)>, sides: Vec<Side>) -> Blk {
             let sbottom = side_top + sh - 1;
             bottom = bottom.max(sbottom);
             if back && exit {
-                // loop back into the head's second row
                 let turn = sbottom + 1;
                 out.ops.push(Op::Poly(vec![
                     (spine_i, sbottom),
@@ -1270,13 +1224,11 @@ fn branch(head: Blk, down: Option<(String, Blk)>, sides: Vec<Side>) -> Blk {
             right_edge = right_edge.max(sx + sw);
             sx += sw + 3;
         }
-        // the bus: from the head's right border to the last drop
         let last = *spines.last().unwrap();
         out.ops
             .push(Op::Poly(vec![(head_right, bus_row), (last, bus_row)]));
         let _ = n;
     }
-    // Merge surviving paths below everything.
     if merges.is_empty() {
         if let Some(end) = down_end {
             if end < bottom {
@@ -1311,8 +1263,6 @@ fn is_simple(items: &[Flow]) -> Option<Vec<FlowLine>> {
     }
 }
 
-/// A side branch that runs a few statements and then ends (a guard
-/// clause) becomes one terminal box, so it can sit beside its decision.
 fn lay_branch(items: &[Flow]) -> Blk {
     if let [Flow::Stmts(lines), Flow::End { kind, line }] = items {
         if lines.len() <= 3 {
@@ -1375,7 +1325,6 @@ fn lay_one(f: &Flow) -> Blk {
                 }],
             );
             if no.is_empty() && b.exit {
-                // label the fall-through when there is no else
                 b.ops.push(Op::Label(b.spine + 2, 3, "no".into(), false));
             }
             b
@@ -1447,7 +1396,6 @@ fn lay_one(f: &Flow) -> Blk {
                 })
                 .collect::<Vec<_>>();
             let sides = if sides.len() > 1 {
-                // several handlers: label each drop with its except clause
                 sides
                     .into_iter()
                     .map(|mut s| {
@@ -1488,7 +1436,6 @@ fn lay_one(f: &Flow) -> Blk {
     }
 }
 
-/// A block whose first box carries a title (else, finally).
 fn titled(title: Option<String>, items: &[Flow]) -> Blk {
     match is_simple(items) {
         Some(lines) if !lines.is_empty() => box_blk(title, lines, BoxKind::Stmt, 0),
@@ -1535,7 +1482,6 @@ fn titled_arm(pat: &FlowLine, items: &[Flow]) -> Blk {
     }
 }
 
-/// A laid-out flowchart: boxes (in reading order) and a canvas-ready plan.
 #[derive(Debug, Clone)]
 pub struct FlowLayout {
     pub boxes: Vec<FlowBox>,
@@ -1544,7 +1490,6 @@ pub struct FlowLayout {
     pub height: usize,
 }
 
-/// Columns kept free on the left for change marks.
 pub const GUTTER: usize = 2;
 
 pub fn layout(chart: &FlowChart) -> FlowLayout {
@@ -1560,7 +1505,6 @@ pub fn layout(chart: &FlowChart) -> FlowLayout {
     }
     let b = seq(parts).shift(GUTTER, 0);
     let mut boxes = b.boxes;
-    // The entry box is drawn round, like a terminal node.
     if let Some(first) = boxes.first_mut() {
         first.kind = BoxKind::End(EndKind::Return);
     }
@@ -1587,14 +1531,12 @@ impl FlowLayout {
         bad
     }
 
-    /// Index of the box holding a source line.
     pub fn box_for_line(&self, line: u32) -> Option<usize> {
         self.boxes
             .iter()
             .position(|b| b.lines.iter().any(|l| l.line == line))
     }
 
-    /// Draw with change marks (line -> 'A'/'M') and a selected box.
     pub fn draw(&self, marks: &BTreeMap<u32, char>, selected: Option<usize>) -> Canvas {
         let mut c = Canvas::new(self.width + 1, self.height + 1);
         for op in &self.ops {
@@ -1625,7 +1567,6 @@ impl FlowLayout {
                     _ => Tone::Rule,
                 }
             };
-            // keep junction bits on the borders
             let mut keep = Vec::new();
             for x in b.x..b.x + b.w {
                 for y in [b.y, b.y + b.h - 1] {
@@ -1696,7 +1637,6 @@ impl FlowLayout {
         for op in &self.ops {
             if let Op::Label(x, y, s, on_line) = op {
                 let w = util::width(s);
-                // bus labels may sit on a horizontal line; others need space
                 let clear = (0..w).all(|i| {
                     c.get(x + i, *y).is_some_and(|cell| {
                         !cell.txt

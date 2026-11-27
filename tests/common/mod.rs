@@ -1,4 +1,3 @@
-//! Helpers shared by the integration tests: temp dirs and throwaway repos.
 #![allow(dead_code)]
 
 pub mod pty;
@@ -23,7 +22,6 @@ impl TempDir {
                 .as_nanos()
         ));
         std::fs::create_dir_all(&base).unwrap();
-        // Resolve /var -> /private/var on macOS so paths compare equal to git's.
         TempDir(base.canonicalize().unwrap())
     }
 
@@ -57,9 +55,6 @@ pub fn git(dir: &Path, args: &[&str]) -> String {
             "commit.gpgsign=false",
             "-c",
             "tag.gpgsign=false",
-            // No background `maintenance run --auto` after commits: its
-            // transient objects/maintenance.lock would show up in the
-            // fingerprints the tests take of .git.
             "-c",
             "maintenance.auto=false",
             "-c",
@@ -85,7 +80,6 @@ pub fn write(dir: &Path, rel: &str, content: &str) {
     std::fs::write(p, content).unwrap();
 }
 
-/// A repo with one commit containing `files`.
 pub fn repo_with(files: &[(&str, &str)]) -> TempDir {
     let t = TempDir::new("repo");
     git(t.path(), &["init", "-q"]);
@@ -97,8 +91,6 @@ pub fn repo_with(files: &[(&str, &str)]) -> TempDir {
     t
 }
 
-/// Fingerprint of everything under `.git` (path -> size, mtime, content hash)
-/// plus `git status` output. Any write codeMap made to the repo shows up.
 pub fn fingerprint(repo: &Path) -> (BTreeMap<String, (u64, u128, u64)>, String) {
     let mut map = BTreeMap::new();
     let git_dir = repo.join(".git");
@@ -144,11 +136,8 @@ pub fn fixtures_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
 }
 
-/// Fixed "now" for snapshots: 21 Sep 2026 21:46:00 UTC.
 pub const NOW: i64 = 1_790_027_160;
 
-/// paneMorph's package as a git repo with history, plus one recorded agent
-/// turn (the real change of commit b8b645e) in codeMap's shadow store.
 pub struct PmRepo {
     pub tmp: TempDir,
     pub root: PathBuf,
@@ -178,7 +167,6 @@ pub fn panemorph_repo() -> PmRepo {
     let fx = fixtures_dir();
     copy_tree(&fx.join("panemorph"), p);
     copy_tree(&fx.join("panemorph_before"), p);
-    // History: two feature commits, a tag and a docs branch.
     let actions = p.join("panemorph/actions");
     let stash = TempDir::new("pm-actions");
     copy_tree(&actions, stash.path());
@@ -227,7 +215,6 @@ pub fn panemorph_repo() -> PmRepo {
         ],
     );
 
-    // The agent's turn, recorded the way the hook records it.
     let state = TempDir::new("pm-state");
     let store = codemap::store::Store::new(state.path());
     let info = codemap::git::discover(p).unwrap();

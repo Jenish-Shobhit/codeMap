@@ -1,11 +1,6 @@
-//! What herdr tells a plugin command about where it was invoked:
-//! `HERDR_PLUGIN_CONTEXT_JSON` (PluginInvocationContext) and, for event hooks,
-//! `HERDR_PLUGIN_EVENT_JSON` (an EventEnvelope).
-
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-/// `WorkspaceWorktreeInfo` in the 0.9.0 schema.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorktreeCtx {
     #[serde(default)]
@@ -20,7 +15,6 @@ pub struct WorktreeCtx {
     pub is_linked_worktree: bool,
 }
 
-/// `PluginInvocationContext` in the 0.9.0 schema. Every field is optional.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PluginContext {
     #[serde(default)]
@@ -56,8 +50,6 @@ impl PluginContext {
         serde_json::from_str(json).ok()
     }
 
-    /// Read the context herdr injected, preferring the copy `codemap open`
-    /// forwarded to the popup (it was taken at the moment of the keypress).
     pub fn from_env() -> Option<Self> {
         for key in ["CODEMAP_CONTEXT_JSON", "HERDR_PLUGIN_CONTEXT_JSON"] {
             if let Ok(json) = std::env::var(key) {
@@ -69,8 +61,6 @@ impl PluginContext {
         None
     }
 
-    /// The directory to open on, best first: the focused pane's cwd, the
-    /// herdr worktree checkout, then the workspace cwd.
     pub fn candidate_dirs(&self) -> Vec<String> {
         let mut dirs = Vec::new();
         if let Some(cwd) = &self.focused_pane_cwd {
@@ -96,7 +86,6 @@ impl PluginContext {
     }
 }
 
-/// The part of an event we care about: which pane changed to which status.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentStatusEvent {
     pub pane_id: String,
@@ -105,9 +94,6 @@ pub struct AgentStatusEvent {
     pub agent: Option<String>,
 }
 
-/// Parse `HERDR_PLUGIN_EVENT_JSON`. herdr serialises an `EventEnvelope`
-/// (`{"event": ..., "data": {"type": "pane_agent_status_changed", ...}}`);
-/// subscription streams wrap the same data. Be lenient about the wrapper.
 pub fn parse_status_event(json: &str) -> Option<AgentStatusEvent> {
     let value: Value = serde_json::from_str(json).ok()?;
     find_status_payload(&value)
@@ -143,7 +129,6 @@ fn find_status_payload(value: &Value) -> Option<AgentStatusEvent> {
     None
 }
 
-/// Status names as herdr reports them.
 pub fn is_working(status: &str) -> bool {
     status == "working"
 }

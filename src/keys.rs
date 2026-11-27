@@ -1,16 +1,12 @@
-//! Keys. The popup receives every key, so nothing reaches herdr or the agent.
-
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use crate::app::{App, Focus, InputKind, Outcome, View};
 
-/// What the event loop should do after a key.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
     None,
     Redraw,
     Quit,
-    /// Leave the terminal to the editor, then come back.
     Edit(std::path::PathBuf, u32),
     Copy(String),
     Pin(&'static str),
@@ -38,7 +34,6 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
         return Action::Redraw;
     }
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-    // Global keys.
     match key.code {
         KeyCode::Char('q') if !ctrl => return quit(app),
         KeyCode::Esc => {
@@ -62,7 +57,6 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
         }
         KeyCode::Char('1') => {
             if app.view == View::Flow {
-                // show the charted function on the map
                 if let Some(t) = app.flow.target.clone() {
                     app.reveal(&t.file, Some(t.idx));
                 }

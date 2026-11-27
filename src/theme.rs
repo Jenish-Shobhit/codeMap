@@ -1,9 +1,3 @@
-//! Colours from herdr's theme. herdr has no theme API, so codeMap reads
-//! `[theme]` from herdr's `config.toml` and resolves it the way herdr does:
-//! built-in palette by name, then `[theme.custom]`, then the dark or light
-//! mode overrides. The palettes are ported from herdr's `src/app/state.rs`
-//! (Apache-2.0, herdr v0.9.0).
-
 use std::path::{Path, PathBuf};
 
 use ratatui::style::Color;
@@ -533,7 +527,6 @@ impl Palette {
     }
 }
 
-/// herdr's theme name aliases (src/config/theme.rs).
 pub fn canonical_theme_name(name: &str) -> Option<&'static str> {
     match name.to_lowercase().replace([' ', '_'], "-").as_str() {
         "catppuccin" | "catppuccin-mocha" => Some("catppuccin"),
@@ -558,7 +551,6 @@ pub fn canonical_theme_name(name: &str) -> Option<&'static str> {
     }
 }
 
-/// herdr's `parse_color`: hex, #rgb, rgb(r,g,b), names, reset aliases.
 pub fn parse_color(s: &str) -> Color {
     let s = s.trim().to_lowercase();
     match s.as_str() {
@@ -666,8 +658,6 @@ struct ConfigFile {
     theme: ThemeConfig,
 }
 
-/// herdr's config file: `HERDR_CONFIG_PATH`, else `$XDG_CONFIG_HOME/herdr`
-/// or `~/.config/herdr`, `config.toml`.
 pub fn herdr_config_path() -> PathBuf {
     if let Some(p) = std::env::var_os("HERDR_CONFIG_PATH").filter(|v| !v.is_empty()) {
         return PathBuf::from(p);
@@ -687,8 +677,6 @@ pub fn parse_theme_config(toml_text: &str) -> ThemeConfig {
         .unwrap_or_default()
 }
 
-/// Resolve the palette herdr would use for a config. With `auto_switch`
-/// codeMap cannot see the host appearance, so it assumes dark.
 pub fn resolve_palette(cfg: &ThemeConfig) -> (Palette, String) {
     let (name, mode) = if cfg.auto_switch {
         (
@@ -714,14 +702,10 @@ pub fn resolve_palette(cfg: &ThemeConfig) -> (Palette, String) {
     (palette, canonical.to_string())
 }
 
-/// codeMap's design tokens, resolved to colours.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Theme {
     pub name: &'static str,
-    /// Left column (herdr sidebar_bg; the panel colour when that is reset).
     pub rail: Color,
-    /// Code and diagram body: the base theme's panel colour, which is what
-    /// the terminal draws agent panes on (#282a36 for dracula).
     pub body: Color,
     pub active_row: Color,
     pub selection: Color,
@@ -819,7 +803,6 @@ impl Theme {
         Theme::from_palette(&palette, &base, &name)
     }
 
-    /// Load herdr's theme; the default catppuccin theme if there is no config.
     pub fn load() -> Theme {
         Self::load_from(&herdr_config_path())
     }
@@ -889,7 +872,6 @@ prefix = "ctrl+b"
         assert_eq!(t.branch, Color::Rgb(0xff, 0x79, 0xc6));
         assert_eq!(t.muted, Color::Rgb(0x82, 0x8c, 0xb4));
         assert_eq!(t.add, Color::Rgb(0x50, 0xfa, 0x7b));
-        // green and red at 15% over #282a36, as in the Loupe design tokens
         assert_eq!(t.add_bg, Color::Rgb(0x2e, 0x49, 0x40));
         assert_eq!(t.del_bg, Color::Rgb(0x48, 0x30, 0x3b));
         assert_eq!(t.on_accent, Color::Rgb(0, 0, 0));
@@ -903,7 +885,6 @@ prefix = "ctrl+b"
         assert_eq!(t.name, "tokyo-night");
         let t = Theme::from_config_text("[theme]\nname = \"nope\"\n");
         assert_eq!(t.name, "catppuccin");
-        // Broken TOML falls back instead of failing.
         let t = Theme::from_config_text("[theme\nname=");
         assert_eq!(t.name, "catppuccin");
     }

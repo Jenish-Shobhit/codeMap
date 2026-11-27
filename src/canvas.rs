@@ -1,10 +1,3 @@
-//! A character grid that draws boxes and lines the way a terminal would.
-//!
-//! Lines are stored as direction bits per cell (up, down, left, right) and
-//! turned into box-drawing glyphs at the end, so crossings and junctions
-//! (`┬ ├ ┼ ┘`) come out right no matter in which order things were drawn.
-//! Colours are semantic tones that the renderer maps to herdr's theme.
-
 use crate::util;
 
 pub const UP: u8 = 1;
@@ -12,31 +5,19 @@ pub const DOWN: u8 = 2;
 pub const LEFT: u8 = 4;
 pub const RIGHT: u8 = 8;
 
-/// Semantic colour of a cell; the theme decides the actual colour.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
 pub enum Tone {
-    /// Box borders and edges (herdr overlay0).
     #[default]
     Rule,
-    /// Primary text.
     Text,
-    /// Secondary text (subtext0).
     Dim,
-    /// Hints, counts, labels (overlay1).
     Muted,
-    /// Added (green).
     Add,
-    /// Changed (yellow).
     Mod,
-    /// Deleted (red).
     Del,
-    /// Branch and path names (mauve).
     Branch,
-    /// Blue: renamed, paths in comments, highlighted edges.
     Blue,
-    /// The view accent (used sparingly).
     Accent,
-    /// Peach: warnings, conflicts, raises.
     Warn,
 }
 
@@ -48,19 +29,14 @@ pub struct Cell {
     pub arrow: Option<char>,
     pub tone: Tone,
     pub bold: bool,
-    /// Background band (selection or active row), by tone of intent.
     pub band: Option<Band>,
-    /// The second half of a wide character: draw nothing here.
     pub cont: bool,
-    /// Written as text: its character wins over lines, even a space.
     pub txt: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Band {
-    /// The active row / selected node interior.
     Active,
-    /// A selection (v) or search hit.
     Selection,
 }
 
@@ -172,7 +148,6 @@ impl Canvas {
         }
     }
 
-    /// Grow to at least w×h, keeping content.
     pub fn ensure(&mut self, w: usize, h: usize) {
         if w <= self.w && h <= self.h {
             return;
@@ -197,7 +172,6 @@ impl Canvas {
         }
     }
 
-    /// Horizontal line from x1 to x2 (either order), inclusive.
     pub fn hline(&mut self, x1: usize, x2: usize, y: usize, tone: Tone) {
         let (a, b) = if x1 <= x2 { (x1, x2) } else { (x2, x1) };
         if a == b {
@@ -215,7 +189,6 @@ impl Canvas {
         }
     }
 
-    /// Vertical line from y1 to y2 (either order), inclusive.
     pub fn vline(&mut self, x: usize, y1: usize, y2: usize, tone: Tone) {
         let (a, b) = if y1 <= y2 { (y1, y2) } else { (y2, y1) };
         if a == b {
@@ -233,7 +206,6 @@ impl Canvas {
         }
     }
 
-    /// An orthogonal polyline through `points`.
     pub fn polyline(&mut self, points: &[(usize, usize)], tone: Tone) {
         for pair in points.windows(2) {
             let (a, b) = (pair[0], pair[1]);
@@ -242,7 +214,6 @@ impl Canvas {
             } else if a.0 == b.0 {
                 self.vline(a.0, a.1, b.1, tone);
             } else {
-                // Not orthogonal: go vertical first, then horizontal.
                 self.vline(a.0, a.1, b.1, tone);
                 self.hline(a.0, b.0, b.1, tone);
             }
@@ -253,7 +224,6 @@ impl Canvas {
         }
     }
 
-    /// A box with its top-left corner at (x, y). Clears its interior.
     pub fn rect(&mut self, x: usize, y: usize, w: usize, h: usize, tone: Tone, round: bool) {
         if w < 2 || h < 2 {
             return;
@@ -277,7 +247,6 @@ impl Canvas {
         }
     }
 
-    /// Write text; returns the x after the last cell written.
     pub fn text(&mut self, x: usize, y: usize, s: &str, tone: Tone, bold: bool) -> usize {
         let mut cx = x;
         for ch in s.chars() {
@@ -308,7 +277,6 @@ impl Canvas {
         cx
     }
 
-    /// Text clipped to `max` cells (with …).
     pub fn text_max(
         &mut self,
         x: usize,
@@ -343,7 +311,6 @@ impl Canvas {
         }
     }
 
-    /// True when every cell in the rectangle is blank.
     pub fn is_free(&self, x: usize, y: usize, w: usize, h: usize) -> bool {
         for yy in y..y + h {
             for xx in x..x + w {
@@ -367,7 +334,6 @@ impl Canvas {
         s.trim_end().to_string()
     }
 
-    /// Plain text rendering (for tests and snapshots).
     pub fn to_text(&self) -> String {
         let mut lines: Vec<String> = (0..self.h).map(|y| self.row_text(y)).collect();
         while lines.last().is_some_and(|l| l.is_empty()) {
@@ -385,7 +351,6 @@ mod tests {
     fn junctions_merge() {
         let mut c = Canvas::new(12, 6);
         c.rect(0, 0, 8, 3, Tone::Rule, false);
-        // an edge leaving the bottom border
         c.vline(3, 2, 4, Tone::Rule);
         c.hline(3, 9, 4, Tone::Rule);
         c.vline(9, 4, 5, Tone::Rule);

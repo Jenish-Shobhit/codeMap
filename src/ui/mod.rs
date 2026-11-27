@@ -1,7 +1,3 @@
-//! Drawing. One frame: the view tabs and context on top, a black rail on the
-//! left, the charcoal body on the right, one dim hint line at the bottom.
-//! No boxes around panels: herdr draws the popup border (taste rule HC-2).
-
 mod changes;
 mod flow_view;
 mod history;
@@ -17,7 +13,6 @@ use crate::canvas::Canvas;
 use crate::theme::Theme;
 use crate::util;
 
-/// Areas of one frame.
 #[derive(Debug, Clone, Copy)]
 pub struct Areas {
     pub header: Rect,
@@ -79,7 +74,6 @@ pub fn render_buf(buf: &mut Buffer, area: Rect, app: &mut App) {
         return;
     }
     let a = areas(area, app.view);
-    // Rail surface (including its part of the hint row).
     if a.rail.width > 0 {
         fill(
             buf,
@@ -105,8 +99,6 @@ pub fn render_buf(buf: &mut Buffer, area: Rect, app: &mut App) {
     }
 }
 
-// ---- building blocks -----------------------------------------------------
-
 pub fn fill(buf: &mut Buffer, r: Rect, bg: Color) {
     let r = r.intersection(buf.area);
     for y in r.y..r.y + r.height {
@@ -118,7 +110,6 @@ pub fn fill(buf: &mut Buffer, r: Rect, bg: Color) {
     }
 }
 
-/// Write text clipped to `max` cells; returns the x after it.
 pub fn put(buf: &mut Buffer, x: u16, y: u16, s: &str, style: Style, max: u16) -> u16 {
     if y >= buf.area.y + buf.area.height || max == 0 {
         return x;
@@ -140,7 +131,6 @@ pub fn bold(s: Style) -> Style {
     s.add_modifier(Modifier::BOLD)
 }
 
-/// A line of styled spans written left to right.
 pub struct Line<'a> {
     pub spans: Vec<(String, Style)>,
     pub bg: Option<Color>,
@@ -191,7 +181,6 @@ impl Default for Line<'_> {
     }
 }
 
-/// Rail rows written top to bottom, with a selection band.
 pub struct Rail<'a> {
     pub buf: &'a mut Buffer,
     pub area: Rect,
@@ -237,7 +226,6 @@ impl<'a> Rail<'a> {
         }
     }
 
-    /// Write a line at the rail's last row (footer).
     pub fn footer(&mut self, line: Line) {
         if self.area.height == 0 {
             return;
@@ -252,7 +240,6 @@ impl<'a> Rail<'a> {
     }
 }
 
-/// Blit part of a canvas into `area`, starting at canvas cell `scroll`.
 pub fn blit(
     buf: &mut Buffer,
     area: Rect,
@@ -298,7 +285,6 @@ pub fn blit(
     }
 }
 
-/// Scroll so that the rectangle (x, y, w, h) is visible in a viewport.
 pub fn follow(
     scroll: &mut (usize, usize),
     view: (usize, usize),
@@ -310,13 +296,11 @@ pub fn follow(
     if vw == 0 || vh == 0 {
         return;
     }
-    // horizontal
     if x < scroll.0 {
         scroll.0 = x.saturating_sub(2);
     } else if x + w.min(vw) > scroll.0 + vw {
         scroll.0 = (x + w.min(vw)).saturating_sub(vw) + 2;
     }
-    // vertical
     if y < scroll.1 {
         scroll.1 = y.saturating_sub(1);
     } else if y + h.min(vh) > scroll.1 + vh {
@@ -325,8 +309,6 @@ pub fn follow(
     scroll.0 = scroll.0.min(content.0.saturating_sub(vw.min(content.0)));
     scroll.1 = scroll.1.min(content.1.saturating_sub(vh.min(content.1)));
 }
-
-// ---- header, hints, help ----------------------------------------------------
 
 fn header(buf: &mut Buffer, r: Rect, app: &App) {
     let t = app.theme;
@@ -348,7 +330,6 @@ fn header(buf: &mut Buffer, r: Rect, app: &App) {
         );
         x += 1;
     }
-    // Right side: agent, branch, scope.
     let mut ctx = Line::new();
     if app.view == View::History {
         if let Some(line) = history::header_summary(app) {
@@ -394,7 +375,6 @@ fn header(buf: &mut Buffer, r: Rect, app: &App) {
     if w <= avail {
         ctx.draw(buf, r.x + r.width - w - 1, r.y, w);
     } else if avail > 8 {
-        // keep the start (agent) visible
         ctx.draw(buf, x + 2, r.y, avail);
     }
 }
@@ -459,7 +439,6 @@ fn view_hints(app: &App) -> Vec<(&'static str, String)> {
 
 fn hints_line(buf: &mut Buffer, a: &Areas, app: &App) {
     let t = app.theme;
-    // Rail hint.
     if a.rail_hints.width > 0 {
         let rail_hint = match (app.view, app.focus()) {
             (_, Focus::Rail) => "tab body",
@@ -633,7 +612,6 @@ impl App {
     }
 }
 
-/// Render the whole app into plain text (tests, snapshots).
 pub fn render_text(app: &mut App, w: u16, h: u16) -> String {
     let area = Rect::new(0, 0, w, h);
     let mut buf = Buffer::empty(area);
@@ -665,29 +643,6 @@ pub fn buffer_text(buf: &Buffer) -> String {
     out
 }
 
-// Formal verification with Kani: `follow` keeps the selected box on screen.
-//
-// Properties, for every input in the bounds below:
-// - `follow_shows_a_box_that_fits`: a box that fits the viewport with
-//   `follow`'s scroll margin (2 columns, 1 row) and lies inside the canvas is
-//   entirely visible after `follow`, wherever the view was scrolled before.
-// - `follow_never_scrolls_past_the_content`: the view never scrolls past the
-//   right or bottom edge of the canvas.
-// Harm if broken: moving the selection in the Map or Flow view leaves the
-// selected box partly or wholly off screen, or scrolls into empty space.
-//
-// Covers src/ui/mod.rs `follow` (lines 301-327), called from
-// src/ui/map_view.rs (lines 83-88, a node's box) and src/ui/flow_view.rs
-// (lines 68-77, a flow box widened by the change-mark gutter).
-// Source read at 4c75657.
-// Bounds and assumptions: the viewport is a terminal area, so each side is at
-// most `u16::MAX` (both callers pass `Rect` sides); it is not empty, because
-// `follow` returns early for an empty one. Canvas sides, box coordinates and
-// the old scroll position are at most 2^20 cells, far beyond any canvas
-// `Canvas::new` (src/canvas.rs line 151) could allocate as `w * h` cells. No
-// callee is stubbed.
-// Run: `python3 scripts/kani.py prove`. Broken variants each proof must catch:
-// src/ui/mod.mutations, run by `python3 scripts/kani.py mutations`.
 #[cfg(kani)]
 mod proofs {
     use super::follow;

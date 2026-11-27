@@ -1,24 +1,3 @@
-//! An authentic capture: codeMap's popup over a real herdr client.
-//!
-//! Needs herdr 0.9.0 or newer on `PATH` and a release build of codeMap
-//! (`CODEMAP_BIN`, by default `target/release/codemap`).
-//!
-//! Everything runs in a throwaway herdr session that cannot see yours:
-//!
-//! - `HOME` and every XDG directory point into `/tmp/cmtest-shot-<pid>` (a
-//!   short path, because herdr's socket lives there), the calling shell's
-//!   environment is cleared, and the session is named `cmtest-shot`;
-//! - codeMap is registered in that session's own plugin registry, a
-//!   `plugins.json` written next to its config; `herdr plugin link` never runs;
-//! - the server and client are stopped with SIGTERM and the directory is
-//!   removed at the end.
-//!
-//! The capture then does what a user does: a workspace on the demo
-//! repository, an agent that works a turn (herdr runs `codemap hook` at both
-//! status changes), and the `dev.codemap.open` action. A pseudo-terminal
-//! carries the client's output into a vt100 parser, whose screen is written to
-//! SVG in the same style as the other screenshots.
-
 use std::fs::File;
 use std::io::{Read, Write};
 use std::os::fd::{FromRawFd, OwnedFd};
@@ -46,7 +25,6 @@ struct Dirs {
     plugin: PathBuf,
 }
 
-/// The server to stop and the directory to remove, whatever happens.
 struct Cleanup {
     base: PathBuf,
     server: Option<Child>,
@@ -61,9 +39,7 @@ impl Drop for Cleanup {
     }
 }
 
-/// SIGTERM, a few seconds to exit, then SIGKILL.
 fn stop(child: &mut Child) {
-    // SAFETY: plain kill(2) on a child we spawned and have not reaped.
     unsafe { libc::kill(child.id() as libc::pid_t, libc::SIGTERM) };
     let deadline = Instant::now() + Duration::from_secs(5);
     while Instant::now() < deadline {
@@ -93,7 +69,6 @@ pub fn capture(manifest: &Path, fixtures: &Path, out: &Path) -> Result<(), Strin
     };
     let repo = demo::build_repo(fixtures, &dirs.home);
 
-    // The server, then a client on a pseudo-terminal.
     let server = herdr(&dirs)
         .arg("server")
         .current_dir(&dirs.home)
@@ -115,7 +90,6 @@ pub fn capture(manifest: &Path, fixtures: &Path, out: &Path) -> Result<(), Strin
     wait(Duration::from_secs(15), || term.text().trim().len() > 20)
         .ok_or("the herdr client did not paint")?;
 
-    // A workspace on the repository, with a tab named for the task.
     let ws = call(
         &client,
         "workspace.create",
@@ -157,7 +131,6 @@ pub fn capture(manifest: &Path, fixtures: &Path, out: &Path) -> Result<(), Strin
         json!({"pane_id": pane, "text": "git log --oneline -5\n"}),
     )?;
 
-    // One agent turn: herdr runs `codemap hook` when it starts and ends.
     let store = Store::new(
         dirs.state
             .join("herdr/plugins")
@@ -184,7 +157,6 @@ pub fn capture(manifest: &Path, fixtures: &Path, out: &Path) -> Result<(), Strin
     })
     .ok_or("the hook did not record the end of the turn")?;
 
-    // ⌃⌥M: the action the key binding runs.
     call(
         &client,
         "plugin.action.invoke",
@@ -195,7 +167,6 @@ pub fn capture(manifest: &Path, fixtures: &Path, out: &Path) -> Result<(), Strin
         t.contains("this turn") && t.contains("PaneMorphService")
     })
     .ok_or_else(|| format!("the popup did not paint:\n{}", term.text()))?;
-    // Let the last frame land.
     std::thread::sleep(Duration::from_millis(800));
 
     let grid = term.grid();
@@ -210,7 +181,6 @@ pub fn capture(manifest: &Path, fixtures: &Path, out: &Path) -> Result<(), Strin
     Ok(())
 }
 
-/// Refuse to write a capture that names this machine or its user.
 fn check_private(text: &str) -> Result<(), String> {
     let mut names = Vec::new();
     for var in ["USER", "LOGNAME"] {
@@ -265,7 +235,6 @@ fn make_dirs(manifest: &Path, bin: &Path) -> Result<Dirs, String> {
         &d.plugin.join("herdr-plugin.toml"),
     )?;
     copy(bin, &d.plugin.join("target/release/codemap"))?;
-    // herdr reads the rest of the entry from the manifest when it loads.
     let registry = json!([{
         "plugin_id": codemap::herdr::PLUGIN_ID,
         "name": "codeMap",
@@ -291,8 +260,6 @@ window_title = ""
     Ok(d)
 }
 
-/// `herdr --session cmtest-shot` with nothing from the calling environment
-/// but `PATH`.
 fn herdr(d: &Dirs) -> Command {
     let shell = ["/bin/dash", "/usr/bin/dash", "/bin/sh"]
         .into_iter()
@@ -307,8 +274,6 @@ fn herdr(d: &Dirs) -> Command {
         .env("LANG", "en_US.UTF-8")
         .env("TERM", "xterm-256color")
         .env("COLORTERM", "truecolor")
-        // dash reads no system rc file, so the prompt stays `$ ` instead of
-        // bash's `host:dir user$` from /etc/bashrc.
         .env("SHELL", shell)
         .env("PS1", "$ ")
         .env("XDG_CONFIG_HOME", &d.cfg)
@@ -345,8 +310,6 @@ fn wait(limit: Duration, mut ok: impl FnMut() -> bool) -> Option<()> {
     None
 }
 
-// ---- a terminal for the client -----------------------------------------------
-
 struct Terminal {
     child: Child,
     master: File,
@@ -368,7 +331,6 @@ impl Terminal {
             ws_xpixel: 0,
             ws_ypixel: 0,
         };
-        // SAFETY: openpty fills the two descriptors; we own them afterwards.
         let rc = unsafe {
             libc::openpty(
                 &mut master_fd,
@@ -389,8 +351,6 @@ impl Terminal {
         cmd.stdin(io(&slave)?)
             .stdout(io(&slave)?)
             .stderr(io(&slave)?);
-        // SAFETY: setsid and TIOCSCTTY are async-signal-safe; they make the
-        // pseudo-terminal the child's controlling terminal.
         unsafe {
             cmd.pre_exec(|| {
                 libc::setsid();
@@ -413,8 +373,6 @@ impl Terminal {
                 let chunk = &buf[..n];
                 let mut parser = p.lock().unwrap();
                 parser.process(chunk);
-                // Answer the queries a terminal answers, so the client does
-                // not wait on them.
                 for reply in answers(chunk, parser.screen().cursor_position()) {
                     let _ = replies.write_all(&reply);
                 }
@@ -491,7 +449,6 @@ fn blank(fg: svg::Rgb, bg: svg::Rgb) -> svg::Cell {
     }
 }
 
-/// Replies to device-status, device-attribute and colour queries.
 fn answers(chunk: &[u8], (row, col): (u16, u16)) -> Vec<Vec<u8>> {
     let s = String::from_utf8_lossy(chunk);
     let mut out = Vec::new();
@@ -510,7 +467,6 @@ fn answers(chunk: &[u8], (row, col): (u16, u16)) -> Vec<Vec<u8>> {
     out
 }
 
-/// A terminal colour, with the Dracula palette for the 16 named ones.
 fn color(c: vt100::Color, default: svg::Rgb) -> svg::Rgb {
     const ANSI: [svg::Rgb; 16] = [
         (0x21, 0x22, 0x2c),

@@ -1,8 +1,3 @@
-//! codeMap: see your code as a map, and what your agents changed on it.
-//!
-//! One binary, four views (Map, Flow, Changes, History), shipped as the herdr
-//! plugin `dev.codemap` and runnable on its own as `codemap [path]`.
-
 pub mod app;
 pub mod canvas;
 pub mod flow;

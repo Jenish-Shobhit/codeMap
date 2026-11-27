@@ -1,7 +1,3 @@
-//! A stand-in "agent" for codeMap's live tests: copy it to a file named
-//! `claude` so herdr recognises the foreground process, then everything typed
-//! into its pane is echoed back.
-
 use std::io::{Read, Write};
 
 fn main() {

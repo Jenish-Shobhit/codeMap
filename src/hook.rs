@@ -1,11 +1,3 @@
-//! `codemap hook`: herdr runs it on `pane.agent_status_changed`.
-//!
-//! A change to `working` starts a turn and a change from `working` to
-//! `idle`, `done` or `blocked` ends it; each boundary snapshots the agent's
-//! work tree into the shadow store. The event carries no previous status, so
-//! the last status per pane lives in the state dir. Panes are keyed by their
-//! terminal id and agent, because pane ids change when panes move.
-
 use std::path::PathBuf;
 
 use serde_json::Value;
@@ -18,7 +10,6 @@ use crate::util;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HookOutcome {
-    /// "start", "end", "reopen" or "none".
     pub action: &'static str,
     pub pane_key: String,
     pub turn: Option<u32>,
@@ -26,7 +17,6 @@ pub struct HookOutcome {
     pub repo: Option<PathBuf>,
 }
 
-/// Entry point: read the event from the environment herdr set.
 pub fn run() -> i32 {
     let Ok(json) = std::env::var("HERDR_PLUGIN_EVENT_JSON") else {
         eprintln!("codemap hook: HERDR_PLUGIN_EVENT_JSON is not set");
@@ -66,7 +56,6 @@ pub fn handle(
     event: &AgentStatusEvent,
     ctx: Option<&PluginContext>,
 ) -> Result<HookOutcome, String> {
-    // Where is the agent working?
     let ctx_matches =
         ctx.is_some_and(|c| c.focused_pane_id.as_deref() == Some(event.pane_id.as_str()));
     let mut cwd: Option<String> = ctx
@@ -117,7 +106,6 @@ pub fn handle(
         .as_deref()
         .and_then(|d| git::discover(std::path::Path::new(d)).ok());
     let Some(repo) = repo else {
-        // Not in a repository: remember the status, nothing to snapshot.
         store.save_pane(&state).map_err(|e| e.to_string())?;
         return Ok(out);
     };
@@ -132,7 +120,6 @@ pub fn handle(
                 t.repo_root == root_s && t.end_status.as_deref() == Some("blocked")
             });
         if reopen {
-            // Answering a question continues the same turn.
             let t = state.turns.last_mut().unwrap();
             t.open = true;
             out.action = "reopen";
@@ -175,7 +162,6 @@ pub fn handle(
             out.checkpoint = Some(cp);
         }
     }
-    // Retention: keep the last MAX_TURNS turns.
     while state.turns.len() > MAX_TURNS {
         let old = state.turns.remove(0);
         let _ = shadow.delete_ref(&format!("refs/codemap/{key}/{}-start", old.n));

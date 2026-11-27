@@ -1,6 +1,3 @@
-//! Map view: breadcrumbs and this turn's changed functions on the rail, the
-//! boxes-and-lines diagram in the body.
-
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
@@ -27,7 +24,6 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
         return;
     }
     let Some(scene) = &app.map.scene else { return };
-    // Header: level and summary.
     let mut head = Line::new().push(scene.level.label(), bold(style(t.text, t.body)));
     let mut summary = scene.summary.clone();
     if app.parse_pending {
@@ -96,7 +92,6 @@ fn rail(buf: &mut Buffer, area: Rect, app: &App) {
     }
     let t = app.theme;
     let mut r = Rail::new(buf, area, t);
-    // Search results replace the rail while typing.
     if let Some(input) = &app.input {
         if input.kind == InputKind::Search {
             r.section("search");
@@ -139,7 +134,6 @@ fn rail(buf: &mut Buffer, area: Rect, app: &App) {
         }
     }
     r.section("map");
-    // Breadcrumbs from the root to the current level.
     let level = app.map_level();
     let path = match &level {
         Level::Dir(d) => d.clone(),
@@ -215,7 +209,6 @@ fn rail(buf: &mut Buffer, area: Rect, app: &App) {
         );
     }
     r.blank();
-    // Changed functions in the scope.
     let changed = app.marks.changed_symbols(&app.index);
     let noun = if app.scope_info.noun.is_empty() {
         "changed".to_string()

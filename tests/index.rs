@@ -1,6 +1,3 @@
-//! Tree-sitter extraction and call-edge resolution on real code: paneMorph's
-//! Python package (copied as fixtures) and small Rust/TypeScript/Go samples.
-
 mod common;
 
 use codemap::git;
@@ -97,14 +94,11 @@ fn resolves_calls_across_files() {
             "service.py:PaneMorphService.bring_choices",
         ]
     );
-    // self.method() inside a class stays inside the class.
     let extract = edge_names(&index, "panemorph/service.py", "PaneMorphService.extract");
     assert!(extract.contains(&"service.py:PaneMorphService.snapshot_for".to_string()));
     assert!(extract.contains(&"service.py:PaneMorphService._id".to_string()));
     assert!(extract.contains(&"service.py:PaneMorphService._ensure_unzoomed".to_string()));
-    // self.client.request(): a unique method name across the repo.
     assert!(extract.contains(&"api.py:HerdrClient.request".to_string()));
-    // Generic names through unknown receivers are not guessed.
     let all_targets: Vec<String> = index
         .calls
         .iter()
@@ -229,7 +223,6 @@ fn typescript_relative_imports_resolve() {
         vec!["api.ts:request"]
     );
     assert!(index.imports["src/index.ts"].contains("src/board.ts"));
-    // module-level calls have no caller symbol but still resolve
     assert!(index
         .calls
         .iter()
@@ -278,7 +271,6 @@ fn search_finds_symbols_and_files() {
 
 #[test]
 fn real_rust_source_parses() {
-    // codeMap's own source doubles as a Rust fixture.
     let src =
         std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/store.rs")).unwrap();
     let fs = lang::extract(Lang::Rust, &src);
@@ -302,7 +294,6 @@ fn bare_names_do_not_jump_across_unrelated_folders() {
         "src/lib.rs",
         "pub mod layout;\npub fn place() -> usize { 1 }\n",
     );
-    // `key` here is a local closure, not a function.
     write(
         t.path(),
         "src/layout.rs",
@@ -321,7 +312,6 @@ fn bare_names_do_not_jump_across_unrelated_folders() {
         edge_names(&index, "src/layout.rs", "run").is_empty(),
         "a closure call must not resolve to tests/views.rs::key"
     );
-    // The crate's own name resolves from tests/.
     assert_eq!(
         edge_names(&index, "tests/views.rs", "t"),
         vec!["views.rs:key", "lib.rs:place"]

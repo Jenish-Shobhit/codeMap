@@ -1,6 +1,3 @@
-//! Git operations on temp repos: turn diffs from checkpoints, the shadow
-//! store writing nothing into the repo, the commit graph and worktrees.
-
 mod common;
 
 use codemap::git::{self, FileStatus};
@@ -42,13 +39,11 @@ fn turn_diff_shows_only_the_turn() {
     ]);
     let state = TempDir::new("state");
     let store = store_in(&state);
-    // The user edits before the agent's turn: not part of the turn.
     write(repo.path(), "util.py", "def helper():\n    return 2\n");
     let info = git::discover(repo.path()).unwrap();
     let shadow = store.shadow(&info);
 
     let start = shadow.snapshot("turn 1 start").unwrap();
-    // The agent's turn: edit app.py, add new.py.
     write(
         repo.path(),
         "app.py",
@@ -65,17 +60,14 @@ fn turn_diff_shows_only_the_turn() {
         "util.py was the user's edit"
     );
     assert_eq!(turn[1].status, FileStatus::Added);
-    // Line-level marks: new lines 2-4 were added; main() as a whole changed.
     assert_eq!(turn[0].mark_for_range(2, 4), Some('A'));
     assert_eq!(turn[0].mark_for_range(1, 5), Some('M'));
 
-    // Since HEAD includes the user's edit too.
     let head = info.head.clone().unwrap();
     let since_head = shadow.diff(&head, &end.tree).unwrap();
     let paths: Vec<&str> = since_head.iter().map(|f| f.path.as_str()).collect();
     assert_eq!(paths, vec!["app.py", "pkg/new.py", "util.py"]);
 
-    // Refs live in the shadow only.
     shadow
         .update_ref("refs/codemap/p1/1-start", &start.commit)
         .unwrap();
@@ -91,7 +83,6 @@ fn shadow_store_writes_nothing_into_the_repo() {
     let repo = repo_with(&[("a.py", "x = 1\n"), ("b/c.py", "def f():\n    pass\n")]);
     write(repo.path(), "a.py", "x = 2\n");
     write(repo.path(), "untracked.py", "y = 3\n");
-    // A stale stat cache tempts `git status` into refreshing the index.
     std::thread::sleep(std::time::Duration::from_millis(1100));
     let before = fingerprint(repo.path());
 
@@ -116,7 +107,6 @@ fn shadow_store_writes_nothing_into_the_repo() {
     let _ = git::worktrees(repo.path()).unwrap();
     let _ = git::discover(repo.path()).unwrap();
 
-    // Undo the one work-tree edit the test itself made, then compare.
     write(repo.path(), "b/c.py", "def f():\n    pass\n");
     let after = fingerprint(repo.path());
     assert_eq!(
@@ -124,9 +114,7 @@ fn shadow_store_writes_nothing_into_the_repo() {
         ".git changed: codeMap wrote into the repo"
     );
     assert_eq!(before.1, after.1, "git status changed");
-    // The shadow really has its own objects and index.
     assert!(shadow.git_dir.join("index").is_file());
-    // No persistent alternates: writes never reach the user's object store.
     assert!(!shadow.git_dir.join("objects/info/alternates").exists());
     let objects = std::fs::read_dir(shadow.git_dir.join("objects"))
         .unwrap()
@@ -143,12 +131,6 @@ fn set_mtime(path: &std::path::Path, t: std::time::SystemTime) {
         .unwrap();
 }
 
-/// git trusts an entry's cached stat data unless the file is at least as new
-/// as the index file ("racily clean"), and then compares content. "Since
-/// HEAD" diffs against a private copy of the index, so the copy has to keep
-/// the index's mtime; a fresh one would hide a same-size edit made in the
-/// second the index was written. Linux builds of git compare whole seconds,
-/// which is what `core.checkStat = minimal` makes git do here on any system.
 #[test]
 fn since_head_sees_same_size_edits_from_the_second_the_index_was_written() {
     let repo = repo_with(&[("a.py", "x = 1\n"), ("b.py", "y = 1\n")]);
@@ -158,7 +140,6 @@ fn since_head_sees_same_size_edits_from_the_second_the_index_was_written() {
     let t = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_790_000_000);
     set_mtime(&p.join("a.py"), t);
     git(p, &["update-index", "--refresh"]);
-    // Same size, same mtime second, and an index written in that second.
     write(p, "a.py", "x = 2\n");
     set_mtime(&p.join("a.py"), t);
     set_mtime(&p.join(".git/index"), t);
@@ -170,7 +151,6 @@ fn since_head_sees_same_size_edits_from_the_second_the_index_was_written() {
     let paths: Vec<&str> = diff.iter().map(|f| f.path.as_str()).collect();
     assert_eq!(paths, vec!["a.py"]);
     assert_eq!(diff[0].status, FileStatus::Modified);
-    // git itself agrees on the user's own index.
     assert_eq!(git(p, &["diff", "--name-only", "HEAD"]).trim(), "a.py");
 }
 
@@ -223,7 +203,6 @@ fn graph_of_branches_and_merge() {
     assert!(text.iter().any(|t| t == "├─╯"), "{text:?}");
     assert_eq!(rows.iter().filter(|r| r.commit.is_some()).count(), 4);
 
-    // Commit diff for History's ⏎.
     let merge_files = git::show_commit(p, &commits[0].sha).unwrap();
     assert_eq!(merge_files.len(), 1);
     assert_eq!(merge_files[0].path, "b.txt");
@@ -248,11 +227,9 @@ fn worktrees_are_listed() {
     let list = git::worktrees(repo.path()).unwrap();
     assert_eq!(list.len(), 2);
     assert_eq!(list[1].branch.as_deref(), Some("agent-branch"));
-    // A linked worktree resolves to its own root but the shared object dir.
     let info = git::discover(&wt_path).unwrap();
     assert_eq!(info.root, wt_path.canonicalize().unwrap());
     assert_eq!(info.common_dir, repo.path().join(".git"));
-    // Snapshots of a linked worktree work and leave the main repo alone.
     let before = fingerprint(repo.path());
     let state = TempDir::new("state");
     let shadow = store_in(&state).shadow(&info);

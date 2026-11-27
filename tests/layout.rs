@@ -1,10 +1,6 @@
-//! Layered layout: boxes never overlap and edges never cross a box, on
-//! hand-made and pseudo-random graphs.
-
 use codemap::canvas::{Canvas, Tone};
 use codemap::layout::{layout, LEdge, LNode, Layout, Options};
 
-/// Tiny deterministic PRNG (xorshift) so the test needs no dependencies.
 struct Rng(u64);
 impl Rng {
     fn next(&mut self) -> u64 {
@@ -37,7 +33,6 @@ pub fn draw(nodes: &[LNode], l: &Layout, names: &[String]) -> String {
         c.text(n.x + 2, n.y + 1, &names[i], Tone::Text, false);
         let _ = nodes;
     }
-    // Ports: an edge leaving a bottom border joins it with ┬.
     for r in &l.routes {
         let (x, y) = r.points[0];
         if y > 0 {
@@ -86,7 +81,6 @@ fn random_graphs_have_no_overlaps_or_collisions() {
                 "case {case}: size kept"
             );
         }
-        // Every non-self edge got a route.
         let distinct: std::collections::BTreeSet<(usize, usize)> = edges
             .iter()
             .filter(|e| e.from != e.to)
@@ -137,7 +131,6 @@ fn orthogonal_routes_start_below_and_end_above() {
     let text = draw(&nodes, &l, &names);
     assert!(text.contains("▼"));
     assert!(text.contains("┬"));
-    // Diamond without crossings.
     assert!(!text.contains('┼'), "\n{text}");
 }
 
