@@ -49,10 +49,25 @@ every other job passed; it is the check `main` requires.
 
 Some promises are proved with [Kani](https://model-checking.github.io/kani/)
 for every input within stated bounds, on the real functions. Each proof lives
-in a `#[cfg(kani)] mod proofs` at the end of the file it checks, with a header
-that states the promise, the bounds and the commit it was read at. A
-`.mutations` file beside that file lists broken variants of the code that each
-proof must catch, so a proof that can no longer fail does not pass quietly.
+in a `#[cfg(kani)] mod proofs` at the end of the file it checks; its promise,
+bounds, assumptions and the commit it was last confirmed at are in the area's
+project skill (below), since code carries no comments. A `.mutations` file
+beside that file lists broken variants of the code that each proof must catch,
+so a proof that can no longer fail does not pass quietly:
+
+```text
+mutation no clamp at the right edge
+detects ui::proofs::follow_never_scrolls_past_the_content
+-     scroll.0 = scroll.0.min(content.0.saturating_sub(vw.min(content.0)));
++     scroll.0 = scroll.0.min(content.0);
+```
+
+`scripts/kani.py mutations` applies each one in place, runs the harness it
+names, and restores the file; a compile error never counts as a catch, and
+every harness needs at least one mutation. `scripts/kani.py prove` also fails a
+harness that has no satisfied `kani::cover!`, because a proof whose
+assumptions exclude every input would otherwise pass vacuously. The format is
+the one the agent-formal-verify plugin uses.
 
 ```sh
 cargo install --locked kani-verifier --version 0.68.0   # once
@@ -84,6 +99,7 @@ weaken it to pass: the failure is a finding.
 | `tests/git_store.rs`, `tests/hook.rs` | turn diffs from checkpoints, the side store writing nothing into the repository, the graph, worktrees, the hook |
 | `tests/manifest.rs` | `herdr-plugin.toml` against herdr 0.9.0's link rules |
 | `tests/pty.rs` | the real binary on a pseudo-terminal: keys, Esc, first-paint time |
+| `tests/no_comments.rs` | no comments anywhere in our Rust or Python code |
 
 ### Snapshot tests
 
@@ -199,6 +215,11 @@ pass. Force pushes and deletion of `main` are blocked, and release tags
   `PR title` check enforces it.
 - Write commits the same way, and keep each to one logical change that builds
   and passes the tests.
+- No comments in code: no `//`, `/* */`, `///` or `//!` in Rust, no `#`
+  comments or docstrings in Python. Let names, types and tests carry the
+  meaning; put explanation in the commit message, the pull request, the docs
+  or a project skill. `tests/no_comments.rs` fails the build on any comment in
+  `src/`, `tests/`, `examples/` or `scripts/` (`tests/fixtures/` is exempt).
 - Add a line under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md) for
   anything a user would notice.
 - Behaviour changes come with a test. UI changes come with updated snapshots
