@@ -1,6 +1,3 @@
-//! Changes view: agents and the turn's files on the rail; the selected
-//! file's hunks, reviewed marks and draft comments in the body.
-
 use std::collections::BTreeMap;
 
 use ratatui::buffer::Buffer;
@@ -93,7 +90,6 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
     }
     let file_idx = app.changes.file.min(app.diffs.len() - 1);
     let f = app.diffs[file_idx].clone();
-    // File header.
     let (done, total) = app.reviewed_count(file_idx);
     let mut head = Line::new().push(f.path.clone(), bold(style(t.text, t.body)));
     if let Some(old) = &f.old_path {
@@ -147,7 +143,6 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
     }
     let rows = app.change_rows(file_idx);
     let view_h = body.height.saturating_sub(1) as usize;
-    // Keep the cursor visible.
     let cur = app.changes.row.min(rows.len().saturating_sub(1));
     if cur < app.changes.scroll {
         app.changes.scroll = cur;
@@ -211,7 +206,6 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
     }
 }
 
-/// Name for a hunk header: the function around its first change.
 fn hunk_name(app: &App, f: &FileDiff, _start: u32, h: &crate::git::Hunk) -> String {
     let first_change = h
         .lines
@@ -238,7 +232,6 @@ fn human(n: u64) -> String {
     }
 }
 
-/// How a diff row is highlighted.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct RowMark {
     pub cursor: bool,
@@ -333,7 +326,6 @@ fn rail(buf: &mut Buffer, area: Rect, app: &App) {
         "{noun} · {}",
         util::plural(app.diffs.len(), "file", "files")
     ));
-    // Files grouped by folder.
     let mut groups: BTreeMap<String, Vec<usize>> = BTreeMap::new();
     for (i, f) in app.diffs.iter().enumerate() {
         groups
@@ -422,7 +414,6 @@ fn rail(buf: &mut Buffer, area: Rect, app: &App) {
     );
 }
 
-/// All files of a diff as rows (History's commit diff).
 pub fn render_diff_list(
     buf: &mut Buffer,
     area: Rect,

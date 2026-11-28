@@ -1,37 +1,3 @@
-//! The README screenshots, rendered from the real UI.
-//!
-//! ```sh
-//! cargo run --example screenshots            # writes docs/assets/*.svg
-//! cargo run --example screenshots -- --text  # also prints each frame as text
-//! cargo build --release && cargo run --example screenshots -- --herdr
-//!                                            # also docs/assets/herdr.svg
-//! ```
-//!
-//! `herdr.svg`, the README's hero image, is a capture of a real herdr client
-//! (see `herdr.rs`); it needs herdr installed, so CI does not regenerate it.
-//! The other images are rendered in-process, and CI checks they are current.
-//!
-//! The example builds a throwaway workspace in the system temp directory:
-//!
-//! - a git repository holding the code of paneMorph, codeMap's public
-//!   sibling plugin, vendored in `tests/fixtures/` for the snapshot tests;
-//! - a short, invented history around it: two merged branches, a tag and a
-//!   second worktree;
-//! - one agent turn, recorded in codeMap's side store the way
-//!   `codemap hook` records one. The turn is the real change of paneMorph's
-//!   commit b8b645e.
-//!
-//! A stand-in herdr socket answers `pane.get` and `agent.list`, so the header
-//! and the worktree rows take the same code path as inside herdr. The keys
-//! that mark a hunk reviewed and write a comment go through `keys::handle`.
-//!
-//! Each view is drawn by `codemap::ui::render_buf` into a ratatui buffer and
-//! written to SVG in herdr's Dracula theme. The output is deterministic:
-//! commit dates and the clock are fixed. The example reads `tests/fixtures/`,
-//! writes `docs/assets/`, and touches nothing else outside its temp directory.
-//!
-//! `--herdr` also captures the popup over a real herdr client; see `herdr.rs`.
-
 mod demo;
 mod herdr;
 mod svg;
@@ -51,14 +17,11 @@ use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier};
 use serde_json::{json, Value};
 
-/// Popup sizes (columns, rows) per view. Each view gets the width its content
-/// needs and no more, so the text stays as large as possible in the README.
 const MAP: (u16, u16) = (128, 46);
 const MAP_FILE: (u16, u16) = (136, 34);
 const FLOW: (u16, u16) = (176, 50);
 const CHANGES: (u16, u16) = (150, 46);
 const HISTORY: (u16, u16) = (128, 40);
-/// "Now" for relative times: 21 Sep 2026 21:46 UTC.
 const NOW: i64 = 1_790_027_160;
 
 fn main() {
@@ -74,7 +37,6 @@ fn main() {
     std::fs::create_dir_all(&home).unwrap();
     let base = base.canonicalize().unwrap();
     let home = home.canonicalize().unwrap();
-    // Paths print as ~/code/paneMorph instead of the temp directory.
     std::env::set_var("HOME", &home);
 
     let fixtures = manifest.join("tests/fixtures");
@@ -104,19 +66,15 @@ fn main() {
 
     let mut shots: Vec<(&str, &str, Buffer)> = Vec::new();
 
-    // Map at folder level: the README's hero image shows it inside herdr
-    // (`--herdr`), so it is only drawn here, to build the scene.
     app.view = View::Map;
     frame(&mut app, MAP);
 
-    // Map, zoomed in: select open_selector.py in its folder, then ⏎.
     let file = "panemorph/actions/open_selector.py";
     app.reveal(file, None);
     frame(&mut app, MAP);
     key(&mut app, KeyCode::Enter);
     shots.push(("map-file", "Map", frame(&mut app, MAP_FILE)));
 
-    // Flow: finish_selection(), the function this turn added.
     frame(&mut app, FLOW);
     let idx = app
         .index
@@ -129,8 +87,6 @@ fn main() {
     });
     shots.push(("flow", "Flow", frame(&mut app, FLOW)));
 
-    // Changes: open_selector.py, the first hunk marked reviewed, and a
-    // comment on the new wait loop, typed with the same keys a user presses.
     app.view = View::Changes;
     frame(&mut app, CHANGES);
     key(&mut app, KeyCode::Char('}'));
@@ -155,7 +111,6 @@ fn main() {
     key(&mut app, KeyCode::Enter);
     shots.push(("changes", "Changes", frame(&mut app, CHANGES)));
 
-    // History: the graph, worktrees with their agents, the merge commit.
     app.view = View::History;
     frame(&mut app, HISTORY);
     key(&mut app, KeyCode::Char('j'));
@@ -190,7 +145,6 @@ fn main() {
     }
 }
 
-/// herdr's dracula theme, as a user would set it in herdr's config.toml.
 fn dracula() -> Theme {
     Theme::from_config_text(
         "[theme]\nname = \"dracula\"\n[theme.custom]\nsidebar_bg = \"#21222c\"\n",
@@ -210,10 +164,6 @@ fn key(app: &mut App, code: KeyCode) {
     app.drain();
 }
 
-// ---- the recorded turn ----------------------------------------------------
-
-/// Apply the agent's turn to the demo repository and record it in a side
-/// store the way `codemap hook` does: a snapshot before and one after.
 fn record_turn(fixtures: &Path, repo: &demo::Repo, base: &Path) -> Store {
     let store = Store::new(base.join("state"));
     let info = codemap::git::discover(&repo.root).unwrap();
@@ -243,7 +193,6 @@ fn record_turn(fixtures: &Path, repo: &demo::Repo, base: &Path) -> Store {
     store
 }
 
-/// A stand-in for herdr's socket: the two read-only calls the UI makes.
 fn serve_mock_herdr(socket: &Path, repo: &demo::Repo) {
     let listener = UnixListener::bind(socket).expect("bind mock socket");
     let root = repo.root.display().to_string();
@@ -280,10 +229,7 @@ fn serve_mock_herdr(socket: &Path, repo: &demo::Repo) {
     });
 }
 
-// ---- ratatui buffer to grid ----------------------------------------------
-
 fn rgb(c: Color, fallback: svg::Rgb) -> svg::Rgb {
-    // The Dracula terminal palette, for the few named colours.
     match c {
         Color::Rgb(r, g, b) => (r, g, b),
         Color::Reset => fallback,

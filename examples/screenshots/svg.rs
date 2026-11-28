@@ -1,20 +1,11 @@
-//! A terminal grid rendered to SVG in a macOS-style window.
-//!
-//! Text is placed glyph by glyph on the cell grid, so columns line up in any
-//! monospace font. Box-drawing lines, arrowheads and circles are drawn as
-//! vectors: they join cleanly between rows whatever the line height.
-
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
 pub type Rgb = (u8, u8, u8);
 
-/// What a run of text shares: colour, bold, italic, dim.
 type TextStyle = (Rgb, bool, bool, bool);
-/// Per-glyph x positions and the escaped glyphs of one run.
 type Run = (Vec<String>, String);
 
-/// One terminal cell. `ch` is empty for the trailing half of a wide glyph.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Cell {
     pub ch: String,
@@ -26,7 +17,6 @@ pub struct Cell {
     pub underline: bool,
 }
 
-/// A screen of cells, row-major.
 pub struct Grid {
     pub cols: usize,
     pub rows: usize,
@@ -39,7 +29,6 @@ impl Grid {
     }
 }
 
-/// The house style shared by codeMap's and paneMorph's screenshots.
 pub struct Style {
     pub font_size: f32,
     pub cell_w: f32,
@@ -54,9 +43,7 @@ impl Default for Style {
     fn default() -> Self {
         Style {
             font_size: 14.0,
-            // JetBrains Mono, SF Mono and Menlo advance 0.6em.
             cell_w: 8.4,
-            // line-height 1.3
             cell_h: 18.2,
             background: (0x28, 0x2a, 0x36),
             title_bar: (0x21, 0x22, 0x2c),
@@ -101,7 +88,6 @@ fn num(v: f32) -> String {
     }
 }
 
-/// Arms of a light box-drawing character: (up, down, left, right, rounded).
 fn box_arms(c: char) -> Option<(bool, bool, bool, bool, bool)> {
     Some(match c {
         '─' => (false, false, true, true, false),
@@ -127,7 +113,6 @@ fn box_arms(c: char) -> Option<(bool, bool, bool, bool, bool)> {
     })
 }
 
-/// Vector shapes for glyphs that fonts draw inconsistently.
 enum Shape {
     Triangle(char),
     Disc,
@@ -147,7 +132,6 @@ fn shape(c: char) -> Option<Shape> {
     })
 }
 
-/// Render `grid` as an SVG document with a window frame titled `title`.
 pub fn render(grid: &Grid, title: &str, st: &Style) -> String {
     let (cw, ch) = (st.cell_w, st.cell_h);
     let width = (PAD_X * 2.0 + grid.cols as f32 * cw).ceil();
@@ -166,7 +150,6 @@ pub fn render(grid: &Grid, title: &str, st: &Style) -> String {
         esc(title),
         num(st.font_size)
     );
-    // Window: rounded body, title bar with its lower corners square.
     let _ = write!(
         s,
         r#"<rect x="0.5" y="0.5" width="{}" height="{}" rx="10" fill="{}" stroke="{}"/>"#,
@@ -213,7 +196,6 @@ pub fn render(grid: &Grid, title: &str, st: &Style) -> String {
         num(TITLE_H + PAD_TOP)
     );
 
-    // Backgrounds: one rect per run of equal colour on a row.
     s.push_str(r#"<g shape-rendering="crispEdges">"#);
     for y in 0..grid.rows {
         let mut x = 0;
@@ -239,10 +221,8 @@ pub fn render(grid: &Grid, title: &str, st: &Style) -> String {
     }
     s.push_str("</g>");
 
-    // Box-drawing lines: one stroked path per colour.
     let mut lines: BTreeMap<Rgb, String> = BTreeMap::new();
     let mut shapes = String::new();
-    // Text: per row, one <text> per style with per-glyph x positions.
     let mut texts = String::new();
     let mut underlines = String::new();
     for y in 0..grid.rows {
@@ -285,7 +265,6 @@ pub fn render(grid: &Grid, title: &str, st: &Style) -> String {
                     && (l || r)
                     && [up, down, l, r].iter().filter(|b| **b).count() == 2;
                 if corner {
-                    // One polyline through the centre, rounded if asked.
                     let hx = if l { x0 } else { x1 };
                     let vy = if up { y0 } else { y1 };
                     if round {

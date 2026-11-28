@@ -1,6 +1,3 @@
-//! Tags-style queries per language: `@def.<kind>` + `@name` for definitions,
-//! `@ref.call` + `@name` (+ `@recv`) for calls.
-
 use super::Lang;
 
 const PYTHON: &str = r#"

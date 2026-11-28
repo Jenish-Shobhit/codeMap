@@ -1,31 +1,4 @@
 #!/usr/bin/env python3
-"""Run codeMap's Kani proofs, and check that each proof can fail.
-
-    python3 scripts/kani.py prove       every harness holds and reaches every cover
-    python3 scripts/kani.py mutations   every broken variant in src/**/*.mutations is caught
-
-`prove` runs `cargo kani --lib` and fails unless every harness verifies and
-every `kani::cover!` in it is satisfied. A harness needs at least one cover:
-without one, a proof whose assumptions rule out every input passes vacuously.
-
-`mutations` reads each `.mutations` file beside the Rust file it breaks
-(`src/ui/mod.mutations` for `src/ui/mod.rs`), in the format of the
-agent-formal-verify plugin:
-
-    mutation <the bug, in a few words>
-    detects <harness, e.g. ui::proofs::follow_shows_a_box_that_fits>
-    - <line as it is in the source>
-    + <the line with the bug>
-
-It applies each mutation to the file in place, runs Kani on the harness it
-names and restores the file. A mutation is caught only when Kani finished and
-reported a failed check or a cover it no longer reaches. A compile error or a
-crash is an error, never a catch. Every harness in a file that has a
-`.mutations` file must be named by at least one mutation.
-
-Needs Kani (`cargo install --locked kani-verifier --version 0.68.0 && cargo
-kani setup`) and Python 3.9 or later. Exits 1 when a check fails.
-"""
 
 import pathlib
 import re
@@ -34,6 +7,9 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 TIMEOUT_SECONDS = 20 * 60
+USAGE = """usage: python3 scripts/kani.py prove|mutations
+  prove      every harness holds and reaches every kani::cover!
+  mutations  every broken variant in src/**/*.mutations is caught"""
 
 HARNESS_HEADER = re.compile(r"^Checking harness (\S+)\.\.\.$", re.M)
 COVERS = re.compile(r"\*\* (\d+) of (\d+) cover properties satisfied")
@@ -41,7 +17,6 @@ PROOF_FN = re.compile(r"#\[kani::proof\][^\n]*\n(?:\s*#\[[^\n]*\n)*\s*fn\s+(\w+)
 
 
 def kani(*args):
-    """Run `cargo kani --lib` and return (exit code, combined output)."""
     cmd = ["cargo", "kani", "--lib", *args]
     try:
         done = subprocess.run(
@@ -58,7 +33,6 @@ def kani(*args):
 
 
 def harness_reports(output):
-    """Split Kani's output into {harness: its section of the output}."""
     marks = list(HARNESS_HEADER.finditer(output))
     reports = {}
     for i, mark in enumerate(marks):
@@ -68,7 +42,6 @@ def harness_reports(output):
 
 
 def verdict(report):
-    """'holds', 'fails' (a check failed or a cover was lost) or 'unknown'."""
     if "VERIFICATION:- FAILED" in report:
         return "fails"
     if "VERIFICATION:- SUCCESSFUL" not in report:
@@ -113,7 +86,6 @@ def module_path(rs):
 
 
 def parse_mutations(path):
-    """Yield (label, harness, old, new) for each mutation in a file."""
     blocks = re.split(r"\n\s*\n", path.read_text())
     for block in blocks:
         lines = [l for l in block.splitlines() if l and not l.startswith("#")]
@@ -191,8 +163,7 @@ def mutations():
 def main(argv):
     commands = {"prove": prove, "mutations": mutations}
     if len(argv) != 2 or argv[1] not in commands:
-        print(__doc__.strip().splitlines()[0])
-        print("usage: python3 scripts/kani.py prove|mutations")
+        print(USAGE)
         return 2
     return commands[argv[1]]()
 

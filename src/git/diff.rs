@@ -1,6 +1,3 @@
-//! Unified diff parsing (`git diff` / `git show` output) and the line sets the
-//! Map and Flow views use to mark what changed.
-
 use std::collections::BTreeSet;
 
 use crate::util;
@@ -47,14 +44,11 @@ pub struct Hunk {
     pub old_lines: u32,
     pub new_start: u32,
     pub new_lines: u32,
-    /// The text git prints after the second `@@` (often the enclosing function).
     pub section: String,
     pub lines: Vec<DiffLine>,
 }
 
 impl Hunk {
-    /// Identity of a hunk for "reviewed" marks: a hash of its +/- lines, so the
-    /// mark survives unrelated edits elsewhere and resets when the hunk changes.
     pub fn hash(&self) -> String {
         let mut bytes = Vec::new();
         for line in &self.lines {
@@ -83,7 +77,6 @@ impl Hunk {
             .count()
     }
 
-    /// Last new-side line number covered by the hunk.
     pub fn new_end(&self) -> u32 {
         if self.new_lines == 0 {
             self.new_start
@@ -111,7 +104,6 @@ impl FileDiff {
         self.hunks.iter().map(Hunk::dels).sum()
     }
 
-    /// New-side line numbers of added lines.
     pub fn added_lines(&self) -> BTreeSet<u32> {
         self.hunks
             .iter()
@@ -121,8 +113,6 @@ impl FileDiff {
             .collect()
     }
 
-    /// New-side lines that were added, plus the line after each deletion, so a
-    /// pure deletion still marks the code around it.
     pub fn touched_lines(&self) -> BTreeSet<u32> {
         let mut set = BTreeSet::new();
         for hunk in &self.hunks {
@@ -160,8 +150,6 @@ impl FileDiff {
         set
     }
 
-    /// Mark for a line range [start, end] of the new file: A when every line
-    /// in it was added, M when any line was touched, None otherwise.
     pub fn mark_for_range(&self, start: u32, end: u32) -> Option<char> {
         if self.status == FileStatus::Added {
             return Some('A');
@@ -179,7 +167,6 @@ impl FileDiff {
     }
 }
 
-/// A whole file shown as added (untracked files, empty repositories).
 pub fn added_file(root: &std::path::Path, rel: &str) -> FileDiff {
     let bytes = std::fs::read(root.join(rel)).unwrap_or_default();
     let probe = &bytes[..bytes.len().min(8000)];
@@ -217,7 +204,6 @@ pub fn added_file(root: &std::path::Path, rel: &str) -> FileDiff {
     }
 }
 
-/// Parse unified diff text produced with `--src-prefix=a/ --dst-prefix=b/`.
 pub fn parse(text: &str) -> Vec<FileDiff> {
     let mut files: Vec<FileDiff> = Vec::new();
     let mut cur: Option<FileDiff> = None;
@@ -288,7 +274,6 @@ pub fn parse(text: &str) -> Vec<FileDiff> {
             old_no += 1;
             new_no += 1;
         }
-        // "\ No newline at end of file" is ignored.
     }
     flush_hunk(&mut cur, &mut hunk);
     if let Some(f) = cur.take() {
@@ -347,7 +332,6 @@ fn parse_header_line(file: &mut FileDiff, line: &str) {
 }
 
 fn parse_hunk_header(rest: &str) -> Option<Hunk> {
-    // "-a,b +c,d @@ section"
     let end = rest.find(" @@")?;
     let ranges = &rest[..end];
     let section = rest[end + 3..].trim().to_string();
@@ -373,11 +357,9 @@ fn parse_range(s: &str) -> Option<(u32, u32)> {
     }
 }
 
-/// "a/x b/y" (possibly quoted) -> ("x", "y").
 fn split_git_header(rest: &str) -> (String, String) {
     let rest = rest.trim();
     if rest.starts_with('"') {
-        // quoted form: "a/x" "b/y" or mixed
         let mut parts = Vec::new();
         let mut buf = String::new();
         let mut in_q = false;
@@ -414,7 +396,6 @@ fn split_git_header(rest: &str) -> (String, String) {
             );
         }
     }
-    // Unquoted: both halves are equal length when the path did not change.
     let body = rest.strip_prefix("a/").unwrap_or(rest);
     if let Some(idx) = find_middle_split(body) {
         let a = &body[..idx];
@@ -428,8 +409,6 @@ fn split_git_header(rest: &str) -> (String, String) {
 }
 
 fn find_middle_split(body: &str) -> Option<usize> {
-    // body = "<p> b/<p>"; if the two paths are identical the split is exactly
-    // in the middle.
     let len = body.len();
     if len < 4 || !(len - 3).is_multiple_of(2) {
         return None;
@@ -567,7 +546,6 @@ Binary files a/logo.png and b/logo.png differ
     fn marks_ranges() {
         let files = parse(SAMPLE);
         let api = &files[0];
-        // main() spans 5..13 in the new file; line 12 changed
         assert_eq!(api.mark_for_range(5, 13), Some('M'));
         assert_eq!(api.mark_for_range(2, 3), Some('A'));
         assert_eq!(api.mark_for_range(20, 30), None);
@@ -579,7 +557,7 @@ Binary files a/logo.png and b/logo.png differ
         let files = parse(SAMPLE);
         let h = &files[0].hunks[1];
         let mut h2 = h.clone();
-        h2.lines[0].text = "    y = 2".into(); // context line
+        h2.lines[0].text = "    y = 2".into();
         assert_eq!(h.hash(), h2.hash());
         h2.lines[1].text = "    return y".into();
         assert_ne!(h.hash(), h2.hash());
@@ -594,8 +572,6 @@ Binary files a/logo.png and b/logo.png differ
 
     #[test]
     fn unquoted_header_splits_in_the_middle() {
-        // A path that itself contains " b/" only splits correctly at the
-        // middle; odd lengths and different halves fall back to " b/".
         assert_eq!(
             split_git_header("a/x b/y.py b/x b/y.py"),
             ("x b/y.py".to_string(), "x b/y.py".to_string())

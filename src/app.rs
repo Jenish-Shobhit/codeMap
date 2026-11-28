@@ -1,9 +1,3 @@
-//! Application state, background loading and the actions behind the keys.
-//!
-//! The UI thread owns all state. Slow work (git, parsing, checkpoints) runs
-//! on worker threads that send `Msg`s back, so the frame paints first and
-//! content fills in as it arrives.
-
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -23,10 +17,7 @@ use crate::store::{Comment, PaneState, Reviews, Store};
 use crate::theme::Theme;
 use crate::util;
 
-/// Listing cap: bigger repositories are marked truncated.
 pub const MAX_FILES: usize = 20_000;
-/// Parse everything up front below this many source files; above it, parse a
-/// folder when the map zooms into it.
 pub const EAGER_PARSE: usize = 1_500;
 pub const HISTORY_LIMIT: usize = 2_000;
 
@@ -63,17 +54,12 @@ impl View {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Scope {
-    /// The agent's last turn: start checkpoint to end (or to now if open).
     Turn,
-    /// Everything since this agent's first checkpoint.
     Session,
-    /// Working tree against HEAD.
     Head,
-    /// One commit (from History).
     Commit(String),
 }
 
-/// The agent codeMap follows (inside herdr).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct AgentInfo {
     pub pane_id: Option<String>,
@@ -114,7 +100,6 @@ impl AgentInfo {
     }
 }
 
-/// Where and how to start.
 #[derive(Debug, Clone)]
 pub struct Options {
     pub path: Option<PathBuf>,
@@ -125,21 +110,16 @@ pub struct Options {
     pub theme: Theme,
 }
 
-/// Summary of the scope in effect, for the header and rails.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ScopeInfo {
-    /// "turn 3 · 2m" (header, right side)
     pub header: String,
-    /// "last turn · done 9:44 PM" (rail footer)
     pub rail: String,
-    /// "this turn" / "since HEAD" (rail section titles)
     pub noun: String,
     pub fallback_note: Option<String>,
     pub turn_n: Option<u32>,
     pub open: bool,
 }
 
-/// An agent with checkpoints in this repository, for the Changes rail.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct AgentRow {
     pub pane_key: String,
@@ -155,12 +135,10 @@ pub struct AgentRow {
 pub struct WorktreeRow {
     pub path: PathBuf,
     pub branch: Option<String>,
-    /// (agent label, working)
     pub agents: Vec<(String, bool)>,
     pub current: bool,
 }
 
-/// What repository discovery found.
 pub struct RepoLoad {
     pub root: PathBuf,
     pub repo: Result<RepoInfo, Option<String>>,
@@ -236,7 +214,6 @@ pub struct FlowState {
 #[derive(Debug, Default)]
 pub struct ChangesState {
     pub file: usize,
-    /// Cursor row within the selected file's rows.
     pub row: usize,
     pub scroll: usize,
     pub anchor: Option<usize>,
@@ -248,7 +225,6 @@ pub struct HistoryState {
     pub commits: Vec<Commit>,
     pub rows: Vec<GraphRow>,
     pub total: usize,
-    /// Index into `commits`.
     pub sel: usize,
     pub scroll: usize,
     pub worktrees: Vec<WorktreeRow>,
@@ -276,14 +252,12 @@ pub struct Input {
     pub text: String,
 }
 
-/// What the process should do after the UI closes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Outcome {
     Quit,
     Edit { path: PathBuf, line: u32 },
 }
 
-/// One row of the Changes body for the selected file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CRow {
     Hunk(usize),
@@ -329,7 +303,6 @@ pub struct App {
     pub outcome: Option<Outcome>,
     pub started: Instant,
     pub first_paint_ms: Option<f64>,
-    /// Popup vs pinned split/tab (follow mode).
     pub pinned: bool,
     tx: Sender<Msg>,
     rx: Receiver<Msg>,
@@ -419,7 +392,6 @@ impl App {
         !self.files_loaded || self.parse_pending || (self.repo.is_some() && !self.diffs_loaded)
     }
 
-    /// Start background loading (the interactive path).
     pub fn start(&mut self) {
         let tx = self.tx.clone();
         let root = self.root.clone();
@@ -428,7 +400,6 @@ impl App {
         std::thread::spawn(move || load_repo(&tx, root, client, agent));
     }
 
-    /// Load everything synchronously (tests and snapshots).
     pub fn load_blocking(&mut self) {
         self.sync = true;
         let (tx, rx) = mpsc::channel();
@@ -446,7 +417,6 @@ impl App {
         self.drain();
     }
 
-    /// Apply queued messages; in sync mode keep going until quiet.
     pub fn drain(&mut self) {
         for _ in 0..16 {
             let msgs: Vec<Msg> = self.rx.try_iter().collect();
@@ -459,7 +429,6 @@ impl App {
         }
     }
 
-    /// Process worker messages; true if anything changed.
     pub fn poll(&mut self) -> bool {
         let msgs: Vec<Msg> = self.rx.try_iter().collect();
         let changed = !msgs.is_empty();
@@ -576,7 +545,6 @@ impl App {
                 }
                 self.history.total = total;
                 self.history.worktrees = worktrees;
-                // The selected commit's files load when History is shown.
             }
             Msg::CommitDiff(sha, result) => {
                 self.history.loading_detail = false;
@@ -604,7 +572,6 @@ impl App {
                 }
             }
         }
-        // A repository whose root holds one folder of code opens inside it.
         let subs = self.index.subdirs("");
         let root_code = self
             .index
@@ -626,8 +593,6 @@ impl App {
         }
         String::new()
     }
-
-    // ---- requests -----------------------------------------------------------
 
     fn request_parse_initial(&mut self) {
         let sources: Vec<String> = self.index.source_files().cloned().collect();
@@ -673,8 +638,6 @@ impl App {
         });
     }
 
-    /// Parse a folder's own files when the map zooms into it (huge
-    /// repositories); subfolders are parsed when they are opened.
     pub fn ensure_dir_parsed(&mut self, dir: &str) {
         let files: Vec<String> = self
             .index
@@ -747,8 +710,6 @@ impl App {
         });
     }
 
-    // ---- scope ----------------------------------------------------------------
-
     pub fn set_scope(&mut self, scope: Scope) {
         if self.scope == scope {
             return;
@@ -796,13 +757,10 @@ impl App {
         }
     }
 
-    // ---- map ----------------------------------------------------------------
-
     pub fn map_level(&self) -> Level {
         self.map.level.clone().unwrap_or(Level::Dir(String::new()))
     }
 
-    /// Rebuild the scene when something changed (or the width did).
     pub fn ensure_scene(&mut self, width: usize) {
         if !self.files_loaded {
             return;
@@ -824,7 +782,6 @@ impl App {
                 self.drain_if_sync();
             }
         }
-        // Keep the selection on the same thing across rebuilds.
         if self.map.pending_select.is_none() {
             if let Some(scene) = &self.map.scene {
                 if scene.level == level && self.map.built_page == self.map.page {
@@ -849,7 +806,6 @@ impl App {
                 Select::Symbol(f, i) => map::node_for_symbol(scene, f, *i),
             };
             let mut found = find(&scene);
-            // In a paginated folder, turn to the page that holds it.
             if found.is_none() && scene.pages > 1 {
                 for page in 0..scene.pages {
                     let other = map::build(&self.index, &self.marks, &level, page, width.max(40));
@@ -899,7 +855,6 @@ impl App {
         })
     }
 
-    /// The function the cursor is on (for Flow and the hint line).
     pub fn current_function(&self) -> Option<SymId> {
         let scene = self.map.scene.as_ref()?;
         let node = scene.nodes.get(self.map.cursor.node)?;
@@ -913,7 +868,6 @@ impl App {
         if s.kind.is_callable() {
             Some(SymId { file, idx })
         } else {
-            // a class: its first method
             let m = map::methods_of(fs, idx).into_iter().next()?;
             Some(SymId { file, idx: m })
         }
@@ -928,7 +882,6 @@ impl App {
         }
     }
 
-    /// j/k: rows inside the selected box, then the next box in reading order.
     pub fn map_row(&mut self, delta: i32) {
         let Some(scene) = &self.map.scene else { return };
         let Some(node) = scene.nodes.get(self.map.cursor.node) else {
@@ -957,7 +910,6 @@ impl App {
             (Some(r), _, _) => self.map.cursor.row = Some(r),
             (None, Some(0), false) => self.map.cursor.row = None,
             _ => {
-                // leave the box: next/previous node in reading order
                 let mut order: Vec<usize> = (0..scene.nodes.len()).collect();
                 order.sort_by_key(|&i| (scene.layout.nodes[i].y, scene.layout.nodes[i].x));
                 let at = order
@@ -1058,7 +1010,6 @@ impl App {
         }
     }
 
-    /// Jump the map to a symbol or file (search, rail lists).
     pub fn reveal(&mut self, file: &str, sym: Option<usize>) {
         match sym {
             Some(i) => self.zoom_to(
@@ -1071,8 +1022,6 @@ impl App {
             ),
         }
     }
-
-    // ---- flow ---------------------------------------------------------------
 
     pub fn open_flow(&mut self, target: SymId) {
         if let Some(cur) = self.flow.target.take() {
@@ -1180,7 +1129,6 @@ impl App {
         self.flow.selected = (self.flow.selected as i32 + delta).clamp(0, n - 1) as usize;
     }
 
-    /// Move to the nearest box sideways (branches).
     pub fn flow_side(&mut self, dir: i32) {
         let Some(l) = &self.flow.layout else { return };
         let Some(cur) = l.boxes.get(self.flow.selected) else {
@@ -1211,7 +1159,6 @@ impl App {
         }
     }
 
-    /// Calls made from the selected box (resolved targets).
     pub fn flow_calls_in_box(&self) -> Vec<SymId> {
         let (Some(t), Some(l)) = (&self.flow.target, &self.flow.layout) else {
             return Vec::new();
@@ -1242,7 +1189,6 @@ impl App {
         }
     }
 
-    /// Functions listed in the Flow rail: those of the target's file.
     pub fn flow_rail_functions(&self) -> Vec<(usize, String)> {
         let Some(t) = &self.flow.target else {
             return Vec::new();
@@ -1257,8 +1203,6 @@ impl App {
             .map(|(i, s)| (i, s.qual()))
             .collect()
     }
-
-    // ---- changes ------------------------------------------------------------
 
     pub fn change_rows(&self, file: usize) -> Vec<CRow> {
         let Some(f) = self.diffs.get(file) else {
@@ -1332,7 +1276,6 @@ impl App {
         match target {
             Some(r) => self.changes.row = r,
             None => {
-                // across files
                 if delta > 0 && self.changes.file + 1 < self.diffs.len() {
                     self.select_file(self.changes.file + 1);
                 } else if delta < 0 && self.changes.file > 0 {
@@ -1359,7 +1302,6 @@ impl App {
         let now = self.reviews.toggle(&path, &hash);
         let _ = self.store.save_reviews(&self.repo_key(), &self.reviews);
         if now {
-            // advance to the next hunk, like a checklist
             self.next_hunk(1);
         }
     }
@@ -1376,7 +1318,6 @@ impl App {
         (done, f.hunks.len())
     }
 
-    /// New-file line range covered by rows a..=b of the selected file.
     fn line_range(&self, a: usize, b: usize) -> Option<(u32, u32, String)> {
         let f = self.diffs.get(self.changes.file)?;
         let rows = self.change_rows(self.changes.file);
@@ -1387,10 +1328,9 @@ impl App {
             if let CRow::Line(h, l) = r {
                 hunk.get_or_insert(*h);
                 let dl = &f.hunks[*h].lines[*l];
-                let n = dl.new_no.or_else(|| {
-                    // a deleted line anchors to the next new line
-                    f.hunks[*h].lines[*l..].iter().find_map(|x| x.new_no)
-                });
+                let n = dl
+                    .new_no
+                    .or_else(|| f.hunks[*h].lines[*l..].iter().find_map(|x| x.new_no));
                 if let Some(n) = n {
                     lines.push(n);
                 }
@@ -1448,12 +1388,10 @@ impl App {
         ));
     }
 
-    /// The agent pane comments go to.
     pub fn target_pane(&self) -> Option<String> {
         self.agent.as_ref().and_then(|a| a.pane_id.clone())
     }
 
-    /// P (paste, no Enter) or S (submit): send the draft to the agent.
     pub fn send_draft(&mut self, submit: bool) -> Result<(), String> {
         if self.drafts.is_empty() {
             return Err("no comments yet · c writes one".into());
@@ -1479,7 +1417,6 @@ impl App {
                     let _ = client.pane_focus(&pane);
                     self.message = Some(format!("sent {}", util::plural(n, "comment", "comments")));
                 } else {
-                    // Close the popup: the agent's pane is right underneath.
                     self.outcome = Some(Outcome::Quit);
                 }
                 Ok(())
@@ -1504,7 +1441,6 @@ impl App {
         }
     }
 
-    /// path and line under the cursor in the current view (for e and y).
     pub fn location(&self) -> Option<(String, u32)> {
         match self.view {
             View::Map => {
@@ -1589,7 +1525,6 @@ impl App {
         self.search_hits.clear();
     }
 
-    /// History ⏎: show the selected commit's diff.
     pub fn history_open(&mut self) {
         let Some(c) = self.history.commits.get(self.history.sel) else {
             return;
@@ -1603,7 +1538,6 @@ impl App {
         }
     }
 
-    /// Load the selected commit's files if they are not loaded yet.
     pub fn ensure_commit_detail(&mut self) {
         if self.history.loading_detail {
             return;
@@ -1632,7 +1566,6 @@ impl App {
         }
     }
 
-    /// History `1`: the map, with this commit's changes marked.
     pub fn map_of_commit(&mut self) {
         if let Some(c) = self.history.commits.get(self.history.sel) {
             let sha = c.sha.clone();
@@ -1690,8 +1623,6 @@ fn parse_file(root: &std::path::Path, f: &str) -> Option<(String, FileSymbols, (
     Some((f.to_string(), syms, stamp))
 }
 
-/// Resolve the directory and list files. Inside herdr, ask for the focused
-/// pane's foreground cwd first: the agent may have moved.
 fn load_repo(tx: &Sender<Msg>, root: PathBuf, client: Option<Client>, agent: Option<AgentInfo>) {
     let mut root = root;
     let mut agent = agent;
@@ -1748,7 +1679,6 @@ fn load_repo(tx: &Sender<Msg>, root: PathBuf, client: Option<Client>, agent: Opt
     })));
 }
 
-/// Diff for a scope, plus the base versions' symbol names for A/M marks.
 pub fn compute_changes(
     store: &Store,
     repo: &RepoInfo,
@@ -1772,7 +1702,6 @@ pub fn compute_changes(
                 .and_then(|k| panes.iter().find(|p| &p.pane_key == k))
         })
         .or_else(|| {
-            // Standalone: the agent that worked here most recently.
             if agent.is_none_or(|a| a.pane_id.is_none()) {
                 panes.first()
             } else {
@@ -1788,7 +1717,6 @@ pub fn compute_changes(
         now_tree.clone()
     };
 
-    // Agents strip: each agent's last turn in this repo.
     let mut agents = Vec::new();
     for p in panes.iter().take(6) {
         let Some(t) = p.last_turn(&repo.root) else {
@@ -1895,7 +1823,6 @@ pub fn compute_changes(
         Ok((d, base)) => (Ok(d), base),
         Err(e) => (Err(e), None),
     };
-    // Symbol names of the base version of each changed source file.
     let mut old_quals = BTreeMap::new();
     if let (Ok(d), Some(base)) = (&diffs, &base) {
         for f in d
@@ -1908,7 +1835,6 @@ pub fn compute_changes(
                 continue;
             }
             let src = if base.len() == 40 && !base.ends_with('^') {
-                // a shadow checkpoint commit
                 shadow.read_file(base, path)
             } else {
                 git::run(&repo.root, &["show", &format!("{base}:{path}")]).ok()
@@ -1947,7 +1873,6 @@ fn head_changes(
         .map_err(|e| e.0)
 }
 
-/// Worktrees with the herdr agents working in them.
 fn worktree_rows(repo: &RepoInfo, client: Option<&Client>) -> Vec<WorktreeRow> {
     let list = git::worktrees(&repo.root).unwrap_or_default();
     let agents: Vec<Value> = client.and_then(|c| c.agent_list().ok()).unwrap_or_default();
@@ -1964,8 +1889,6 @@ fn worktree_rows(repo: &RepoInfo, client: Option<&Client>) -> Vec<WorktreeRow> {
                 let Some(cwd) = cwd else { continue };
                 let cwd = PathBuf::from(cwd);
                 let cwd = cwd.canonicalize().unwrap_or(cwd);
-                // the most specific worktree wins: skip if another worktree
-                // inside this one holds the agent
                 if !cwd.starts_with(&wp) {
                     continue;
                 }

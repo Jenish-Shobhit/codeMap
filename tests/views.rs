@@ -1,11 +1,3 @@
-//! The renderer through ratatui's TestBackend: golden snapshots of all four
-//! views on paneMorph's real code with a recorded agent turn, the states
-//! (not a repo, empty repo, loading, unsupported language, big folders),
-//! theme colours, and key handling.
-//!
-//! Snapshots live in tests/snapshots/*.txt. Regenerate with
-//! `UPDATE_SNAPSHOTS=1 cargo test --test views`.
-
 mod common;
 
 use codemap::app::{App, Focus, InputKind, Options, Scope, View};
@@ -18,7 +10,6 @@ use ratatui::backend::TestBackend;
 use ratatui::style::Color;
 use ratatui::Terminal;
 
-// A 94% x 92% popup on a 170x54 terminal.
 const W: u16 = 160;
 const H: u16 = 50;
 
@@ -32,7 +23,6 @@ fn text(app: &mut App) -> String {
     ui::buffer_text(&draw(app, W, H))
 }
 
-/// Replace machine-specific temp paths so snapshots are stable.
 fn normalize(s: &str, base: &std::path::Path) -> String {
     let base = base.display().to_string();
     let mut out = String::new();
@@ -96,7 +86,6 @@ fn map_view() {
     let pm = panemorph_repo();
     let mut app = app_for(&pm, View::Map, true);
     let t = text(&mut app);
-    // The folder level of paneMorph's package, like the approved mock.
     assert_eq!(app.map_level(), Level::Dir("panemorph".into()));
     for needle in [
         " map ",
@@ -119,7 +108,6 @@ fn map_view() {
 fn map_zooms_into_files_and_back() {
     let pm = panemorph_repo();
     let mut app = app_for(&pm, View::Map, true);
-    // Zoom into actions/, then into open_selector.py.
     app.reveal("panemorph/actions/open_selector.py", None);
     text(&mut app);
     assert_eq!(app.map_level(), Level::Dir("panemorph/actions".into()));
@@ -137,7 +125,6 @@ fn map_zooms_into_files_and_back() {
         "callees appear as external boxes\n{t}"
     );
     snapshot("map_file", &normalize(&t, pm.tmp.path()));
-    // Backspace returns to the folder with the file still selected.
     key(&mut app, KeyCode::Backspace);
     text(&mut app);
     assert_eq!(app.map_level(), Level::Dir("panemorph/actions".into()));
@@ -158,7 +145,6 @@ fn map_arrow_keys_move_between_boxes() {
     assert_ne!(start, below);
     key(&mut app, KeyCode::Up);
     assert_eq!(app.map.cursor.node, start);
-    // j walks the rows of a box.
     let svc = app
         .map
         .scene
@@ -185,7 +171,6 @@ fn map_arrow_keys_move_between_boxes() {
 fn flow_view() {
     let pm = panemorph_repo();
     let mut app = app_for(&pm, View::Map, true);
-    // Search selector.py's main and open it in Flow.
     key(&mut app, KeyCode::Char('/'));
     chars(&mut app, "selector.py");
     assert!(!app.search_hits.is_empty());
@@ -215,7 +200,6 @@ fn flow_view() {
     ] {
         assert!(t.contains(needle), "missing {needle:?}\n{t}");
     }
-    // Lines this turn changed carry an M in the gutter.
     let marked = t
         .lines()
         .find(|l| l.contains("Path(result_path).write_text(json.dumps({\"choice\""))
@@ -223,7 +207,6 @@ fn flow_view() {
     let gutter = marked.split('│').next().unwrap().trim();
     assert!(gutter.ends_with('A') || gutter.ends_with('M'), "{marked}");
     snapshot("flow_main", &normalize(&t, pm.tmp.path()));
-    // Enter on the try box opens the first call it makes.
     let try_box = app
         .flow
         .layout
@@ -259,7 +242,6 @@ fn changes_view_review_and_comment() {
     ] {
         assert!(t.contains(needle), "missing {needle:?}\n{t}");
     }
-    // Next file: open_selector.py.
     key(&mut app, KeyCode::Char('}'));
     let t = text(&mut app);
     assert!(
@@ -268,12 +250,10 @@ fn changes_view_review_and_comment() {
     );
     assert!(t.contains("@@ "), "{t}");
     snapshot("changes_open_selector", &normalize(&t, pm.tmp.path()));
-    // space marks the hunk reviewed and persists across restarts.
     key(&mut app, KeyCode::Char(' '));
     assert_eq!(app.reviewed_count(1).0, 1);
     let again = app_for(&pm, View::Changes, true);
     assert_eq!(again.reviewed_count(1).0, 1, "reviewed marks persist");
-    // v selects, c comments; the comment joins the draft and shows inline.
     key(&mut app, KeyCode::Char('j'));
     key(&mut app, KeyCode::Char('v'));
     key(&mut app, KeyCode::Char('j'));
@@ -292,11 +272,9 @@ fn changes_view_review_and_comment() {
     let t = text(&mut app);
     assert!(t.contains("⎿ this loop has no timeout"), "{t}");
     assert!(t.contains("draft  1 comment"), "{t}");
-    // Outside herdr, P keeps the draft and says why.
     key(&mut app, KeyCode::Char('P'));
     assert!(app.message.as_deref().unwrap().contains("not inside herdr"));
     assert_eq!(app.drafts.len(), 1);
-    // s switches the scope to since-HEAD.
     key(&mut app, KeyCode::Char('s'));
     assert_eq!(app.scope, Scope::Session);
     key(&mut app, KeyCode::Char('s'));
@@ -323,7 +301,6 @@ fn history_view() {
         assert!(t.contains(needle), "missing {needle:?}\n{t}");
     }
     snapshot("history", &normalize(&t, pm.tmp.path()));
-    // j moves down, enter shows the diff.
     key(&mut app, KeyCode::Char('j'));
     key(&mut app, KeyCode::Char('j'));
     key(&mut app, KeyCode::Enter);
@@ -333,7 +310,6 @@ fn history_view() {
     assert!(t.contains("panemorph/actions/extract.py  +27"), "{t}");
     key(&mut app, KeyCode::Backspace);
     assert!(!app.history.show_diff);
-    // 1 opens the map with that commit's changes marked.
     key(&mut app, KeyCode::Char('1'));
     assert_eq!(app.view, View::Map);
     assert!(matches!(app.scope, Scope::Commit(_)));
@@ -345,7 +321,6 @@ fn history_view() {
 fn standalone_without_agent_shows_repo_path_and_head_scope() {
     let pm = panemorph_repo();
     let mut app = app_for(&pm, View::Changes, false);
-    // Standalone: the most recent agent's turn in this repo is still shown.
     assert_eq!(app.scope, Scope::Head);
     let t = text(&mut app);
     assert!(t.contains("since HEAD"), "{t}");
@@ -382,7 +357,6 @@ fn not_a_git_repo_state() {
     assert!(changes.contains("Map and Flow still work."), "{changes}");
     app.view = View::History;
     assert!(text(&mut app).contains("not a git repository"));
-    // Flow still works.
     app.view = View::Map;
     app.reveal("tool.py", Some(0));
     text(&mut app);
@@ -426,7 +400,6 @@ fn loading_state_paints_the_frame_first() {
         store: pm.store.clone(),
         theme: dracula(),
     });
-    // Nothing loaded yet: the frame, tabs and rail still draw.
     let t = text(&mut app);
     assert!(t.contains(" map "), "{t}");
     assert!(t.contains("paneMorph · selector-fix"), "{t}");
@@ -468,7 +441,6 @@ fn unsupported_language_and_big_folders() {
     let second = text(&mut app);
     assert!(second.contains("page 2 of 2"), "{second}");
     assert!(second.contains("README.md"), "{second}");
-    // Enter on a markdown box says which grammar is missing.
     app.reveal("pkg/README.md", None);
     text(&mut app);
     key(&mut app, KeyCode::Enter);
@@ -477,7 +449,6 @@ fn unsupported_language_and_big_folders() {
         "{:?}",
         app.message
     );
-    // Flow on a non-code file explains itself.
     app.open_flow(codemap::index::SymId {
         file: "pkg/README.md".into(),
         idx: 0,
@@ -492,7 +463,6 @@ fn theme_colours_reach_the_screen() {
     let mut app = app_for(&pm, View::Changes, true);
     let buf = draw(&mut app, W, H);
     let t = dracula();
-    // The active view label is the only accent block.
     let accent_cells: Vec<u16> = (0..W).filter(|&x| buf[(x, 0)].bg == t.accent).collect();
     assert!(!accent_cells.is_empty());
     let label: String = accent_cells
@@ -506,7 +476,6 @@ fn theme_colours_reach_the_screen() {
         Color::Rgb(0x28, 0x2a, 0x36),
         "body is #282a36"
     );
-    // Added lines sit on the green band.
     key(&mut app, KeyCode::Char('}'));
     let buf = draw(&mut app, W, H);
     let has_add_band = (0..H).any(|y| (0..W).any(|x| buf[(x, y)].bg == t.add_bg));

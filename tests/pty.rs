@@ -1,10 +1,3 @@
-//! PTY harness: runs the real binary on a pseudo-terminal the way herdr's
-//! popup does, measures open-to-first-paint, drives keys and checks that Esc
-//! closes it.
-//!
-//! `CODEMAP_BIN=target/release/codemap cargo test --test pty -- --nocapture`
-//! measures a release build.
-
 mod common;
 
 use std::time::Duration;
@@ -12,7 +5,6 @@ use std::time::Duration;
 use common::pty::*;
 use common::*;
 
-/// Text of a key press, then the view's marker text to wait for.
 fn press(p: &mut Pty, key: &[u8], expect: &str) {
     let from = p.len();
     p.send(key);
@@ -44,28 +36,20 @@ fn keys_first_paint_and_escape() {
         160,
         50,
     );
-    // The frame: tabs are drawn before any git or parsing work lands.
     let painted = p
         .wait_for("history", 0, Duration::from_secs(5))
         .expect("first paint");
-    // Content fills in.
     p.wait_for("PaneMorphService", 0, Duration::from_secs(10))
         .expect("map content");
-    // 3: changes (standalone: since HEAD)
     press(&mut p, b"3", "since HEAD");
-    // } next file, space marks reviewed
     press(&mut p, b"}", "open_selector.py");
     press(&mut p, b" ", "✓ reviewed");
-    // 4: history
     press(&mut p, b"4", "tag: v0.1.0");
-    // 2: flow, 1: map
     press(&mut p, b"2", "flow");
     press(&mut p, b"1", "zoom in");
-    // /: search, then Esc cancels the search only
     press(&mut p, b"/", "type a symbol");
     press(&mut p, b"snapshot_for", "PaneMorphService.snapshot_for");
     press(&mut p, b"\x1b", "zoom in");
-    // ?: keys, Esc closes the help
     press(&mut p, b"?", "paste the draft");
     p.send(b"\x1b");
     std::thread::sleep(Duration::from_millis(150));
@@ -73,13 +57,11 @@ fn keys_first_paint_and_escape() {
         p.child.try_wait().unwrap().is_none(),
         "Esc on help must not quit"
     );
-    // Esc closes codeMap.
     p.send(b"\x1b");
     let status = p
         .wait_exit(Duration::from_secs(5))
         .expect("Esc closes the popup");
     assert!(status.success());
-    // The terminal is restored: alternate screen left, cursor shown.
     let out = p.text();
     assert!(out.contains("\x1b[?1049l"), "left the alternate screen");
     assert!(out.contains("\x1b[?25h"), "cursor shown again");
@@ -104,7 +86,6 @@ fn keys_first_paint_and_escape() {
         first_paint_ms,
         trace.trim()
     );
-    // The doc's target: open to first paint under 150 ms on a small repo.
     assert!(first_paint_ms < 150.0, "first paint {first_paint_ms} ms");
     assert!(
         painted < Duration::from_millis(1500),
@@ -136,8 +117,6 @@ fn q_quits_and_ctrl_c_quits() {
     );
 }
 
-/// Smoke run on codeMap's own repository (Rust); prints each view.
-/// `CODEMAP_BIN=target/release/codemap cargo test --test pty smoke -- --ignored --nocapture`
 #[test]
 #[ignore]
 fn smoke_own_repo() {

@@ -1,7 +1,3 @@
-//! The symbol index: every file of the worktree, their parsed symbols (parsed
-//! lazily and cached by mtime and size), and the call and import edges
-//! resolved between them.
-
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -9,10 +5,8 @@ use std::time::SystemTime;
 
 use crate::lang::{self, FileSymbols, Lang, SymKind};
 
-/// Files larger than this are listed but not parsed.
 pub const MAX_PARSE_BYTES: u64 = 1_500_000;
 
-/// A symbol somewhere in the repo.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SymId {
     pub file: String,
@@ -22,7 +16,6 @@ pub struct SymId {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CallEdge {
     pub from_file: String,
-    /// Calling function, None for module-level code.
     pub from_sym: Option<usize>,
     pub to: SymId,
     pub line: u32,
@@ -31,20 +24,16 @@ pub struct CallEdge {
 #[derive(Debug, Clone, Default)]
 pub struct Index {
     pub root: PathBuf,
-    /// Every file (relative, '/'-separated, sorted).
     pub files: Vec<String>,
-    /// True when the listing was capped (huge repositories).
     pub truncated: bool,
     parsed: HashMap<String, Arc<FileSymbols>>,
     stamps: HashMap<String, (SystemTime, u64)>,
     pub calls: Vec<CallEdge>,
-    /// file -> files it imports (resolved inside the repo).
     pub imports: BTreeMap<String, BTreeSet<String>>,
     resolved_generation: u64,
     generation: u64,
 }
 
-/// Methods too generic to link by name alone when the receiver is unknown.
 const GENERIC_METHODS: &[&str] = &[
     "get",
     "set",
@@ -143,8 +132,6 @@ impl Index {
         self.files.iter().filter(|f| Lang::from_path(f).is_some())
     }
 
-    /// Parse one file if it changed since the cached parse. Returns true when
-    /// the index changed.
     pub fn ensure_parsed(&mut self, file: &str) -> bool {
         let Some(lang) = Lang::from_path(file) else {
             return false;
@@ -179,15 +166,12 @@ impl Index {
         true
     }
 
-    /// Insert symbols parsed elsewhere (a background thread).
     pub fn insert_parsed(&mut self, file: &str, symbols: FileSymbols, stamp: (SystemTime, u64)) {
         self.parsed.insert(file.to_string(), Arc::new(symbols));
         self.stamps.insert(file.to_string(), stamp);
         self.generation += 1;
     }
 
-    /// Parse every source file under `dir` ("" for the whole repo), up to
-    /// `limit` files. Returns how many were (re)parsed.
     pub fn ensure_parsed_under(&mut self, dir: &str, limit: usize) -> usize {
         let targets: Vec<String> = self
             .files
@@ -205,8 +189,6 @@ impl Index {
         n
     }
 
-    /// Resolve calls and imports across all parsed files (only when something
-    /// changed since the last resolution).
     pub fn resolve(&mut self) {
         if self.resolved_generation == self.generation && self.generation != 0 {
             return;
@@ -218,12 +200,10 @@ impl Index {
         self.imports = imports;
     }
 
-    /// Files directly inside `dir`.
     pub fn files_in(&self, dir: &str) -> Vec<&String> {
         self.files.iter().filter(|f| parent_dir(f) == dir).collect()
     }
 
-    /// Immediate subdirectories of `dir`, with how many files each holds.
     pub fn subdirs(&self, dir: &str) -> Vec<(String, usize)> {
         let mut counts: BTreeMap<String, usize> = BTreeMap::new();
         for f in &self.files {
@@ -247,7 +227,6 @@ impl Index {
         counts.into_iter().collect()
     }
 
-    /// Callable and container symbols under a directory, for counts.
     pub fn function_count_under(&self, dir: &str) -> usize {
         self.parsed
             .iter()
@@ -256,12 +235,10 @@ impl Index {
             .sum()
     }
 
-    /// Callers of a symbol (for "called from" in Flow).
     pub fn callers_of(&self, target: &SymId) -> Vec<&CallEdge> {
         self.calls.iter().filter(|c| &c.to == target).collect()
     }
 
-    /// Calls made by a symbol.
     pub fn calls_from(&self, file: &str, sym: usize) -> Vec<&CallEdge> {
         self.calls
             .iter()
@@ -269,7 +246,6 @@ impl Index {
             .collect()
     }
 
-    /// Search files and symbols by name.
     pub fn search(&self, query: &str, limit: usize) -> Vec<SearchHit> {
         let mut hits: Vec<SearchHit> = Vec::new();
         for f in &self.files {
@@ -326,21 +302,14 @@ pub fn in_dir(file: &str, dir: &str) -> bool {
         || (file.len() > dir.len() && file.starts_with(dir) && file.as_bytes()[dir.len()] == b'/')
 }
 
-/// Name resolution by rules, most specific first:
-/// same file, then explicit imports, then `self`/type receivers, then a
-/// unique match across the repo.
 struct Resolver<'a> {
     index: &'a Index,
-    /// name -> symbols with that name (callables and containers)
     by_name: HashMap<&'a str, Vec<SymId>>,
-    /// (container, method) -> symbols
     methods: HashMap<(&'a str, &'a str), Vec<SymId>>,
     files: BTreeSet<&'a str>,
-    /// Rust crates in the repo: (source root holding lib.rs/main.rs, name).
     crates: Vec<(String, String)>,
 }
 
-/// Rust crates declared by Cargo.toml files: their `src` dir and name.
 fn rust_crates(index: &Index) -> Vec<(String, String)> {
     let mut out = Vec::new();
     for f in index.files.iter().filter(|f| f.ends_with("Cargo.toml")) {
@@ -418,7 +387,6 @@ impl<'a> Resolver<'a> {
         files.sort();
         for file in files {
             let syms = &self.index.parsed[file];
-            // Module imports: alias -> files; imported name -> (files, original name)
             let mut module_alias: HashMap<String, Vec<String>> = HashMap::new();
             let mut imported_names: HashMap<String, (Vec<String>, String)> = HashMap::new();
             for imp in &syms.imports {
@@ -428,7 +396,6 @@ impl<'a> Resolver<'a> {
                         imports.entry(file.clone()).or_default().insert(t.clone());
                     }
                 }
-                // Python `from pkg import mod` where mod is a module file.
                 for (name, alias) in &imp.names {
                     let local = alias.clone().unwrap_or_else(|| name.clone());
                     let sub = self.resolve_submodule(file, syms.lang, imp, name);
@@ -471,7 +438,6 @@ impl<'a> Resolver<'a> {
                     &imported_names,
                     imported_files.as_ref(),
                 ) {
-                    // Skip a function "calling" its own definition line.
                     if to.file == *file
                         && Some(to.idx) == call.caller
                         && self.index.parsed[file].symbols[to.idx].start_line == call.line
@@ -509,11 +475,9 @@ impl<'a> Resolver<'a> {
         let caller_container = call.caller.and_then(|c| syms.symbols[c].container.clone());
         match call.receiver.as_deref() {
             None => {
-                // 1. Same file: prefer non-methods (functions, classes).
                 if let Some(c) = in_file(file).find(|c| self.sym(c).kind != SymKind::Method) {
                     return Some(c.clone());
                 }
-                // 2. Imported by name.
                 if let Some((targets, original)) = imported_names.get(name) {
                     for t in targets {
                         if let Some(c) = self.by_name.get(original.as_str()).and_then(|v| {
@@ -524,9 +488,6 @@ impl<'a> Resolver<'a> {
                         }
                     }
                 }
-                // 3. A unique definition the caller can see without naming
-                //    it: the same directory (a Go package, a Python
-                //    package's siblings through `*`), or a file it imports.
                 let dir = parent_dir(file);
                 let visible: Vec<&SymId> = candidates
                     .iter()
@@ -543,7 +504,6 @@ impl<'a> Resolver<'a> {
             }
             Some(recv) => {
                 let recv_head = recv.split(['.', ':']).next().unwrap_or(recv);
-                // self.foo() / this.foo() / Self::foo()
                 if matches!(recv, "self" | "this" | "cls" | "Self") {
                     if let Some(container) = &caller_container {
                         if let Some(v) = self.methods.get(&(container.as_str(), name)) {
@@ -557,7 +517,6 @@ impl<'a> Resolver<'a> {
                     }
                     return None;
                 }
-                // module.func() through an import alias
                 if let Some(targets) = module_alias
                     .get(recv)
                     .or_else(|| module_alias.get(recv_head))
@@ -568,7 +527,6 @@ impl<'a> Resolver<'a> {
                         }
                     }
                 }
-                // Type::method() / Type.method()
                 let recv_last = recv
                     .rsplit(['.', ':'])
                     .find(|s| !s.is_empty())
@@ -581,8 +539,6 @@ impl<'a> Resolver<'a> {
                 if GENERIC_METHODS.contains(&name) {
                     return None;
                 }
-                // obj.method(): a unique method of that name, preferring the
-                // same file, then the same directory.
                 let methods: Vec<&SymId> = candidates
                     .iter()
                     .filter(|c| self.sym(c).kind == SymKind::Method)
@@ -618,7 +574,6 @@ impl<'a> Resolver<'a> {
             .unwrap_or_default()
     }
 
-    /// Files a module path refers to.
     fn resolve_module(&self, file: &str, lang: Lang, imp: &lang::ImportRef) -> Vec<String> {
         let dir = parent_dir(file);
         match lang {
@@ -633,7 +588,6 @@ impl<'a> Resolver<'a> {
                     String::new()
                 };
                 if imp.module.is_empty() {
-                    // `from . import x`: the package itself
                     return self.first_existing(&[join_path(&base, "__init__.py")]);
                 }
                 let rel = imp.module.replace('.', "/");
@@ -663,7 +617,6 @@ impl<'a> Resolver<'a> {
                 self.first_existing(&cands)
             }
             Lang::Go => {
-                // Match the import path's tail against directories in the repo.
                 let tail = imp.module.as_str();
                 let mut best: Option<&str> = None;
                 for f in &self.files {
@@ -691,7 +644,6 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    /// `from pkg import mod` where `mod` is itself a module file.
     fn resolve_submodule(
         &self,
         file: &str,
@@ -718,7 +670,6 @@ impl<'a> Resolver<'a> {
     fn resolve_rust_path(&self, file: &str, path: &str) -> Vec<String> {
         let dir = parent_dir(file);
         if let Some(name) = path.strip_prefix("mod::") {
-            // `mod foo;` next to this file (or in its directory for mod.rs/lib.rs/main.rs)
             let fname = file.rsplit('/').next().unwrap_or(file);
             let base = if matches!(fname, "mod.rs" | "lib.rs" | "main.rs") {
                 dir.to_string()
@@ -733,7 +684,6 @@ impl<'a> Resolver<'a> {
         let segs: Vec<&str> = path.split("::").filter(|s| *s != "*").collect();
         let (base, rest): (String, &[&str]) = match segs.first() {
             Some(&"crate") => {
-                // The crate root: the directory holding lib.rs or main.rs.
                 let mut root = String::from("src");
                 let mut d = dir;
                 loop {
@@ -751,14 +701,12 @@ impl<'a> Resolver<'a> {
             }
             Some(&"super") => (parent_dir(dir).to_string(), &segs[1..]),
             Some(&"self") => (dir.to_string(), &segs[1..]),
-            // `use codemap::app::View` from tests/, examples/ or another crate.
             Some(first) => match self.crates.iter().find(|(_, name)| name == first) {
                 Some((src, _)) => (src.clone(), &segs[1..]),
                 None => return Vec::new(),
             },
             None => return Vec::new(),
         };
-        // Longest prefix of segments that names a file.
         for n in (1..=rest.len()).rev() {
             let rel = rest[..n].join("/");
             let found = self.first_existing(&[
@@ -769,7 +717,6 @@ impl<'a> Resolver<'a> {
                 return found;
             }
         }
-        // Otherwise the items live in the module file itself.
         self.first_existing(&[
             join_path(&base, "lib.rs"),
             join_path(&base, "main.rs"),
@@ -786,7 +733,6 @@ fn join_path(dir: &str, rel: &str) -> String {
     }
 }
 
-/// Collapse `.` and `..` segments.
 fn normalize(path: &str) -> String {
     let mut out: Vec<&str> = Vec::new();
     for seg in path.split('/') {
@@ -801,7 +747,6 @@ fn normalize(path: &str) -> String {
     out.join("/")
 }
 
-/// Resolve a path relative to the index root into an absolute path.
 pub fn abs(root: &Path, rel: &str) -> PathBuf {
     root.join(rel)
 }

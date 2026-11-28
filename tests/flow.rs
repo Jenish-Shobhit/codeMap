@@ -1,7 +1,3 @@
-//! The Flow builder: if/elif/else, loops, try/except, match, returns, for
-//! Python, Rust, TypeScript and Go, and the layout of every paneMorph
-//! function without overlapping boxes.
-
 mod common;
 
 use std::collections::BTreeMap;
@@ -63,7 +59,6 @@ fn python_constructs() {
     assert_eq!(s["return"], 2);
     assert_eq!(s["raise"], 1);
     assert_eq!(s["continue"], 1);
-    // The first statement group, then the decision.
     match &c.body[..2] {
         [Flow::Stmts(lines), Flow::If { cond, .. }] => {
             assert_eq!(lines[0].text, "total = 0");
@@ -125,7 +120,6 @@ fn rust_constructs() {
     assert_eq!(s["switch"], 1);
     assert_eq!(s["continue"], 1);
     assert_eq!(s["break"], 1);
-    // `return -1` in an arm, and the tail `if` returns from both branches.
     assert_eq!(s["return"], 3, "{s:?}");
     assert!(flow::layout(&c).overlaps().is_empty());
     let t = text_of(&c);
@@ -173,7 +167,6 @@ fn early_return_ends_the_path() {
         other => panic!("{other:?}"),
     }
     let t = text_of(&c);
-    // The guard's return sits beside the decision on the same row.
     let row = t.lines().find(|l| l.contains("◇ x")).unwrap();
     assert!(row.contains("yes") && row.contains("◉ return 1"), "{t}");
 }
@@ -195,8 +188,6 @@ fn changed_lines_are_marked() {
     assert_eq!(l.box_for_line(2), l.box_for_line(3));
 }
 
-/// M2's exit criterion: every function in paneMorph draws with no
-/// overlapping boxes.
 #[test]
 fn every_panemorph_function_lays_out_cleanly() {
     let root = fixtures_dir().join("panemorph");

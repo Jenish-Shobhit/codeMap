@@ -1,5 +1,3 @@
-//! Import statements, read by walking the syntax tree.
-
 use tree_sitter::Node;
 
 use super::{text, ImportRef, Lang};
@@ -117,7 +115,6 @@ fn rust(node: Node, src: &str, out: &mut Vec<ImportRef>) -> bool {
             }
             true
         }
-        // `mod foo;` pulls in foo.rs / foo/mod.rs.
         "mod_item" if node.child_by_field_name("body").is_none() => {
             if let Some(name) = node.child_by_field_name("name") {
                 out.push(ImportRef {

@@ -1,7 +1,3 @@
-//! The checkpoint hook: turn boundaries from agent status changes, keyed by
-//! terminal id and agent, stored in the shadow store without touching the
-//! repository.
-
 mod common;
 
 use std::io::{BufRead, BufReader, Write};
@@ -48,14 +44,12 @@ fn turns_start_and_end_on_status_changes() {
     assert_eq!(out.turn, Some(1));
     let start = out.checkpoint.unwrap();
 
-    // The agent edits during its turn.
     write(
         repo.path(),
         "app.py",
         "def main():\n    return helper()\n\ndef helper():\n    return 1\n",
     );
 
-    // Repeated status reports do nothing.
     let out = hook::handle(&store, None, &event("w1:p2", "working"), Some(&c)).unwrap();
     assert_eq!(out.action, "none");
 
@@ -79,11 +73,9 @@ fn turns_start_and_end_on_status_changes() {
     assert_eq!(pane.turns[0].end_status.as_deref(), Some("done"));
     assert_eq!(pane.last_status.as_deref(), Some("done"));
 
-    // A second turn gets number 2.
     let out = hook::handle(&store, None, &event("w1:p2", "working"), Some(&c)).unwrap();
     assert_eq!((out.action, out.turn), ("start", Some(2)));
 
-    // Blocked ends the turn; answering the question reopens the same turn.
     let out = hook::handle(&store, None, &event("w1:p2", "blocked"), Some(&c)).unwrap();
     assert_eq!((out.action, out.turn), ("end", Some(2)));
     let out = hook::handle(&store, None, &event("w1:p2", "working"), Some(&c)).unwrap();
@@ -91,7 +83,6 @@ fn turns_start_and_end_on_status_changes() {
     let out = hook::handle(&store, None, &event("w1:p2", "idle"), Some(&c)).unwrap();
     assert_eq!((out.action, out.turn), ("end", Some(2)));
 
-    // Undo the test's own edit: the repository itself must be untouched.
     write(repo.path(), "app.py", "def main():\n    return 1\n");
     let after = fingerprint(repo.path());
     assert_eq!(before.0, after.0, "the hook wrote into .git");
@@ -132,10 +123,7 @@ fn retention_keeps_the_last_fifty_turns() {
     assert!(!refs.iter().any(|r| r.ends_with("/1-start")));
 }
 
-/// A fake herdr answering pane.get, so the hook keys by terminal id and
-/// follows the pane's foreground cwd.
 fn fake_herdr(_dir: &std::path::Path, cwd: &std::path::Path) -> std::path::PathBuf {
-    // Unix socket paths are limited to ~104 bytes on macOS; temp_dir() is long.
     let sock = std::path::PathBuf::from(format!(
         "/tmp/cmh-{}-{}.sock",
         std::process::id(),
@@ -177,12 +165,10 @@ fn keys_by_terminal_id_and_follows_foreground_cwd() {
     let client = Client::new(&sock);
     let state = TempDir::new("hook-state4");
     let store = Store::new(state.path());
-    // The context has no cwd for this pane: pane.get provides it.
     let out = hook::handle(&store, Some(&client), &event("w9:p9", "working"), None).unwrap();
     assert_eq!(out.action, "start");
     assert_eq!(out.pane_key, "term_42-claude");
     assert_eq!(out.repo.as_deref(), Some(repo.path()));
-    // After a move the pane id changes but the terminal id does not.
     let out = hook::handle(&store, Some(&client), &event("w2:p1", "idle"), None).unwrap();
     assert_eq!(out.action, "end");
     assert_eq!(out.pane_key, "term_42-claude");
@@ -222,7 +208,6 @@ fn the_binary_runs_as_herdr_runs_it() {
     write(repo.path(), "app.py", "def f():\n    return 2\n");
     assert!(run("idle").starts_with("end w1_p7-claude turn 1"));
     let elapsed = t.elapsed();
-    // Two hook runs, each with a snapshot: well inside the 250 ms budget each.
     assert!(elapsed.as_millis() < 2_000, "hook took {elapsed:?}");
     assert!(state.path().join("panes/w1_p7-claude.json").is_file());
 }

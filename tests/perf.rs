@@ -1,6 +1,3 @@
-//! Performance checks, ignored by default (timings vary with load):
-//! `cargo test --release --test perf -- --ignored --nocapture`
-
 mod common;
 
 use std::io::Write;
@@ -11,7 +8,6 @@ use codemap::app::{App, Options, View};
 use codemap::git;
 use common::*;
 
-/// 2,000 commits with a branch merged every 50, written with fast-import.
 fn big_history(dir: &std::path::Path) {
     git(dir, &["init", "-q"]);
     let mut s = String::new();
@@ -34,7 +30,6 @@ fn big_history(dir: &std::path::Path) {
         ));
         main_tip = mark;
         if i % 50 == 49 {
-            // a side branch of two commits merged back
             mark += 1;
             let b1 = mark;
             s.push_str(&format!(
@@ -128,12 +123,10 @@ fn huge_repo_paints_first_and_parses_lazily() {
             theme: dracula(),
         })
     };
-    // First paint: nothing loaded yet.
     let t0 = Instant::now();
     let mut app = mk();
     let _ = codemap::ui::render_text(&mut app, 180, 50);
     let first = t0.elapsed();
-    // Full load (listing, folder-level parse, diff, history) synchronously.
     let t1 = Instant::now();
     let mut app = mk();
     app.load_blocking();
@@ -146,7 +139,6 @@ fn huge_repo_paints_first_and_parses_lazily() {
         "parsed {} files up front",
         app.index.parsed_count()
     );
-    // Zooming into a folder parses just that folder.
     let t2 = Instant::now();
     app.zoom_to(codemap::map::Level::Dir("pkg150".into()), None);
     let _ = codemap::ui::render_text(&mut app, 180, 50);

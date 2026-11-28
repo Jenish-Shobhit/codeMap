@@ -1,8 +1,3 @@
-//! The Map: folders, files and symbols as boxes, calls and imports as lines.
-//!
-//! Levels zoom from a directory (its subfolders and files) into a file (its
-//! functions and classes, plus the files it calls into and is called from).
-
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::canvas::{Band, Canvas, Tone, DOWN};
@@ -12,7 +7,6 @@ use crate::lang::{self, Lang, SymKind};
 use crate::layout::{self, LEdge, LNode, Layout, Options};
 use crate::util;
 
-/// Boxes per page before a level paginates.
 pub const PAGE_SIZE: usize = 36;
 const MAX_ROWS: usize = 8;
 const MAX_BOX_W: usize = 46;
@@ -42,13 +36,10 @@ impl Level {
     }
 }
 
-/// What changed, per file and per symbol, in the active scope.
 #[derive(Debug, Clone, Default)]
 pub struct Marks {
     pub files: HashMap<String, char>,
-    /// file -> symbol index -> 'A' | 'M'
     pub symbols: HashMap<String, BTreeMap<usize, char>>,
-    /// file -> set of changed new-side lines (for Flow)
     pub lines: HashMap<String, BTreeMap<u32, char>>,
 }
 
@@ -69,7 +60,6 @@ impl Marks {
         self.files.is_empty()
     }
 
-    /// Changed callables, for the rail: (file, symbol index, mark).
     pub fn changed_symbols(&self, index: &Index) -> Vec<(String, usize, char)> {
         let mut out = Vec::new();
         for (file, syms) in &self.symbols {
@@ -87,7 +77,6 @@ impl Marks {
     }
 }
 
-/// Symbol names of a source text, for `compute_marks`.
 pub fn quals_of(path: &str, src: &str) -> Option<BTreeSet<String>> {
     let lang = Lang::from_path(path)?;
     Some(
@@ -99,9 +88,6 @@ pub fn quals_of(path: &str, src: &str) -> Option<BTreeSet<String>> {
     )
 }
 
-/// Compute marks from a diff. `old_quals` gives the symbol names of the
-/// base version of a file, so a symbol whose name is new is "A" even when
-/// git aligned some of its lines with old ones.
 pub fn compute_marks(
     index: &Index,
     diffs: &[FileDiff],
@@ -137,7 +123,6 @@ pub fn compute_marks(
             if is_new {
                 sm.insert(i, 'A');
             } else if let Some(m) = d.mark_for_range(s.start_line, s.end_line) {
-                // Containers are "M" when anything inside them changed.
                 let m = if old_quals.is_some() && m == 'A' {
                     'M'
                 } else {
@@ -159,14 +144,8 @@ pub fn compute_marks(
 pub enum NodeKind {
     Dir(String),
     File(String),
-    /// A function, method or class of the file level.
-    Symbol {
-        file: String,
-        idx: usize,
-    },
-    /// Another file, at the file level (callers and callees).
+    Symbol { file: String, idx: usize },
     External(String),
-    /// "N more" when a level is paginated.
     More,
 }
 
@@ -174,7 +153,6 @@ pub enum NodeKind {
 pub struct Row {
     pub text: String,
     pub mark: Option<char>,
-    /// Symbol in `file` this row stands for (selectable rows).
     pub sym: Option<(String, usize)>,
     pub dim: bool,
 }
@@ -197,7 +175,6 @@ impl Node {
         (w.clamp(MIN_BOX_W, MAX_BOX_W), self.rows.len().max(1) + 2)
     }
 
-    /// The symbol this node stands for, if any.
     pub fn symbol(&self) -> Option<(String, usize)> {
         match &self.kind {
             NodeKind::Symbol { file, idx } => Some((file.clone(), *idx)),
@@ -223,7 +200,6 @@ pub struct Scene {
     pub layout: Layout,
     pub page: usize,
     pub pages: usize,
-    /// "7 modules · 38 functions · 4 changed"
     pub summary: String,
 }
 
@@ -245,7 +221,6 @@ fn human_size(bytes: u64) -> String {
     }
 }
 
-/// Rows describing a file's top-level symbols.
 fn file_rows(index: &Index, marks: &Marks, file: &str) -> (Vec<Row>, Option<String>) {
     let Some(fs) = index.symbols(file) else {
         let size = std::fs::metadata(index.root.join(file))
@@ -307,7 +282,6 @@ fn file_rows(index: &Index, marks: &Marks, file: &str) -> (Vec<Row>, Option<Stri
             dim: true,
         });
     }
-    // Changed rows first when the box must be cut.
     if rows.len() > MAX_ROWS {
         let extra = rows.len() - (MAX_ROWS - 1);
         let mut keep: Vec<Row> = rows.iter().filter(|r| r.mark.is_some()).cloned().collect();
@@ -320,7 +294,6 @@ fn file_rows(index: &Index, marks: &Marks, file: &str) -> (Vec<Row>, Option<Stri
             }
         }
         keep.truncate(MAX_ROWS - 1);
-        // keep source order
         keep.sort_by_key(|r| r.sym.as_ref().map(|s| s.1).unwrap_or(usize::MAX));
         keep.push(Row {
             text: format!("… {extra} more"),
@@ -333,8 +306,6 @@ fn file_rows(index: &Index, marks: &Marks, file: &str) -> (Vec<Row>, Option<Stri
     (rows, title_extra)
 }
 
-/// Methods of a container, including those in `impl` blocks of the same
-/// type elsewhere in the file (Rust).
 pub fn methods_of(fs: &lang::FileSymbols, container: usize) -> Vec<usize> {
     let name = &fs.symbols[container].name;
     let mut out: Vec<usize> = fs.children(container);
@@ -349,7 +320,6 @@ pub fn methods_of(fs: &lang::FileSymbols, container: usize) -> Vec<usize> {
     out
 }
 
-/// Build the scene for a level.
 pub fn build(index: &Index, marks: &Marks, level: &Level, page: usize, max_width: usize) -> Scene {
     let (nodes, edges, pages, summary) = match level {
         Level::Dir(dir) => build_dir(index, marks, dir, page),
@@ -441,7 +411,6 @@ fn build_dir(index: &Index, marks: &Marks, dir: &str, page: usize) -> Built {
             muted: Lang::from_path(f).is_none(),
         });
     }
-    // Pagination: code first when cutting (dirs, source files, then others).
     let total = nodes.len();
     let pages = total.div_ceil(PAGE_SIZE).max(1);
     let page = page.min(pages - 1);
@@ -469,7 +438,6 @@ fn build_dir(index: &Index, marks: &Marks, dir: &str, page: usize) -> Built {
             });
         }
     }
-    // Which node holds a file?
     let owner = |file: &str| -> Option<usize> {
         nodes.iter().position(|n| match &n.kind {
             NodeKind::File(f) => f == file,
@@ -557,7 +525,6 @@ fn build_file(index: &Index, marks: &Marks, file: &str) -> Built {
         return (nodes, Vec::new(), 1, "no grammar for this file".to_string());
     };
     let lang = fs.lang;
-    // One node per top-level function and container.
     let top: Vec<usize> = fs
         .top_level()
         .into_iter()
@@ -585,7 +552,6 @@ fn build_file(index: &Index, marks: &Marks, file: &str) -> Built {
                 });
                 node_of_sym.insert(m, nodes.len());
             }
-            // Impl blocks of the same type map to this node too.
             for (j, other) in fs.symbols.iter().enumerate() {
                 if other.kind == SymKind::Impl && other.name == s.name {
                     node_of_sym.insert(j, nodes.len());
@@ -638,7 +604,6 @@ fn build_file(index: &Index, marks: &Marks, file: &str) -> Built {
             muted: false,
         });
     }
-    // Map nested functions to their outermost top-level node.
     let owner_node = |mut i: usize| -> Option<usize> {
         loop {
             if let Some(&n) = node_of_sym.get(&i) {
@@ -648,10 +613,9 @@ fn build_file(index: &Index, marks: &Marks, file: &str) -> Built {
         }
     };
     let mut agg: BTreeMap<(usize, usize), (usize, BTreeSet<String>)> = BTreeMap::new();
-    // External files: callees and callers.
     let mut ext_out: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     let mut ext_in: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    let mut ext_edges: Vec<(Option<usize>, String, bool, String)> = Vec::new(); // (local node, ext file, outgoing, name)
+    let mut ext_edges: Vec<(Option<usize>, String, bool, String)> = Vec::new();
     for c in &index.calls {
         if c.from_file == file && c.to.file == file {
             let (Some(a), Some(b)) = (c.from_sym.and_then(owner_node), owner_node(c.to.idx)) else {
@@ -692,7 +656,6 @@ fn build_file(index: &Index, marks: &Marks, file: &str) -> Built {
             ));
         }
     }
-    // Keep the busiest external files.
     let mut ext_files: Vec<(String, usize)> = ext_out
         .iter()
         .map(|(f, s)| (f.clone(), s.len()))
@@ -768,21 +731,17 @@ fn build_file(index: &Index, marks: &Marks, file: &str) -> Built {
     (nodes, edges, 1, summary.join(" · "))
 }
 
-/// Selection inside a scene: a node and optionally one of its rows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Cursor {
     pub node: usize,
     pub row: Option<usize>,
 }
 
-/// Draw a scene. The selected node gets a bright border and an active band
-/// on the selected row; edges touching it are highlighted.
 pub fn draw(scene: &Scene, cursor: Option<Cursor>) -> Canvas {
     let l = &scene.layout;
     let mut c = Canvas::new(l.width + 2, l.height + 2);
     let selected = cursor.map(|c| c.node);
     let mut order: Vec<usize> = (0..l.routes.len()).collect();
-    // Highlighted edges last so they win shared cells.
     order.sort_by_key(|&i| {
         let e = l.routes[i].edge;
         selected.is_some_and(|s| e.from == s || e.to == s)
@@ -804,7 +763,6 @@ pub fn draw(scene: &Scene, cursor: Option<Cursor>) -> Canvas {
         };
         c.polyline(&r.points, tone);
         let (sx, sy) = r.points[0];
-        // join the source's bottom border
         if sy > 0 {
             c.bits(sx, sy - 1, DOWN, tone);
         }
@@ -828,7 +786,6 @@ pub fn draw(scene: &Scene, cursor: Option<Cursor>) -> Canvas {
                 None => Tone::Rule,
             }
         };
-        // Keep port junctions drawn by edges on the borders.
         let mut saved = Vec::new();
         for x in r.x..r.right() {
             for y in [r.y, r.bottom() - 1] {
@@ -903,7 +860,6 @@ pub fn draw(scene: &Scene, cursor: Option<Cursor>) -> Canvas {
             }
         }
     }
-    // Edge labels: callee names beside the arrowhead when there is room.
     for (ei, e) in scene.edges.iter().enumerate() {
         let Some(route) = l
             .routes
@@ -931,7 +887,6 @@ pub fn draw(scene: &Scene, cursor: Option<Cursor>) -> Canvas {
     c
 }
 
-/// Index of the node at a scene position (for mouse-free tests and search).
 pub fn node_for_symbol(scene: &Scene, file: &str, idx: usize) -> Option<Cursor> {
     for (i, n) in scene.nodes.iter().enumerate() {
         if let NodeKind::Symbol { file: f, idx: s } = &n.kind {
@@ -951,7 +906,6 @@ pub fn node_for_symbol(scene: &Scene, file: &str, idx: usize) -> Option<Cursor> 
     None
 }
 
-/// The node standing for a file or directory at a dir level.
 pub fn node_for_path(scene: &Scene, path: &str) -> Option<usize> {
     scene.nodes.iter().position(|n| match &n.kind {
         NodeKind::File(f) | NodeKind::External(f) => f == path,

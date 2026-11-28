@@ -1,6 +1,3 @@
-//! The terminal loop: paint the frame first, then fill in content as the
-//! workers deliver it.
-
 use std::io::{self, Write};
 use std::time::{Duration, Instant};
 
@@ -50,7 +47,6 @@ pub fn run(opts: Options, trace: Trace) -> io::Result<i32> {
     app.first_paint_ms = Some(first_paint.as_secs_f64() * 1000.0);
     let mut content_ms: Option<f64> = None;
 
-    // Follow mode: a pinned split retargets when another pane gets focus.
     let follow_rx = if app.pinned { follow_events() } else { None };
 
     let mut dirty = false;
@@ -279,7 +275,6 @@ fn copy(text: &str) -> bool {
             }
         }
     }
-    // OSC 52: ask the terminal to copy.
     let b64 = base64(text.as_bytes());
     let mut out = io::stdout();
     let _ = write!(out, "\x1b]52;c;{b64}\x07");

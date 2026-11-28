@@ -1,10 +1,3 @@
-//! Languages and symbol extraction with tree-sitter.
-//!
-//! Definitions and calls come from tags-style queries (`@def.*` for
-//! definitions, `@ref.call` for calls, as in tree-sitter's code navigation
-//! tags). Imports are read by walking the tree, because their shapes differ
-//! too much between languages for one capture scheme.
-
 mod imports;
 mod queries;
 
@@ -67,7 +60,6 @@ impl Lang {
         }
     }
 
-    /// Whether the Flow view can chart functions of this language.
     pub fn has_flow(self) -> bool {
         true
     }
@@ -89,7 +81,6 @@ impl Lang {
     }
 }
 
-/// Extensions codeMap can parse, for "grammar missing" messages.
 pub fn supported_extensions() -> &'static str {
     ".py .rs .ts .tsx .js .jsx .go"
 }
@@ -115,12 +106,10 @@ pub enum SymKind {
 }
 
 impl SymKind {
-    /// Functions and methods have bodies worth charting and can make calls.
     pub fn is_callable(self) -> bool {
         matches!(self, SymKind::Function | SymKind::Method)
     }
 
-    /// Containers group methods in the Map.
     pub fn is_container(self) -> bool {
         matches!(
             self,
@@ -156,19 +145,15 @@ impl SymKind {
 pub struct Symbol {
     pub name: String,
     pub kind: SymKind,
-    /// 1-based, inclusive.
     pub start_line: u32,
     pub end_line: u32,
     pub start_byte: usize,
     pub end_byte: usize,
-    /// Enclosing symbol (class, impl, function) by index.
     pub parent: Option<usize>,
-    /// Type a method belongs to (class name, impl type, Go receiver).
     pub container: Option<String>,
 }
 
 impl Symbol {
-    /// "Class.method" or "name".
     pub fn qual(&self) -> String {
         match &self.container {
             Some(c) if self.kind == SymKind::Method => format!("{c}.{}", self.name),
@@ -183,23 +168,17 @@ impl Symbol {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CallRef {
-    /// Innermost enclosing function or method, None at module level.
     pub caller: Option<usize>,
     pub name: String,
-    /// `self` in `self.foo()`, `api` in `api.request()`, `Foo` in `Foo::new()`.
     pub receiver: Option<String>,
     pub line: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ImportRef {
-    /// Module path as written: "panemorph.api", "crate::git::diff", "./util", "fmt".
     pub module: String,
-    /// Imported names with optional alias: `from m import a as b`.
     pub names: Vec<(String, Option<String>)>,
-    /// Alias for the module itself: `import numpy as np`, Go package names.
     pub alias: Option<String>,
-    /// Python relative import depth (number of leading dots).
     pub level: u32,
     pub line: u32,
 }
@@ -211,12 +190,10 @@ pub struct FileSymbols {
     pub calls: Vec<CallRef>,
     pub imports: Vec<ImportRef>,
     pub lines: u32,
-    /// True when tree-sitter reported syntax errors (results are best effort).
     pub has_errors: bool,
 }
 
 impl FileSymbols {
-    /// Top-level definitions (no parent, or whose parent is a module).
     pub fn top_level(&self) -> Vec<usize> {
         (0..self.symbols.len())
             .filter(|&i| match self.symbols[i].parent {
@@ -232,7 +209,6 @@ impl FileSymbols {
             .collect()
     }
 
-    /// The innermost callable containing a 1-based line.
     pub fn callable_at_line(&self, line: u32) -> Option<usize> {
         self.symbols
             .iter()
@@ -251,8 +227,6 @@ fn text<'a>(node: Node, src: &'a str) -> &'a str {
     src.get(node.byte_range()).unwrap_or("")
 }
 
-/// Clean a type expression down to its base name: `Foo<T>` -> `Foo`,
-/// `&mut crate::x::Foo` -> `Foo`.
 fn base_type_name(s: &str) -> String {
     let s = s
         .trim()
@@ -265,7 +239,6 @@ fn base_type_name(s: &str) -> String {
     s.trim().to_string()
 }
 
-/// Parse `src` and pull out definitions, calls and imports.
 pub fn extract(lang: Lang, src: &str) -> FileSymbols {
     let lines = src.lines().count() as u32;
     let Some(tree) = parse(lang, src) else {
@@ -340,7 +313,6 @@ pub fn extract_tree(lang: Lang, src: &str, tree: &Tree) -> FileSymbols {
             if kind == SymKind::Impl {
                 name_text = base_type_name(&name_text);
             }
-            // Go `type X struct/interface` decides the kind from the type node.
             let go_type = if lang == Lang::Go && kind == SymKind::Struct {
                 node.child_by_field_name("type")
                     .map(|t| t.kind().to_string())
@@ -360,8 +332,6 @@ pub fn extract_tree(lang: Lang, src: &str, tree: &Tree) -> FileSymbols {
         } else if let (Some(call), Some(name)) = (call_node, name_node) {
             let recv = recv_node.map(|r| {
                 let t = text(r, src);
-                // Keep receivers short: `self.client` -> "self.client",
-                // long expressions -> their last identifier.
                 let t = t.trim();
                 if t.len() > 60 || t.contains('\n') || t.contains('(') {
                     t.rsplit(['.', ':', ')'])
@@ -382,8 +352,6 @@ pub fn extract_tree(lang: Lang, src: &str, tree: &Tree) -> FileSymbols {
         }
     }
 
-    // Deduplicate definitions (a node can match two patterns) and sort by
-    // position so parents precede children.
     defs.sort_by(|a, b| {
         a.start_byte
             .cmp(&b.start_byte)
@@ -437,7 +405,6 @@ pub fn extract_tree(lang: Lang, src: &str, tree: &Tree) -> FileSymbols {
         stack.push(symbols.len() - 1);
     }
 
-    // Attach each call to the innermost enclosing callable.
     let callables: Vec<usize> = (0..symbols.len())
         .filter(|&i| symbols[i].kind.is_callable())
         .collect();
@@ -482,8 +449,6 @@ mod tests {
         }
     }
 
-    /// `parse` turns a grammar the runtime cannot load into "no tree", so a
-    /// tree-sitter upgrade that drops a grammar's ABI must fail here instead.
     #[test]
     fn every_grammar_loads() {
         let supported =

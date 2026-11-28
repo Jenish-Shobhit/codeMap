@@ -1,10 +1,6 @@
-//! The demo workspace both captures show: paneMorph's code in a git
-//! repository with a short history, and the agent turn applied to it.
-
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// The repository and its second worktree.
 pub struct Repo {
     pub root: PathBuf,
     pub worktree: PathBuf,
@@ -59,7 +55,6 @@ pub fn copy_tree(from: &Path, to: &Path) {
     }
 }
 
-/// Copy one fixture file as it was before the agent's turn.
 fn copy(fx: &Path, root: &Path, rel: &str) {
     let dest = root.join(rel);
     std::fs::create_dir_all(dest.parent().unwrap()).unwrap();
@@ -76,8 +71,6 @@ fn write(root: &Path, rel: &str, text: &str) {
     std::fs::write(root.join(rel), text).unwrap();
 }
 
-/// Build `code/paneMorph` (and the `code/paneMorph-docs` worktree) under
-/// `home`, with the code as it was before the agent's turn.
 pub fn build_repo(fx: &Path, home: &Path) -> Repo {
     let code = home.join("code");
     let root = code.join("paneMorph");
@@ -149,7 +142,6 @@ pub fn build_repo(fx: &Path, home: &Path) -> Repo {
     merge(&day(20, 10), "overlay-selector");
     git(r, &day(20, 10), &["branch", "-q", "-D", "overlay-selector"]);
 
-    // A second worktree, where another agent writes docs.
     let worktree = code.join("paneMorph-docs");
     let wt = worktree.to_str().unwrap();
     git(
@@ -169,7 +161,6 @@ pub fn build_repo(fx: &Path, home: &Path) -> Repo {
     }
 }
 
-/// What the agent's turn wrote: the real change of paneMorph's b8b645e.
 pub fn apply_turn(fx: &Path, root: &Path) {
     copy_tree(&fx.join("panemorph"), root);
 }

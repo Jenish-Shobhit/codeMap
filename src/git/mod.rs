@@ -1,9 +1,3 @@
-//! Git through the `git` CLI. Every command that touches the user's repository
-//! is read-only: `GIT_OPTIONAL_LOCKS=0` stops `git status`-style commands from
-//! refreshing (writing) the index, and codeMap never runs a command that
-//! creates refs, stashes or index entries there. Checkpoints live in a shadow
-//! repository in codeMap's own state directory (see `store`).
-
 pub mod diff;
 pub mod graph;
 
@@ -24,7 +18,6 @@ impl std::fmt::Display for GitError {
 
 impl std::error::Error for GitError {}
 
-/// A `git` command with a predictable, side-effect-free environment.
 pub fn git_cmd(cwd: &Path) -> Command {
     let mut cmd = Command::new("git");
     cmd.current_dir(cwd)
@@ -63,18 +56,12 @@ pub fn run(cwd: &Path, args: &[&str]) -> Result<String, GitError> {
     run_cmd(cmd).map(|out| String::from_utf8_lossy(&out).into_owned())
 }
 
-/// Facts about the repository around a directory.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RepoInfo {
-    /// The worktree root (`--show-toplevel`).
     pub root: PathBuf,
-    /// This worktree's git dir (`.git` or `.git/worktrees/<name>`).
     pub git_dir: PathBuf,
-    /// The shared git dir holding objects and refs.
     pub common_dir: PathBuf,
-    /// HEAD commit, None in an empty repository.
     pub head: Option<String>,
-    /// Current branch name, None when detached or empty.
     pub branch: Option<String>,
 }
 
@@ -95,7 +82,6 @@ impl RepoInfo {
     }
 }
 
-/// Find the repository containing `path`. Err(None) means "not a git repo".
 pub fn discover(path: &Path) -> Result<RepoInfo, Option<GitError>> {
     let dir = if path.is_dir() {
         path.to_path_buf()
@@ -127,7 +113,6 @@ pub fn discover(path: &Path) -> Result<RepoInfo, Option<GitError>> {
     let git_dir = PathBuf::from(lines.next().unwrap_or_default());
     let common = lines.next().unwrap_or_default();
     if root.as_os_str().is_empty() {
-        // A bare repository or inside .git: nothing to map.
         return Err(None);
     }
     let common_dir = {
@@ -156,7 +141,6 @@ pub fn discover(path: &Path) -> Result<RepoInfo, Option<GitError>> {
     })
 }
 
-/// Tracked plus untracked-but-not-ignored files, relative to the root.
 pub fn list_files(root: &Path) -> Result<Vec<String>, GitError> {
     let mut cmd = git_cmd(root);
     cmd.args([
@@ -175,12 +159,10 @@ pub fn list_files(root: &Path) -> Result<Vec<String>, GitError> {
         .collect();
     files.sort();
     files.dedup();
-    // Deleted-but-tracked files still show up in --cached; keep only real files.
     files.retain(|f| root.join(f).is_file());
     Ok(files)
 }
 
-/// Directories never worth walking outside a git repository.
 const SKIP_DIRS: &[&str] = &[
     ".git",
     "node_modules",
@@ -197,7 +179,6 @@ const SKIP_DIRS: &[&str] = &[
     ".next",
 ];
 
-/// Walk a plain directory (not a git repo), capped at `limit` files.
 pub fn walk_files(root: &Path, limit: usize) -> Vec<String> {
     let mut out = Vec::new();
     let mut stack = vec![root.to_path_buf()];
@@ -230,7 +211,6 @@ pub fn walk_files(root: &Path, limit: usize) -> Vec<String> {
     out
 }
 
-/// Parse `git diff` output between two tree-ish objects of the user's repo.
 pub fn diff_trees(root: &Path, from: &str, to: &str) -> Result<Vec<FileDiff>, GitError> {
     let out = run(
         root,
@@ -250,9 +230,6 @@ pub fn diff_trees(root: &Path, from: &str, to: &str) -> Result<Vec<FileDiff>, Gi
     Ok(diff::parse(&out))
 }
 
-/// Working tree against HEAD (staged, unstaged and untracked), without
-/// touching the user's index: git reads a private copy of it, so any stat
-/// refresh lands in `scratch`, not in the repository.
 pub fn diff_head(info: &RepoInfo, scratch: &Path) -> Result<Vec<FileDiff>, GitError> {
     std::fs::create_dir_all(scratch).map_err(|e| GitError(e.to_string()))?;
     let index_copy = scratch.join("index.head");
@@ -260,10 +237,6 @@ pub fn diff_head(info: &RepoInfo, scratch: &Path) -> Result<Vec<FileDiff>, GitEr
     let _ = std::fs::remove_file(&index_copy);
     if theirs.is_file() {
         std::fs::copy(&theirs, &index_copy).map_err(|e| GitError(e.to_string()))?;
-        // git re-reads an entry whose file is not older than the index file
-        // ("racily clean"). Give the copy the index's mtime, as macOS's copy
-        // already does and Linux's does not; a newer copy would make git trust
-        // stale stat data and miss same-size edits from that second.
         let mtime = std::fs::metadata(&theirs)
             .and_then(|m| m.modified())
             .map_err(|e| GitError(e.to_string()))?;
@@ -299,7 +272,6 @@ pub fn diff_head(info: &RepoInfo, scratch: &Path) -> Result<Vec<FileDiff>, GitEr
             files.push(diff::added_file(&info.root, &rel));
         }
     } else {
-        // Empty repository: everything is new.
         for rel in list_files(&info.root)? {
             files.push(diff::added_file(&info.root, &rel));
         }
@@ -309,7 +281,6 @@ pub fn diff_head(info: &RepoInfo, scratch: &Path) -> Result<Vec<FileDiff>, GitEr
     Ok(files)
 }
 
-/// Files and diff of one commit.
 pub fn show_commit(root: &Path, sha: &str) -> Result<Vec<FileDiff>, GitError> {
     let out = run(
         root,
@@ -330,7 +301,6 @@ pub fn show_commit(root: &Path, sha: &str) -> Result<Vec<FileDiff>, GitError> {
     Ok(diff::parse(&out))
 }
 
-/// One `git worktree list --porcelain` record.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Worktree {
     pub path: PathBuf,
@@ -378,7 +348,6 @@ pub fn parse_worktrees(out: &str) -> Vec<Worktree> {
     list
 }
 
-/// Number of commits reachable from all refs (for the History header).
 pub fn count_commits(root: &Path) -> usize {
     run(root, &["rev-list", "--all", "--count"])
         .ok()

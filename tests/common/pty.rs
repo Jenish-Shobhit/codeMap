@@ -1,4 +1,3 @@
-//! A pty harness shared by the pty and live tests.
 #![allow(dead_code)]
 
 use std::fs::File;
@@ -9,8 +8,6 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-/// A minimal terminal screen: enough of VT100 to replay what ratatui and
-/// crossterm write (cursor moves, text, clears), ignoring colours.
 pub struct Screen {
     cols: usize,
     rows: usize,
@@ -63,7 +60,6 @@ impl Screen {
                         }
                     }
                     Some(']') => {
-                        // OSC: skip to BEL or ST
                         while let Some(d) = it.next() {
                             if d == '\x07' {
                                 break;
@@ -131,9 +127,6 @@ pub fn spawn(args: &[&str], envs: &[(&str, &str)], cols: u16, rows: u16) -> Pty 
         ws_xpixel: 0,
         ws_ypixel: 0,
     };
-    // SAFETY: openpty fills the two descriptors; we own them afterwards.
-    // A raw pointer for the window size: glibc declares it `*const`, macOS
-    // `*mut`, and `&raw mut` fits both.
     let rc = unsafe {
         libc::openpty(
             &mut master,
@@ -157,7 +150,6 @@ pub fn spawn(args: &[&str], envs: &[(&str, &str)], cols: u16, rows: u16) -> Pty 
     for (k, v) in envs {
         cmd.env(k, v);
     }
-    // SAFETY: only async-signal-safe calls between fork and exec.
     unsafe {
         cmd.pre_exec(|| {
             libc::setsid();
@@ -207,14 +199,12 @@ impl Pty {
         String::from_utf8_lossy(&self.out.lock().unwrap()).into_owned()
     }
 
-    /// The screen as the terminal would show it now.
     pub fn screen(&self) -> String {
         let mut sc = Screen::new(self.cols as usize, self.rows as usize);
         sc.feed(&self.out.lock().unwrap());
         sc.text()
     }
 
-    /// Wait until the screen shows `needle` (once `from` bytes have arrived).
     pub fn wait_for(&self, needle: &str, from: usize, timeout: Duration) -> Option<Duration> {
         let deadline = Instant::now() + timeout;
         loop {

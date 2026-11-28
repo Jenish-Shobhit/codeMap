@@ -1,6 +1,3 @@
-//! `herdr-plugin.toml` checked against the rules herdr 0.9.0 applies when it
-//! links a plugin (src/app/api/plugins/manifest.rs), without linking it.
-
 use std::path::Path;
 
 #[derive(serde::Deserialize)]
@@ -70,8 +67,6 @@ fn version_tuple(v: &str) -> (u32, u32, u32) {
     (it.next().unwrap(), it.next().unwrap(), it.next().unwrap())
 }
 
-/// herdr resolves a relative argv[0] containing a slash against the plugin
-/// root (plugin_command::program_for_cwd); a bare name is looked up on PATH.
 fn resolves_to_our_binary(cmd: &[String]) -> bool {
     let program = &cmd[0];
     program.contains('/') && Path::new(program).is_relative() && program == "target/release/codemap"
@@ -132,12 +127,10 @@ fn manifest_passes_herdr_validation() {
         );
     }
 
-    // The checkpoint hook listens to a known event name.
     assert_eq!(m.events.len(), 1);
     assert_eq!(m.events[0].on, "pane.agent_status_changed");
     assert_eq!(m.events[0].command, vec!["target/release/codemap", "hook"]);
 
-    // The popup entrypoint at 94% x 92%; width/height only valid on popups.
     assert_eq!(m.panes.len(), 1);
     let p = &m.panes[0];
     assert!(local_id_ok(&p.id));
@@ -170,7 +163,6 @@ fn binary_answers_version_and_help() {
         .output()
         .unwrap();
     assert!(String::from_utf8_lossy(&out.stderr).contains("codemap open"));
-    // `open` outside herdr fails cleanly instead of hanging.
     let out = std::process::Command::new(env!("CARGO_BIN_EXE_codemap"))
         .arg("open")
         .env_remove("HERDR_SOCKET_PATH")

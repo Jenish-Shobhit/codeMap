@@ -1,7 +1,3 @@
-//! The commit graph for the History view: `git log --all --topo-order`, then
-//! lanes drawn with box characters, one row per commit plus connector rows
-//! where lanes join or split.
-
 use std::path::Path;
 
 use super::{run, GitError};
@@ -10,7 +6,6 @@ use super::{run, GitError};
 pub struct Commit {
     pub sha: String,
     pub parents: Vec<String>,
-    /// Decorations: "HEAD -> main", "origin/main", "tag: v0.1.2", ...
     pub refs: Vec<String>,
     pub author: String,
     pub time: i64,
@@ -28,7 +23,6 @@ impl Commit {
             .any(|r| r == "HEAD" || r.starts_with("HEAD -> "))
     }
 
-    /// Branch and tag names without the "HEAD -> " prefix.
     pub fn labels(&self) -> Vec<String> {
         self.refs
             .iter()
@@ -41,7 +35,6 @@ impl Commit {
 const FIELD: char = '\u{1f}';
 const RECORD: char = '\u{1e}';
 
-/// Up to `limit` commits from all refs, newest first in topological order.
 pub fn log(root: &Path, limit: usize) -> Result<Vec<Commit>, GitError> {
     let n = format!("-n{limit}");
     let out = run(
@@ -99,14 +92,10 @@ pub fn parse_log(out: &str) -> Vec<Commit> {
         .collect()
 }
 
-/// One drawn row of the graph. `cells` holds two characters per lane: the
-/// lane glyph and the gap after it. `lane_of_cell[i]` is the lane index that
-/// owns cell `i` (for colouring).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GraphRow {
     pub cells: Vec<char>,
     pub colors: Vec<usize>,
-    /// Index into the commit list when this row shows a commit.
     pub commit: Option<usize>,
 }
 
@@ -116,16 +105,13 @@ impl GraphRow {
     }
 }
 
-/// Lay out lanes for commits in topological order (children before parents).
 pub fn layout(commits: &[Commit]) -> Vec<GraphRow> {
     let mut lanes: Vec<Option<String>> = Vec::new();
-    // Colour index per lane, stable while the lane lives.
     let mut lane_color: Vec<usize> = Vec::new();
     let mut next_color = 0usize;
     let mut rows = Vec::new();
 
     for (idx, commit) in commits.iter().enumerate() {
-        // Which lanes expect this commit?
         let expecting: Vec<usize> = lanes
             .iter()
             .enumerate()
@@ -135,7 +121,6 @@ pub fn layout(commits: &[Commit]) -> Vec<GraphRow> {
         let col = match expecting.first() {
             Some(&c) => c,
             None => {
-                // A new branch tip: first free lane, or a new one.
                 let free = lanes.iter().position(Option::is_none);
                 match free {
                     Some(f) => {
@@ -154,7 +139,6 @@ pub fn layout(commits: &[Commit]) -> Vec<GraphRow> {
             }
         };
 
-        // Lanes converging on this commit: draw a join row first.
         if expecting.len() > 1 {
             let last = *expecting.last().unwrap();
             let mut row = blank_row(&lanes, &lane_color);
@@ -186,13 +170,11 @@ pub fn layout(commits: &[Commit]) -> Vec<GraphRow> {
             }
         }
 
-        // The commit row itself.
         let mut row = blank_row(&lanes, &lane_color);
         row.cells[col * 2] = '●';
         row.commit = Some(idx);
         rows.push(row);
 
-        // Continue the lane with the first parent; open lanes for the others.
         let mut parents = commit.parents.iter();
         lanes[col] = parents.next().cloned();
         let extra: Vec<String> = parents.cloned().collect();
@@ -314,7 +296,6 @@ mod tests {
 
     #[test]
     fn branches_join_on_their_base() {
-        // three tips sharing one parent, like the History mock
         let commits = vec![
             c("a1", &["b0"]),
             c("a2", &["b0"]),
@@ -344,7 +325,6 @@ mod tests {
         let text: Vec<String> = rows.iter().map(GraphRow::text).collect();
         assert_eq!(text[0], "●");
         assert_eq!(text[1], "├─╮");
-        // b is expected by lane 1
         assert_eq!(text[2], "│ ●");
         assert_eq!(text[3], "● │");
         assert_eq!(text[4], "├─╯");

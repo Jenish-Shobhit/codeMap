@@ -1,8 +1,3 @@
-//! A tiny NDJSON client for herdr's socket API (protocol 22, herdr 0.9.0).
-//!
-//! One request per line, one response per line with the same `id`. Event
-//! subscriptions keep their connection open and push one event per line.
-
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
@@ -51,7 +46,6 @@ impl Client {
         }
     }
 
-    /// The client for the herdr server that launched us, if any.
     pub fn from_env() -> Option<Self> {
         let path = std::env::var_os("HERDR_SOCKET_PATH")?;
         if path.is_empty() {
@@ -75,7 +69,6 @@ impl Client {
         Ok(stream)
     }
 
-    /// Send one request and return its `result` object.
     pub fn call(&self, method: &str, params: Value) -> Result<Value, HerdrError> {
         let id = format!("codemap-{}", NEXT_ID.fetch_add(1, Ordering::Relaxed));
         let request = json!({ "id": id, "method": method, "params": params });
@@ -105,8 +98,6 @@ impl Client {
         }
     }
 
-    /// Open an event subscription. Events arrive on the returned channel until
-    /// the connection closes. The first acknowledgement is consumed here.
     pub fn subscribe(&self, subscriptions: Value) -> Result<mpsc::Receiver<Value>, HerdrError> {
         let id = format!("codemap-sub-{}", NEXT_ID.fetch_add(1, Ordering::Relaxed));
         let request = json!({
@@ -123,7 +114,6 @@ impl Client {
         reader.read_line(&mut ack).map_err(HerdrError::io)?;
         let ack: Value = serde_json::from_str(ack.trim()).map_err(HerdrError::io)?;
         parse_response(ack)?;
-        // Events can be far apart: no read timeout on the stream from here on.
         let _ = reader.get_ref().set_read_timeout(None);
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || {
@@ -144,8 +134,6 @@ impl Client {
         });
         Ok(rx)
     }
-
-    // ---- typed helpers --------------------------------------------------
 
     pub fn ping(&self) -> Result<Value, HerdrError> {
         self.call("ping", json!({}))
@@ -174,7 +162,6 @@ impl Client {
             .unwrap_or_default())
     }
 
-    /// Type text into a pane without pressing Enter.
     pub fn send_text(&self, pane_id: &str, text: &str) -> Result<(), HerdrError> {
         self.call(
             "pane.send_text",
@@ -183,7 +170,6 @@ impl Client {
         .map(|_| ())
     }
 
-    /// Submit a prompt to an agent (text plus Enter, bracketed-paste aware).
     pub fn agent_prompt(&self, target: &str, text: &str) -> Result<(), HerdrError> {
         self.call("agent.prompt", json!({ "target": target, "text": text }))
             .map(|_| ())
@@ -201,13 +187,11 @@ impl Client {
             .map(|_| ())
     }
 
-    /// Open codeMap's UI pane entrypoint.
     pub fn plugin_pane_open(&self, request: &PaneOpen) -> Result<Value, HerdrError> {
         self.call("plugin.pane.open", request.params())
     }
 }
 
-/// Parameters for `plugin.pane.open`.
 #[derive(Debug, Clone)]
 pub struct PaneOpen {
     pub plugin_id: String,
@@ -281,8 +265,6 @@ mod tests {
     use super::*;
     use std::os::unix::net::UnixListener;
 
-    /// A fake herdr: answers each request line with a canned result and
-    /// records what it received.
     fn fake_server(dir: &Path, reply: Value) -> (PathBuf, mpsc::Receiver<Value>) {
         let path = dir.join("fake.sock");
         let _ = std::fs::remove_file(&path);
@@ -368,7 +350,6 @@ mod tests {
         let p = open.params();
         assert_eq!(p["width"], "94%");
         assert_eq!(p["height"], "92%");
-        // popups target the active pane; herdr rejects target_pane_id there
         assert!(p.get("target_pane_id").is_none());
         assert_eq!(p["env"]["CODEMAP_VIEW"], "map");
 
