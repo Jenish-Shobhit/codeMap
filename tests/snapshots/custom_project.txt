@@ -1,0 +1,50 @@
+  project   global   tools   other agents                                                                                                                  demo
+
+ Instructions                                 1   CLAUDE.md                                                                              instructions · project
+   CLAUDE.md              instructions            <tmp>/demo/CLAUDE.md
+ Settings                                     1
+   settings.json          sonnet · plan mode      A small service with a review workflow.
+ Skills                                       1
+   review                 Review a diff for bug…  Sections  Rules · Releases
+ Agents                                       1   Size      11 lines
+   planner                Plans the work before…
+ Commands                                     1   ────────────────────────────────────────────────────────────────────────────────────────
+   /ship                  Ship the branch.           1  # demo
+ Hooks                                        1      2
+   PreToolUse             Bash                       3  A small service with a review workflow.
+ MCP servers                                  1      4
+   docs                   http                       5  ## Rules
+ Memory                                       0      6
+                                                     7  Run the tests first.
+                                                     8
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ j k move  h l scope                              1-4 scope  ⏎ open  E VS Code  b browser  y copy path  ? keys

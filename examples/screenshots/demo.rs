@@ -161,6 +161,62 @@ pub fn build_repo(fx: &Path, home: &Path) -> Repo {
     }
 }
 
+fn write_new(base: &Path, rel: &str, text: &str) {
+    let path = base.join(rel);
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(path, text).unwrap();
+}
+
+pub fn add_customisations(root: &Path, home: &Path) {
+    write_new(
+        root,
+        "CLAUDE.md",
+        "# paneMorph\n\nA herdr plugin that moves live panes between tabs.\n\n## Checks\n\nRun `python -m pytest` before you finish.\n\n## Style\n\nKeep functions small.\n",
+    );
+    write_new(
+        root,
+        ".claude/skills/selector-review/SKILL.md",
+        "---\nname: selector-review\ndescription: Review changes to the pane selector for stuck loops and missing timeouts.\n---\n\n# Selector review\n\n1. Read the diff of `panemorph/actions/`.\n2. Check every loop has a way out.\n3. Run the selector by hand in a throwaway herdr session.\n",
+    );
+    write_new(
+        root,
+        ".claude/skills/release/SKILL.md",
+        "---\nname: release\ndescription: Cut a release from main and write its notes.\n---\n\n# Release\n",
+    );
+    write_new(
+        root,
+        ".claude/agents/planner.md",
+        "---\nname: planner\ndescription: Plans a change before any file is edited.\nmodel: opus\ntools: Read, Grep\n---\n\nPlan first.\n",
+    );
+    write_new(
+        root,
+        ".claude/commands/ship.md",
+        "---\ndescription: Commit, push and open a pull request.\n---\n\nShip the branch.\n",
+    );
+    write_new(
+        root,
+        ".claude/settings.json",
+        "{\n  \"model\": \"sonnet\",\n  \"permissions\": {\n    \"defaultMode\": \"plan\",\n    \"allow\": [\"Bash(python -m pytest *)\", \"Read\"]\n  },\n  \"hooks\": {\n    \"PostToolUse\": [\n      {\"matcher\": \"Edit\", \"hooks\": [{\"type\": \"command\", \"command\": \"ruff format\"}]}\n    ]\n  }\n}\n",
+    );
+    write_new(
+        root,
+        ".mcp.json",
+        "{\"mcpServers\": {\"herdr-docs\": {\"type\": \"http\", \"url\": \"https://docs.example.com/mcp\"}}}\n",
+    );
+    write_new(home, ".claude/CLAUDE.md", "Answer briefly.\n");
+    write_new(
+        home,
+        ".claude/settings.json",
+        "{\"model\": \"opus\", \"enabledPlugins\": {\"frontend-design@official\": true}}\n",
+    );
+    write_new(
+        home,
+        ".config/herdr/config.toml",
+        "[theme]\nname = \"dracula\"\n\n[keys]\nprefix = \"ctrl+b\"\n",
+    );
+    write_new(home, ".config/nvim/init.lua", "vim.g.mapleader = \" \"\n");
+}
+
 pub fn apply_turn(fx: &Path, root: &Path) {
     copy_tree(&fx.join("panemorph"), root);
 }

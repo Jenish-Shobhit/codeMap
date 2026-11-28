@@ -255,7 +255,10 @@ fn open_outside(app: &App, opener: Opener, at: &Location) -> Result<String, Stri
         Opener::Browser => open::browser(&path),
         Opener::GitHub => {
             let repo = app.repo.as_ref().ok_or("not a git repository")?;
-            open::github(repo, &at.path, at.dir, at.line)
+            let inside = path
+                .strip_prefix(&app.root)
+                .map_err(|_| "this file is not in the repository")?;
+            open::github(repo, &inside.to_string_lossy(), at.dir, at.line)
         }
     }
 }

@@ -4,6 +4,7 @@ use std::time::Instant;
 
 use serde_json::Value;
 
+use crate::custom::{self, CustomState, Group, Roots};
 use crate::files::{FilesState, MAX_FILES};
 use crate::git::{self, graph, Commit, FileDiff, GraphRow, LineKind, RepoInfo};
 use crate::herdr::{Client, PluginContext};
@@ -16,16 +17,18 @@ pub const HISTORY_LIMIT: usize = 2_000;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum View {
     Files,
+    Custom,
     Changes,
     History,
 }
 
 impl View {
-    pub const ALL: [View; 3] = [View::Files, View::Changes, View::History];
+    pub const ALL: [View; 4] = [View::Files, View::Custom, View::Changes, View::History];
 
     pub fn name(self) -> &'static str {
         match self {
             View::Files => "files",
+            View::Custom => "customisations",
             View::Changes => "changes",
             View::History => "history",
         }
@@ -34,6 +37,7 @@ impl View {
     pub fn parse(s: &str) -> Option<View> {
         match s.to_ascii_lowercase().as_str() {
             "files" => Some(View::Files),
+            "customisations" | "customizations" | "custom" => Some(View::Custom),
             "changes" | "review" => Some(View::Changes),
             "history" | "graph" => Some(View::History),
             _ => None,
@@ -43,6 +47,7 @@ impl View {
     pub fn tabs(self) -> &'static [View] {
         match self {
             View::Files => &[View::Files],
+            View::Custom => &[View::Custom],
             View::Changes | View::History => &[View::Changes, View::History],
         }
     }
@@ -145,6 +150,10 @@ pub enum Msg {
     Files {
         files: Vec<String>,
         truncated: bool,
+    },
+    Custom {
+        scanned: Vec<(custom::Scope, Vec<Group>)>,
+        first: custom::Scope,
     },
     Changes(Box<ChangeSet>),
     History {
@@ -250,6 +259,7 @@ pub struct App {
     pub diff_error: Option<String>,
     pub agents: Vec<AgentRow>,
     pub files: FilesState,
+    pub custom: CustomState,
     pub changes: ChangesState,
     pub history: HistoryState,
     pub history_loaded: bool,
@@ -312,6 +322,7 @@ impl App {
                 focus: Focus::Rail,
                 ..Default::default()
             },
+            custom: CustomState::default(),
             changes: ChangesState::default(),
             history: HistoryState::default(),
             history_loaded: false,
@@ -417,8 +428,14 @@ impl App {
                 self.reviews = self.store.load_reviews(&self.repo_key());
                 self.drafts = self.store.load_drafts(&self.repo_key());
                 self.request_files();
+                self.request_custom();
                 self.request_changes();
                 self.request_history();
+            }
+            Msg::Custom { scanned, first } => {
+                self.custom.scanned = scanned;
+                self.custom.loaded = true;
+                self.custom.set_scope(first);
             }
             Msg::Files { files, truncated } => {
                 self.files.tree = crate::files::Tree::new(files);
@@ -493,6 +510,24 @@ impl App {
             let truncated = files.len() > MAX_FILES;
             files.truncate(MAX_FILES);
             let _ = tx.send(Msg::Files { files, truncated });
+        });
+    }
+
+    pub fn request_custom(&mut self) {
+        if self.view != View::Custom {
+            return;
+        }
+        let roots = self
+            .custom
+            .roots
+            .clone()
+            .unwrap_or_else(|| Roots::from_env(&self.root));
+        self.spawn(move |tx| {
+            let scanned = custom::Scope::ALL
+                .map(|scope| (scope, custom::scan(scope, &roots)))
+                .to_vec();
+            let first = roots.first_scope();
+            let _ = tx.send(Msg::Custom { scanned, first });
         });
     }
 
@@ -834,6 +869,11 @@ impl App {
     pub fn location(&self) -> Option<Location> {
         match self.view {
             View::Files => self.file_location(),
+            View::Custom => self.custom.selected().map(|item| Location {
+                path: item.path.display().to_string(),
+                line: None,
+                dir: item.dir,
+            }),
             View::Changes => {
                 let f = self.diffs.get(self.changes.file)?;
                 let (start, _, _) = self

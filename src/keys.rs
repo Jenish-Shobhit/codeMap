@@ -1,6 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use crate::app::{App, Focus, Input, InputKind, Location, Outcome, View};
+use crate::custom::Scope;
 use crate::open::Opener;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57,6 +58,13 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
             app.show_help = true;
             return Action::Redraw;
         }
+        KeyCode::Char(c @ '1'..='9') if app.view == View::Custom => {
+            let Some(&scope) = Scope::ALL.get(c as usize - '1' as usize) else {
+                return Action::None;
+            };
+            app.custom.set_scope(scope);
+            return Action::Redraw;
+        }
         KeyCode::Char(c @ '1'..='9') => {
             let Some(&view) = app.view.tabs().get(c as usize - '1' as usize) else {
                 return Action::None;
@@ -95,11 +103,11 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
         }
         KeyCode::Char('p') if !ctrl => return Action::Pin("split"),
         KeyCode::Char('T') => return Action::Pin("tab"),
-        KeyCode::Char('s') if !ctrl && app.view != View::History => {
+        KeyCode::Char('s') if !ctrl && matches!(app.view, View::Files | View::Changes) => {
             app.cycle_scope();
             return Action::Redraw;
         }
-        KeyCode::Char('a') if !ctrl && app.view != View::History => {
+        KeyCode::Char('a') if !ctrl && matches!(app.view, View::Files | View::Changes) => {
             app.next_agent();
             return Action::Redraw;
         }
@@ -111,6 +119,7 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
     }
     let r = match app.view {
         View::Files => files_key(app, key),
+        View::Custom => custom_key(app, key),
         View::Changes => changes_key(app, key),
         View::History => history_key(app, key),
     };
@@ -141,7 +150,7 @@ fn toggle_focus(app: &mut App) {
     let focus = match app.view {
         View::Files => &mut app.files.focus,
         View::Changes => &mut app.changes.focus,
-        View::History => return,
+        View::Custom | View::History => return,
     };
     *focus = match *focus {
         Focus::Body => Focus::Rail,
@@ -199,6 +208,40 @@ fn input_key(app: &mut App, key: KeyEvent) -> Action {
                 app.update_filter(&text);
             }
         }
+        _ => return Action::None,
+    }
+    Action::Redraw
+}
+
+fn custom_key(app: &mut App, key: KeyEvent) -> Action {
+    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    match key.code {
+        KeyCode::Char('d') if ctrl => app.custom.move_by(10),
+        KeyCode::Char('u') if ctrl => app.custom.move_by(-10),
+        KeyCode::Up | KeyCode::Char('k') => app.custom.move_by(-1),
+        KeyCode::Down | KeyCode::Char('j') => app.custom.move_by(1),
+        KeyCode::Char('g') | KeyCode::Home => app.custom.move_by(-(i32::MAX / 2)),
+        KeyCode::Char('G') | KeyCode::End => app.custom.move_by(i32::MAX / 2),
+        KeyCode::Right | KeyCode::Char('l') => {
+            let next = Scope::ALL
+                .iter()
+                .position(|s| *s == app.custom.scope)
+                .unwrap_or(0)
+                + 1;
+            if let Some(&scope) = Scope::ALL.get(next) {
+                app.custom.set_scope(scope);
+            }
+        }
+        KeyCode::Left | KeyCode::Char('h') => {
+            let at = Scope::ALL
+                .iter()
+                .position(|s| *s == app.custom.scope)
+                .unwrap_or(0);
+            if let Some(&scope) = at.checked_sub(1).and_then(|i| Scope::ALL.get(i)) {
+                app.custom.set_scope(scope);
+            }
+        }
+        KeyCode::Enter => return edit(app),
         _ => return Action::None,
     }
     Action::Redraw

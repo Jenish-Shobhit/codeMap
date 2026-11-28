@@ -1,4 +1,5 @@
 mod changes;
+mod custom;
 mod files;
 mod history;
 
@@ -26,7 +27,7 @@ pub fn areas(area: Rect, view: View) -> Areas {
         0
     } else if view == View::History {
         ((w as u32 * 60 / 100) as u16).clamp(40, w.saturating_sub(30))
-    } else if view == View::Files {
+    } else if matches!(view, View::Files | View::Custom) {
         ((w as u32 * 32 / 100) as u16).clamp(30, 48)
     } else {
         ((w as u32 * 30 / 100) as u16).clamp(28, 40)
@@ -89,6 +90,7 @@ pub fn render_buf(buf: &mut Buffer, area: Rect, app: &mut App) {
     header(buf, a.header, app);
     match app.view {
         View::Files => files::render(buf, &a, app),
+        View::Custom => custom::render(buf, &a, app),
         View::Changes => changes::render(buf, &a, app),
         View::History => history::render(buf, &a, app),
     }
@@ -242,9 +244,20 @@ impl<'a> Rail<'a> {
 fn header(buf: &mut Buffer, r: Rect, app: &App) {
     let t = app.theme;
     let mut x = r.x + 1;
-    for &v in app.view.tabs() {
-        let name = v.name();
-        let st = if v == app.view {
+    let tabs: Vec<(&str, bool)> = if app.view == View::Custom {
+        crate::custom::Scope::ALL
+            .iter()
+            .map(|s| (s.label(), *s == app.custom.scope))
+            .collect()
+    } else {
+        app.view
+            .tabs()
+            .iter()
+            .map(|v| (v.name(), *v == app.view))
+            .collect()
+    };
+    for (name, current) in tabs {
+        let st = if current {
             bold(style(t.on_accent, t.accent))
         } else {
             style(t.text2, t.body)
@@ -264,6 +277,13 @@ fn header(buf: &mut Buffer, r: Rect, app: &App) {
         if let Some(line) = history::header_summary(app) {
             ctx = ctx.push(line, style(t.muted, t.body));
         }
+    } else if app.view == View::Custom {
+        let folder = app
+            .root
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| util::tilde(&app.root));
+        ctx = ctx.push(folder, style(t.text, t.body));
     } else {
         if let Some(agent) = &app.agent {
             if agent.pane_id.is_some() {
@@ -310,6 +330,14 @@ fn header(buf: &mut Buffer, r: Rect, app: &App) {
 
 fn view_hints(app: &App) -> Vec<(&'static str, String)> {
     match app.view {
+        View::Custom => vec![
+            ("1-4", "scope".to_string()),
+            ("⏎", "open".into()),
+            ("E", "VS Code".into()),
+            ("b", "browser".into()),
+            ("y", "copy path".into()),
+            ("?", "keys".into()),
+        ],
         View::Files => vec![
             ("⏎", "open".to_string()),
             ("e", "editor".into()),
@@ -346,6 +374,7 @@ fn hints_line(buf: &mut Buffer, a: &Areas, app: &App) {
     let t = app.theme;
     if a.rail_hints.width > 0 {
         let rail_hint = match (app.view, app.focus()) {
+            (View::Custom, _) => "j k move  h l scope",
             (View::Files, Focus::Rail) => "tab preview",
             (View::Files, Focus::Body) => "tab tree",
             (_, Focus::Rail) => "tab body",
@@ -427,6 +456,14 @@ pub const KEYS: &[(&str, &[(&str, &str)])] = &[
         ],
     ),
     (
+        "customisations",
+        &[
+            ("1 2 3 4", "project, global, tools, other agents"),
+            ("j k  h l", "move through the list, change scope"),
+            ("⏎", "open the file in the editor"),
+        ],
+    ),
+    (
         "changes",
         &[
             ("1 2", "changes, history"),
@@ -502,6 +539,7 @@ impl App {
     pub fn focus(&self) -> Focus {
         match self.view {
             View::Files => self.files.focus,
+            View::Custom => Focus::Rail,
             View::Changes => self.changes.focus,
             View::History => Focus::Body,
         }

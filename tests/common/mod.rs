@@ -280,3 +280,78 @@ pub fn app_for(pm: &PmRepo, view: codemap::app::View, with_agent: bool) -> codem
     app.load_blocking();
     app
 }
+
+pub fn custom_roots() -> (TempDir, codemap::custom::Roots) {
+    let tmp = TempDir::new("custom");
+    let p = tmp.path();
+    write(
+        p,
+        "demo/CLAUDE.md",
+        "# demo\n\nA small service with a review workflow.\n\n## Rules\n\nRun the tests first.\n\n## Releases\n\nTag from main.\n",
+    );
+    write(
+        p,
+        "demo/.claude/skills/review/SKILL.md",
+        "---\nname: review\ndescription: Review a diff for bugs before it is committed.\n---\n\n# Review\n\n1. Read the diff.\n2. Run the tests.\n",
+    );
+    write(
+        p,
+        "demo/.claude/agents/planner.md",
+        "---\nname: planner\ndescription: Plans the work before any edit.\nmodel: opus\ntools: Read, Grep\n---\n\nPlan first.\n",
+    );
+    write(p, "demo/.claude/commands/ship.md", "Ship the branch.\n");
+    write(
+        p,
+        "demo/.claude/settings.json",
+        "{\"model\":\"sonnet\",\"permissions\":{\"defaultMode\":\"plan\",\"allow\":[\"Read\"]},\"hooks\":{\"PreToolUse\":[{\"matcher\":\"Bash\",\"hooks\":[{\"type\":\"command\",\"command\":\"./scripts/check.sh\"}]}]}}",
+    );
+    write(
+        p,
+        "demo/.mcp.json",
+        "{\"mcpServers\":{\"docs\":{\"type\":\"http\",\"url\":\"https://mcp.example.com/v1\"}}}",
+    );
+    write(p, "demo/AGENTS.md", "# Agents\n\nRun the tests first.\n");
+    write(p, "home/.claude/CLAUDE.md", "");
+    write(
+        p,
+        "home/.claude/settings.json",
+        "{\"model\":\"opus\",\"enabledPlugins\":{\"frontend-design@official\":true}}",
+    );
+    write(
+        p,
+        "home/.config/herdr/config.toml",
+        "[theme]\nname = \"gruvbox\"\n[keys]\nprefix = \"ctrl+b\"\n[[keys.command]]\nkey = \"ctrl+e\"\n",
+    );
+    write(p, "home/.config/herdr/config.toml.bak", "");
+    write(
+        p,
+        "home/.config/yazi/yazi.toml",
+        "[opener]\nnvim = []\nvscode = []\n",
+    );
+    write(
+        p,
+        "home/.config/nvim/init.lua",
+        "-- tuned for watching an agent\nvim.g.mapleader = \" \"\n",
+    );
+    write(p, "home/.codex/AGENTS.md", "Be brief.\n");
+    let roots = codemap::custom::Roots {
+        repo: p.join("demo"),
+        home: p.join("home"),
+        config: p.join("home/.config"),
+    };
+    (tmp, roots)
+}
+
+pub fn custom_app(roots: &codemap::custom::Roots, state: &Path) -> codemap::app::App {
+    let mut app = codemap::app::App::new(codemap::app::Options {
+        path: Some(roots.repo.clone()),
+        view: codemap::app::View::Custom,
+        context: None,
+        client: None,
+        store: codemap::store::Store::new(state),
+        theme: dracula(),
+    });
+    app.custom.roots = Some(roots.clone());
+    app.load_blocking();
+    app
+}

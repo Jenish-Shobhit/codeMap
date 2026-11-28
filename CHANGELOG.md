@@ -13,8 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   contents beside it, opened with `dev.codemap.files` or `--view files`.
   Files the turn touched are marked, and added lines carry a `+`. `/` finds
   a file by name.
+- **Customisations**: a popup that lists what the agent runs with, opened
+  with `dev.codemap.customisations` or `--view customisations`. Four scopes:
+  the project's `CLAUDE.md`, settings, skills, agents, commands, hooks, MCP
+  servers and memory; the same from `~/.claude`, with plugins; the
+  configuration of herdr, yazi, neovim and other tools; and other agents'
+  files. Secrets in those files are never shown.
 - `E` opens the file in VS Code, `b` in the browser and `B` on GitHub, from
-  Files and Changes.
+  Files, Customisations and Changes.
 
 ### Changed
 
