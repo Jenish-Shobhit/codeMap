@@ -1,7 +1,6 @@
 # Contributing to codeMap
 
-Thanks for helping. Bug reports, fixes, new language support and documentation
-are all welcome. For a larger change, open an issue first so we can agree on
+Thanks for helping. Bug reports, fixes and documentation are all welcome. For a larger change, open an issue first so we can agree on
 the approach before you write it.
 
 By contributing you agree that your work is licensed under the
@@ -14,8 +13,9 @@ You need:
 - **Rust**: `rust-toolchain.toml` selects stable with rustfmt and clippy, and
   rustup installs it on first use. The minimum supported version is 1.90
   (`rust-version` in `Cargo.toml`).
-- **A C compiler**: the tree-sitter grammars are C. Xcode's command line tools
-  on macOS; `gcc` or `clang` on Linux.
+- **A C compiler**, for the tests only: `tests/no_comments.rs` finds comments
+  with tree-sitter, whose grammars are C. Xcode's command line tools on macOS;
+  `gcc` or `clang` on Linux.
 - **git** on `PATH`: codeMap and its tests run it.
 - **herdr 0.9.0 or newer**, only to try the plugin inside herdr.
 
@@ -40,62 +40,16 @@ cargo test --locked
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --locked
 ```
 
-CI also runs the test suite on Rust 1.90, `cargo deny check` (deny.toml), the
-Kani proofs (below), actionlint and zizmor on the workflows, and checks that
-the README screenshots are current. A last job, `CI gate`, passes only when
+CI also runs the test suite on Rust 1.90, `cargo deny check` (deny.toml),
+actionlint and zizmor on the workflows, and checks that the README screenshots
+are current. A last job, `CI gate`, passes only when
 every other job passed; it is the check `main` requires.
-
-## Formal verification
-
-Some promises are proved with [Kani](https://model-checking.github.io/kani/)
-for every input within stated bounds, on the real functions. Each proof lives
-in a `#[cfg(kani)] mod proofs` at the end of the file it checks; its promise,
-bounds, assumptions and the commit it was last confirmed at are in the area's
-project skill (below), since code carries no comments. A `.mutations` file
-beside that file lists broken variants of the code that each proof must catch,
-so a proof that can no longer fail does not pass quietly:
-
-```text
-mutation no clamp at the right edge
-detects ui::proofs::follow_never_scrolls_past_the_content
--     scroll.0 = scroll.0.min(content.0.saturating_sub(vw.min(content.0)));
-+     scroll.0 = scroll.0.min(content.0);
-```
-
-`scripts/kani.py mutations` applies each one in place, runs the harness it
-names, and restores the file; a compile error never counts as a catch, and
-every harness needs at least one mutation. `scripts/kani.py prove` also fails a
-harness that has no satisfied `kani::cover!`, because a proof whose
-assumptions exclude every input would otherwise pass vacuously. The format is
-the one the agent-formal-verify plugin uses.
-
-```sh
-cargo install --locked kani-verifier --version 0.68.0   # once
-cargo kani setup                                         # once
-python3 scripts/kani.py prove       # every harness holds and reaches every cover
-python3 scripts/kani.py mutations   # every broken variant is caught
-```
-
-| Proof | Promise |
-| --- | --- |
-| `ui::proofs::follow_shows_a_box_that_fits` | the Map and Flow views scroll a selected box that fits the view fully on screen |
-| `ui::proofs::follow_never_scrolls_past_the_content` | those views never scroll past the canvas |
-
-Each verified area has a project skill in `.claude/skills/` that says which
-code it covers, how to rerun it, how to tell a bug from a modelling error, and
-how to update it when the promise changes on purpose
-(`.claude/skills/selection-scroll/SKILL.md` for the proofs above). If your
-change touches covered code, run both commands; if a proof fails, do not
-weaken it to pass: the failure is a finding.
 
 ## Tests
 
 | File | What it covers |
 | --- | --- |
-| `tests/index.rs` | tree-sitter extraction and call and import resolution for Python, Rust, TypeScript and Go |
-| `tests/layout.rs` | 200 random graphs: no overlapping boxes, no edge through a box |
-| `tests/flow.rs` | flowcharts for branches, loops, try/except, match and returns in each language |
-| `tests/views.rs` | golden frames of all four views and their states, colours and keys |
+| `tests/views.rs` | golden frames of both views and their states, colours and keys |
 | `tests/git_store.rs`, `tests/hook.rs` | turn diffs from checkpoints, the side store writing nothing into the repository, the graph, worktrees, the hook |
 | `tests/manifest.rs` | `herdr-plugin.toml` against herdr 0.9.0's link rules |
 | `tests/pty.rs` | the real binary on a pseudo-terminal: keys, Esc, first-paint time |
@@ -146,7 +100,7 @@ Some tests are `#[ignore]` because they need a release build, time, or a herdr
 server:
 
 ```sh
-cargo test --release --test perf -- --ignored --nocapture        # 2,000 commits, 12,000 files
+cargo test --release --test perf -- --ignored --nocapture        # history of 2,000 commits
 CODEMAP_BIN=target/release/codemap \
   cargo test --test pty smoke -- --ignored --nocapture           # codeMap on its own repository
 ```
@@ -184,14 +138,6 @@ the live tests above.
 `herdr plugin log list --plugin dev.codemap` shows each action and hook run
 with its output.
 
-## Adding a language
-
-Language support lives in `src/lang/`: a tree-sitter grammar crate, queries for
-functions, classes, calls and imports (`src/lang/queries.rs`), and import
-resolution (`src/lang/imports.rs`). Flowcharts are built in `src/flow.rs`. Add
-fixtures and cases to `tests/index.rs` and `tests/flow.rs` alongside it, and
-check the grammar's license for NOTICE.
-
 ## Commits and pull requests
 
 `main` changes only through pull requests, for everyone, maintainers
@@ -211,7 +157,7 @@ pass. Force pushes and deletion of `main` are blocked, and release tags
 - Title the pull request as a
   [Conventional Commit](https://www.conventionalcommits.org/): `feat:`,
   `fix:`, `docs:`, `test:`, `refactor:`, `perf:`, `build:`, `ci:`, `chore:`,
-  with an optional scope, as in `fix(flow): keep the gutter visible`. The
+  with an optional scope, as in `fix(changes): keep the gutter visible`. The
   `PR title` check enforces it.
 - Write commits the same way, and keep each to one logical change that builds
   and passes the tests.

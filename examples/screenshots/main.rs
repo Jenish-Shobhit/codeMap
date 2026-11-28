@@ -17,9 +17,6 @@ use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier};
 use serde_json::{json, Value};
 
-const MAP: (u16, u16) = (128, 46);
-const MAP_FILE: (u16, u16) = (136, 34);
-const FLOW: (u16, u16) = (176, 50);
 const CHANGES: (u16, u16) = (150, 46);
 const HISTORY: (u16, u16) = (128, 40);
 const NOW: i64 = 1_790_027_160;
@@ -48,7 +45,7 @@ fn main() {
     codemap::util::freeze_time(NOW);
     let mut app = App::new(Options {
         path: None,
-        view: View::Map,
+        view: View::Changes,
         context: Some(PluginContext {
             workspace_label: Some("paneMorph".into()),
             tab_label: Some("selector-fix".into()),
@@ -66,28 +63,6 @@ fn main() {
 
     let mut shots: Vec<(&str, &str, Buffer)> = Vec::new();
 
-    app.view = View::Map;
-    frame(&mut app, MAP);
-
-    let file = "panemorph/actions/open_selector.py";
-    app.reveal(file, None);
-    frame(&mut app, MAP);
-    key(&mut app, KeyCode::Enter);
-    shots.push(("map-file", "Map", frame(&mut app, MAP_FILE)));
-
-    frame(&mut app, FLOW);
-    let idx = app
-        .index
-        .symbols(file)
-        .and_then(|f| f.find("finish_selection"))
-        .expect("open_selector.py defines finish_selection");
-    app.open_flow(codemap::index::SymId {
-        file: file.into(),
-        idx,
-    });
-    shots.push(("flow", "Flow", frame(&mut app, FLOW)));
-
-    app.view = View::Changes;
     frame(&mut app, CHANGES);
     key(&mut app, KeyCode::Char('}'));
     key(&mut app, KeyCode::Char(' '));

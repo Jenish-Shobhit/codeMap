@@ -1,4 +1,4 @@
-  map   flow   changes   history                                                                                4 commits · 2 branches · 1 worktree · HEAD main
+  changes   history                                                                                             4 commits · 2 branches · 1 worktree · HEAD main
 
  history                                                                                          058bf10
  ●   058bf10 Merge branch 'docs'  main                                                            Merge branch 'docs'
@@ -47,4 +47,4 @@
  worktrees
  <tmp>/paneMorph  main
 
- j k commit                                                                                       ⏎ diff  1 map of this commit  ? keys
+ j k commit                                                                                       ⏎ diff  ? keys

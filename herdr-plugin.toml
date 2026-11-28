@@ -2,7 +2,7 @@ id = "dev.codemap"
 name = "codeMap"
 version = "0.1.0"
 min_herdr_version = "0.9.0"
-description = "See your code as a map, and what your agents changed on it: map, flow, changes and history in one popup."
+description = "Review what your agents changed, and the git history around it: changes and history in one popup."
 platforms = ["macos", "linux"]
 
 # GitHub installs build the binary. `herdr plugin link` skips build steps,
@@ -15,15 +15,9 @@ command = ["cargo", "build", "--release"]
 # same for pane entrypoints), so these run the binary that cargo built here.
 [[actions]]
 id = "open"
-title = "codeMap: open the map of the focused agent's worktree"
+title = "codeMap: open on the focused agent's worktree"
 contexts = ["global", "workspace", "tab", "pane"]
-command = ["target/release/codemap", "open", "--view", "map"]
-
-[[actions]]
-id = "flow"
-title = "codeMap: flow of the function under the cursor"
-contexts = ["global", "workspace", "tab", "pane"]
-command = ["target/release/codemap", "open", "--view", "flow"]
+command = ["target/release/codemap", "open"]
 
 [[actions]]
 id = "changes"

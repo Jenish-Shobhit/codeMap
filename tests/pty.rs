@@ -39,17 +39,12 @@ fn keys_first_paint_and_escape() {
     let painted = p
         .wait_for("history", 0, Duration::from_secs(5))
         .expect("first paint");
-    p.wait_for("PaneMorphService", 0, Duration::from_secs(10))
-        .expect("map content");
-    press(&mut p, b"3", "since HEAD");
+    p.wait_for("since HEAD", 0, Duration::from_secs(10))
+        .expect("changes content");
     press(&mut p, b"}", "open_selector.py");
     press(&mut p, b" ", "✓ reviewed");
-    press(&mut p, b"4", "tag: v0.1.0");
-    press(&mut p, b"2", "flow");
-    press(&mut p, b"1", "zoom in");
-    press(&mut p, b"/", "type a symbol");
-    press(&mut p, b"snapshot_for", "PaneMorphService.snapshot_for");
-    press(&mut p, b"\x1b", "zoom in");
+    press(&mut p, b"2", "tag: v0.1.0");
+    press(&mut p, b"1", "since HEAD");
     press(&mut p, b"?", "paste the draft");
     p.send(b"\x1b");
     std::thread::sleep(Duration::from_millis(150));
@@ -100,8 +95,8 @@ fn q_quits_and_ctrl_c_quits() {
     let root = t.path().display().to_string();
     let state = t.path().join(".st").display().to_string();
     let mut p = spawn(&[&root], &[("CODEMAP_STATE_DIR", &state)], 100, 30);
-    p.wait_for("a.py", 0, Duration::from_secs(5))
-        .expect("map of a plain folder");
+    p.wait_for("not a git repository", 0, Duration::from_secs(5))
+        .expect("a plain folder");
     p.send(b"q");
     assert!(p
         .wait_exit(Duration::from_secs(5))
@@ -109,7 +104,8 @@ fn q_quits_and_ctrl_c_quits() {
         .success());
 
     let mut p = spawn(&[&root], &[("CODEMAP_STATE_DIR", &state)], 100, 30);
-    p.wait_for("a.py", 0, Duration::from_secs(5)).expect("map");
+    p.wait_for("not a git repository", 0, Duration::from_secs(5))
+        .expect("a plain folder");
     p.send(b"\x03");
     assert!(
         p.wait_exit(Duration::from_secs(5)).is_some(),
@@ -138,7 +134,7 @@ fn smoke_own_repo() {
         .expect("paint");
     std::thread::sleep(Duration::from_millis(1500));
     println!("{}\n", p.screen());
-    for (k, name) in [(b"3", "changes"), (b"4", "history"), (b"1", "map")] {
+    for (k, name) in [(b"2", "history"), (b"1", "changes")] {
         p.send(k);
         std::thread::sleep(Duration::from_millis(700));
         println!("===== {name}\n{}\n", p.screen());

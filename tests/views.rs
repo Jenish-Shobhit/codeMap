@@ -2,7 +2,6 @@ mod common;
 
 use codemap::app::{App, Focus, InputKind, Options, Scope, View};
 use codemap::keys::{self, Action};
-use codemap::map::Level;
 use codemap::ui;
 use common::*;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -79,153 +78,6 @@ fn chars(app: &mut App, s: &str) {
     for c in s.chars() {
         key(app, KeyCode::Char(c));
     }
-}
-
-#[test]
-fn map_view() {
-    let pm = panemorph_repo();
-    let mut app = app_for(&pm, View::Map, true);
-    let t = text(&mut app);
-    assert_eq!(app.map_level(), Level::Dir("panemorph".into()));
-    for needle in [
-        " map ",
-        "○ paneMorph · selector-fix   main   turn 3 · 2m",
-        "this turn · 4 functions",
-        "M selector_command   open_selector",
-        "A finish_selection   open_selector",
-        "M main               selector",
-        "service.py · PaneMorphService",
-        "HerdrClient · 5 methods",
-        "scope  last turn · done 9:44 PM",
-        "⏎ zoom in  ⌫ zoom out  / search",
-    ] {
-        assert!(t.contains(needle), "missing {needle:?}\n{t}");
-    }
-    snapshot("map_folder", &normalize(&t, pm.tmp.path()));
-}
-
-#[test]
-fn map_zooms_into_files_and_back() {
-    let pm = panemorph_repo();
-    let mut app = app_for(&pm, View::Map, true);
-    app.reveal("panemorph/actions/open_selector.py", None);
-    text(&mut app);
-    assert_eq!(app.map_level(), Level::Dir("panemorph/actions".into()));
-    let t = text(&mut app);
-    assert!(t.contains("open_selector.py"), "{t}");
-    key(&mut app, KeyCode::Enter);
-    let t = text(&mut app);
-    assert_eq!(
-        app.map_level(),
-        Level::File("panemorph/actions/open_selector.py".into())
-    );
-    assert!(t.contains("finish_selection"), "{t}");
-    assert!(
-        t.contains("panemorph/api.py"),
-        "callees appear as external boxes\n{t}"
-    );
-    snapshot("map_file", &normalize(&t, pm.tmp.path()));
-    key(&mut app, KeyCode::Backspace);
-    text(&mut app);
-    assert_eq!(app.map_level(), Level::Dir("panemorph/actions".into()));
-    let scene = app.map.scene.as_ref().unwrap();
-    assert!(
-        matches!(&scene.nodes[app.map.cursor.node].kind, codemap::map::NodeKind::File(f) if f.ends_with("open_selector.py"))
-    );
-}
-
-#[test]
-fn map_arrow_keys_move_between_boxes() {
-    let pm = panemorph_repo();
-    let mut app = app_for(&pm, View::Map, true);
-    text(&mut app);
-    let start = app.map.cursor.node;
-    key(&mut app, KeyCode::Down);
-    let below = app.map.cursor.node;
-    assert_ne!(start, below);
-    key(&mut app, KeyCode::Up);
-    assert_eq!(app.map.cursor.node, start);
-    let svc = app
-        .map
-        .scene
-        .as_ref()
-        .unwrap()
-        .nodes
-        .iter()
-        .position(|n| n.title.starts_with("service.py"))
-        .unwrap();
-    app.map.cursor = codemap::map::Cursor {
-        node: svc,
-        row: None,
-    };
-    key(&mut app, KeyCode::Char('j'));
-    assert_eq!(app.map.cursor.row, Some(0));
-    let f = app.current_function().unwrap();
-    assert_eq!(
-        app.index.symbols(&f.file).unwrap().symbols[f.idx].qual(),
-        "PaneMorphService.__init__"
-    );
-}
-
-#[test]
-fn flow_view() {
-    let pm = panemorph_repo();
-    let mut app = app_for(&pm, View::Map, true);
-    key(&mut app, KeyCode::Char('/'));
-    chars(&mut app, "selector.py");
-    assert!(!app.search_hits.is_empty());
-    key(&mut app, KeyCode::Enter);
-    text(&mut app);
-    app.reveal("panemorph/actions/selector.py", Some(4));
-    text(&mut app);
-    let main = app
-        .index
-        .symbols("panemorph/actions/selector.py")
-        .unwrap()
-        .find("main")
-        .unwrap();
-    app.open_flow(codemap::index::SymId {
-        file: "panemorph/actions/selector.py".into(),
-        idx: main,
-    });
-    let t = text(&mut app);
-    assert_eq!(app.view, View::Flow);
-    for needle in [
-        "main()  panemorph/actions/selector.py · lines 75–98",
-        "◇ mode not in {\"send\", \"bring\"}",
-        "◉ return 2",
-        " try ",
-        "except (HerdrError",
-        "A added  M changed this turn",
-    ] {
-        assert!(t.contains(needle), "missing {needle:?}\n{t}");
-    }
-    let marked = t
-        .lines()
-        .find(|l| l.contains("Path(result_path).write_text(json.dumps({\"choice\""))
-        .unwrap();
-    let gutter = marked.split('│').next().unwrap().trim();
-    assert!(gutter.ends_with('A') || gutter.ends_with('M'), "{marked}");
-    snapshot("flow_main", &normalize(&t, pm.tmp.path()));
-    let try_box = app
-        .flow
-        .layout
-        .as_ref()
-        .unwrap()
-        .boxes
-        .iter()
-        .position(|b| b.title.as_deref() == Some("try"))
-        .unwrap();
-    app.flow.selected = try_box;
-    key(&mut app, KeyCode::Enter);
-    let t = text(&mut app);
-    assert!(
-        t.contains("HerdrClient") || t.contains("PaneMorphService"),
-        "{t}"
-    );
-    key(&mut app, KeyCode::Backspace);
-    let t = text(&mut app);
-    assert!(t.contains("main()  panemorph/actions/selector.py"), "{t}");
 }
 
 #[test]
@@ -310,11 +162,6 @@ fn history_view() {
     assert!(t.contains("panemorph/actions/extract.py  +27"), "{t}");
     key(&mut app, KeyCode::Backspace);
     assert!(!app.history.show_diff);
-    key(&mut app, KeyCode::Char('1'));
-    assert_eq!(app.view, View::Map);
-    assert!(matches!(app.scope, Scope::Commit(_)));
-    let t = text(&mut app);
-    assert!(t.contains("commit "), "{t}");
 }
 
 #[test]
@@ -331,15 +178,10 @@ fn standalone_without_agent_shows_repo_path_and_head_scope() {
 fn not_a_git_repo_state() {
     let t = TempDir::new("plain");
     let state = TempDir::new("plain-state");
-    write(
-        t.path(),
-        "tool.py",
-        "def run():\n    if x:\n        return 1\n    return 2\n",
-    );
-    write(t.path(), "notes.md", "# notes\n");
+    write(t.path(), "tool.py", "def run():\n    return 1\n");
     let mut app = App::new(Options {
         path: Some(t.path().to_path_buf()),
-        view: View::Map,
+        view: View::Changes,
         context: None,
         client: None,
         store: codemap::store::Store::new(state.path()),
@@ -347,22 +189,11 @@ fn not_a_git_repo_state() {
     });
     app.load_blocking();
     assert!(app.not_a_repo());
-    let map = text(&mut app);
-    assert!(map.contains("tool.py"), "{map}");
-    assert!(map.contains("notes.md"), "{map}");
-    assert!(map.contains("no git · structure only"), "{map}");
-    app.view = View::Changes;
+    assert!(!app.is_loading());
     let changes = text(&mut app);
     assert!(changes.contains("not a git repository"), "{changes}");
-    assert!(changes.contains("Map and Flow still work."), "{changes}");
     app.view = View::History;
     assert!(text(&mut app).contains("not a git repository"));
-    app.view = View::Map;
-    app.reveal("tool.py", Some(0));
-    text(&mut app);
-    key(&mut app, KeyCode::Char('2'));
-    let flow = text(&mut app);
-    assert!(flow.contains("◇ x"), "{flow}");
 }
 
 #[test]
@@ -394,67 +225,20 @@ fn loading_state_paints_the_frame_first() {
     codemap::util::freeze_time(NOW);
     let mut app = App::new(Options {
         path: Some(pm.root.clone()),
-        view: View::Map,
+        view: View::Changes,
         context: Some(agent_context()),
         client: None,
         store: pm.store.clone(),
         theme: dracula(),
     });
+    assert!(app.is_loading());
     let t = text(&mut app);
-    assert!(t.contains(" map "), "{t}");
+    assert!(t.contains(" changes "), "{t}");
+    assert!(t.contains(" history "), "{t}");
     assert!(t.contains("paneMorph · selector-fix"), "{t}");
-    assert!(t.contains("reading files…"), "{t}");
-    app.view = View::Changes;
-    assert!(text(&mut app).contains("reading git status…"));
+    assert!(t.contains("reading git status…"), "{t}");
     app.view = View::History;
     assert!(text(&mut app).contains("reading history…"));
-}
-
-#[test]
-fn unsupported_language_and_big_folders() {
-    let t = TempDir::new("big");
-    let state = TempDir::new("big-state");
-    git(t.path(), &["init", "-q"]);
-    for i in 0..50 {
-        write(
-            t.path(),
-            &format!("pkg/mod_{i:02}.py"),
-            &format!("def f{i}():\n    return {i}\n"),
-        );
-    }
-    write(t.path(), "pkg/README.md", "# pkg\n");
-    git(t.path(), &["add", "-A"]);
-    git(t.path(), &["commit", "-q", "-m", "init"]);
-    let mut app = App::new(Options {
-        path: Some(t.path().to_path_buf()),
-        view: View::Map,
-        context: None,
-        client: None,
-        store: codemap::store::Store::new(state.path()),
-        theme: dracula(),
-    });
-    app.load_blocking();
-    let first = text(&mut app);
-    assert!(first.contains("page 1 of 2"), "{first}");
-    assert!(first.contains("15 more"), "{first}");
-    key(&mut app, KeyCode::Char(']'));
-    let second = text(&mut app);
-    assert!(second.contains("page 2 of 2"), "{second}");
-    assert!(second.contains("README.md"), "{second}");
-    app.reveal("pkg/README.md", None);
-    text(&mut app);
-    key(&mut app, KeyCode::Enter);
-    assert!(
-        app.message.as_deref().unwrap_or("").contains("no grammar"),
-        "{:?}",
-        app.message
-    );
-    app.open_flow(codemap::index::SymId {
-        file: "pkg/README.md".into(),
-        idx: 0,
-    });
-    let flow = text(&mut app);
-    assert!(flow.contains("no flow for pkg/README.md"), "{flow}");
 }
 
 #[test]
@@ -485,29 +269,38 @@ fn theme_colours_reach_the_screen() {
 #[test]
 fn keys_switch_views_and_close() {
     let pm = panemorph_repo();
-    let mut app = app_for(&pm, View::Map, true);
+    let mut app = app_for(&pm, View::Changes, true);
     text(&mut app);
-    key(&mut app, KeyCode::Char('3'));
-    assert_eq!(app.view, View::Changes);
-    key(&mut app, KeyCode::Char('4'));
-    assert_eq!(app.view, View::History);
     key(&mut app, KeyCode::Char('2'));
-    assert_eq!(app.view, View::Flow);
+    assert_eq!(app.view, View::History);
     key(&mut app, KeyCode::Char('1'));
-    assert_eq!(app.view, View::Map);
+    assert_eq!(app.view, View::Changes);
     key(&mut app, KeyCode::Char('?'));
     assert!(app.show_help);
     let t = text(&mut app);
-    assert!(t.contains("keys") && t.contains("paste the draft"), "{t}");
+    assert!(t.contains("╭─ keys ─"), "{t}");
+    assert!(t.contains("paste the draft"), "{t}");
     key(&mut app, KeyCode::Esc);
     assert!(!app.show_help);
     key(&mut app, KeyCode::Tab);
-    assert_eq!(app.map.focus, Focus::Rail);
+    assert_eq!(app.changes.focus, Focus::Rail);
     key(&mut app, KeyCode::Tab);
-    assert_eq!(app.map.focus, Focus::Body);
+    assert_eq!(app.changes.focus, Focus::Body);
     assert_eq!(key(&mut app, KeyCode::Esc), Action::Quit);
-    let mut app = app_for(&pm, View::Map, true);
+    let mut app = app_for(&pm, View::Changes, true);
     assert_eq!(key(&mut app, KeyCode::Char('q')), Action::Quit);
+}
+
+#[test]
+fn view_names_parse_and_the_removed_views_do_not() {
+    for v in View::ALL {
+        assert_eq!(View::parse(v.name()), Some(v));
+    }
+    assert_eq!(View::parse("1"), Some(View::Changes));
+    assert_eq!(View::parse("2"), Some(View::History));
+    for gone in ["map", "flow", "open", "3", "4"] {
+        assert_eq!(View::parse(gone), None, "{gone}");
+    }
 }
 
 #[test]

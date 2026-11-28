@@ -56,8 +56,8 @@ jobs:
         with:
           toolchain: stable
           targets: ${{ matrix.target }}
-      # The tree-sitter grammars are C: build them with musl's compiler
-      # wrapper so they link into the static binary.
+      # The release build has no C today. musl-gcc stays configured so that a
+      # dependency which adds some still links into the static binary.
       - name: Install musl tools
         if: contains(matrix.target, 'musl')
         env:

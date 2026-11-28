@@ -51,41 +51,15 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
             app.show_help = true;
             return Action::Redraw;
         }
-        KeyCode::Char('1') if app.view == View::History => {
-            app.map_of_commit();
-            return Action::Redraw;
-        }
         KeyCode::Char('1') => {
-            if app.view == View::Flow {
-                if let Some(t) = app.flow.target.clone() {
-                    app.reveal(&t.file, Some(t.idx));
-                }
-            }
-            app.view = View::Map;
-            return Action::Redraw;
-        }
-        KeyCode::Char('2') => {
-            if app.view == View::Map {
-                if let Some(f) = app.current_function() {
-                    app.open_flow(f);
-                }
-            }
-            app.view = View::Flow;
-            return Action::Redraw;
-        }
-        KeyCode::Char('3') => {
             app.view = View::Changes;
             return Action::Redraw;
         }
-        KeyCode::Char('4') => {
+        KeyCode::Char('2') => {
             app.view = View::History;
             if app.history.detail.is_none() && !app.history.commits.is_empty() {
                 app.history_move(0);
             }
-            return Action::Redraw;
-        }
-        KeyCode::Char('/') => {
-            app.start_search();
             return Action::Redraw;
         }
         KeyCode::Char('e') if !ctrl => {
@@ -102,13 +76,11 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
         }
         KeyCode::Char('p') if !ctrl => return Action::Pin("split"),
         KeyCode::Char('T') => return Action::Pin("tab"),
-        KeyCode::Char('s')
-            if !ctrl && matches!(app.view, View::Changes | View::Map | View::Flow) =>
-        {
+        KeyCode::Char('s') if !ctrl && app.view == View::Changes => {
             app.cycle_scope();
             return Action::Redraw;
         }
-        KeyCode::Char('a') if !ctrl && matches!(app.view, View::Changes | View::Map) => {
+        KeyCode::Char('a') if !ctrl && app.view == View::Changes => {
             app.next_agent();
             return Action::Redraw;
         }
@@ -119,8 +91,6 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
         _ => {}
     }
     let r = match app.view {
-        View::Map => map_key(app, key),
-        View::Flow => flow_key(app, key),
         View::Changes => changes_key(app, key),
         View::History => history_key(app, key),
     };
@@ -137,25 +107,13 @@ fn quit(app: &mut App) -> Action {
 }
 
 fn toggle_focus(app: &mut App) {
-    let f = match app.view {
-        View::Map => &mut app.map.focus,
-        View::Flow => &mut app.flow.focus,
-        View::Changes => &mut app.changes.focus,
-        View::History => return,
-    };
-    *f = if *f == Focus::Body {
-        Focus::Rail
-    } else {
-        Focus::Body
-    };
-    if app.view == View::Flow && app.flow.focus == Focus::Rail {
-        let cur = app.flow.target.as_ref().map(|t| t.idx);
-        app.flow.rail_sel = app
-            .flow_rail_functions()
-            .iter()
-            .position(|(i, _)| Some(*i) == cur)
-            .unwrap_or(0);
+    if app.view != View::Changes {
+        return;
     }
+    app.changes.focus = match app.changes.focus {
+        Focus::Body => Focus::Rail,
+        Focus::Rail => Focus::Body,
+    };
 }
 
 fn input_key(app: &mut App, key: KeyEvent) -> Action {
@@ -163,36 +121,20 @@ fn input_key(app: &mut App, key: KeyEvent) -> Action {
         return Action::None;
     };
     match key.code {
-        KeyCode::Esc => {
-            app.input = None;
-            app.search_hits.clear();
-        }
-        KeyCode::Enter => match input.kind.clone() {
-            InputKind::Search => app.accept_search(),
-            InputKind::Comment {
+        KeyCode::Esc => app.input = None,
+        KeyCode::Enter => {
+            let InputKind::Comment {
                 path,
                 start,
                 end,
                 hunk,
-            } => {
-                let text = input.text.clone();
-                app.input = None;
-                app.add_comment(path, start, end, hunk, text);
-            }
-        },
+            } = input.kind.clone();
+            let text = input.text.clone();
+            app.input = None;
+            app.add_comment(path, start, end, hunk, text);
+        }
         KeyCode::Backspace => {
             input.text.pop();
-            if input.kind == InputKind::Search {
-                app.update_search();
-            }
-        }
-        KeyCode::Up if input.kind == InputKind::Search => {
-            app.search_sel = app.search_sel.saturating_sub(1);
-        }
-        KeyCode::Down if input.kind == InputKind::Search => {
-            if app.search_sel + 1 < app.search_hits.len() {
-                app.search_sel += 1;
-            }
         }
         KeyCode::Char(c) => {
             if key.modifiers.contains(KeyModifiers::CONTROL) {
@@ -202,98 +144,7 @@ fn input_key(app: &mut App, key: KeyEvent) -> Action {
             } else {
                 input.text.push(c);
             }
-            if input.kind == InputKind::Search {
-                app.update_search();
-            }
         }
-        _ => return Action::None,
-    }
-    Action::Redraw
-}
-
-fn map_key(app: &mut App, key: KeyEvent) -> Action {
-    if app.map.focus == Focus::Rail {
-        let n = app.marks.changed_symbols(&app.index).len();
-        match key.code {
-            KeyCode::Up | KeyCode::Char('k') => {
-                app.map.rail_sel = app.map.rail_sel.saturating_sub(1)
-            }
-            KeyCode::Down | KeyCode::Char('j') => {
-                if app.map.rail_sel + 1 < n {
-                    app.map.rail_sel += 1;
-                }
-            }
-            KeyCode::Enter => {
-                if let Some((file, idx, _)) = app
-                    .marks
-                    .changed_symbols(&app.index)
-                    .get(app.map.rail_sel)
-                    .cloned()
-                {
-                    app.reveal(&file, Some(idx));
-                    app.map.focus = Focus::Body;
-                }
-            }
-            _ => return Action::None,
-        }
-        return Action::Redraw;
-    }
-    match key.code {
-        KeyCode::Left | KeyCode::Char('h') => app.map_move(-1, 0),
-        KeyCode::Right | KeyCode::Char('l') => app.map_move(1, 0),
-        KeyCode::Up => app.map_move(0, -1),
-        KeyCode::Down => app.map_move(0, 1),
-        KeyCode::Char('j') => app.map_row(1),
-        KeyCode::Char('k') => app.map_row(-1),
-        KeyCode::Enter => app.map_enter(),
-        KeyCode::Backspace | KeyCode::Delete => app.map_back(),
-        KeyCode::Char(']') | KeyCode::PageDown => app.map_page(1),
-        KeyCode::Char('[') | KeyCode::PageUp => app.map_page(-1),
-        _ => return Action::None,
-    }
-    Action::Redraw
-}
-
-fn flow_key(app: &mut App, key: KeyEvent) -> Action {
-    if app.flow.focus == Focus::Rail {
-        let fns = app.flow_rail_functions();
-        match key.code {
-            KeyCode::Up | KeyCode::Char('k') => {
-                app.flow.rail_sel = app.flow.rail_sel.saturating_sub(1)
-            }
-            KeyCode::Down | KeyCode::Char('j') => {
-                if app.flow.rail_sel + 1 < fns.len() {
-                    app.flow.rail_sel += 1;
-                }
-            }
-            KeyCode::Enter => {
-                if let (Some((idx, _)), Some(t)) =
-                    (fns.get(app.flow.rail_sel), app.flow.target.clone())
-                {
-                    app.open_flow(crate::index::SymId {
-                        file: t.file,
-                        idx: *idx,
-                    });
-                    app.flow.focus = Focus::Body;
-                }
-            }
-            _ => return Action::None,
-        }
-        return Action::Redraw;
-    }
-    match key.code {
-        KeyCode::Up | KeyCode::Char('k') => app.flow_move(-1),
-        KeyCode::Down | KeyCode::Char('j') => app.flow_move(1),
-        KeyCode::Left | KeyCode::Char('h') => app.flow_side(-1),
-        KeyCode::Right | KeyCode::Char('l') => app.flow_side(1),
-        KeyCode::Char('g') | KeyCode::Home => app.flow.selected = 0,
-        KeyCode::Char('G') | KeyCode::End => {
-            if let Some(l) = &app.flow.layout {
-                app.flow.selected = l.boxes.len().saturating_sub(1);
-            }
-        }
-        KeyCode::Enter => app.flow_enter(),
-        KeyCode::Backspace | KeyCode::Delete => app.flow_back(),
         _ => return Action::None,
     }
     Action::Redraw

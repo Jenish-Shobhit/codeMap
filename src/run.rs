@@ -54,7 +54,7 @@ pub fn run(opts: Options, trace: Trace) -> io::Result<i32> {
         if app.poll() {
             dirty = true;
         }
-        if content_ms.is_none() && app.files_loaded && !app.is_loading() {
+        if content_ms.is_none() && !app.is_loading() {
             content_ms = Some(trace.t0.elapsed().as_secs_f64() * 1000.0);
         }
         if let Some(rx) = &follow_rx {
@@ -97,10 +97,7 @@ pub fn run(opts: Options, trace: Trace) -> io::Result<i32> {
                     dirty = true;
                 }
             },
-            Event::Resize(_, _) => {
-                app.map.dirty = true;
-                dirty = true;
-            }
+            Event::Resize(_, _) => dirty = true,
             _ => {}
         }
     }

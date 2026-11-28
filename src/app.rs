@@ -1,41 +1,28 @@
-use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::time::{Instant, SystemTime};
+use std::time::Instant;
 
 use serde_json::Value;
 
-use crate::canvas::Canvas;
-use crate::flow::{self, FlowChart, FlowLayout};
-use crate::git::{self, graph, Commit, FileDiff, FileStatus, GraphRow, LineKind, RepoInfo};
+use crate::git::{self, graph, Commit, FileDiff, GraphRow, LineKind, RepoInfo};
 use crate::herdr::{Client, PluginContext};
-use crate::index::{in_dir, parent_dir, Index, SearchHit, SymId};
-use crate::lang::{self, FileSymbols, Lang};
-use crate::layout;
-use crate::map::{self, Cursor, Level, Marks, NodeKind, Scene};
 use crate::store::{Comment, PaneState, Reviews, Store};
 use crate::theme::Theme;
 use crate::util;
 
-pub const MAX_FILES: usize = 20_000;
-pub const EAGER_PARSE: usize = 1_500;
 pub const HISTORY_LIMIT: usize = 2_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum View {
-    Map,
-    Flow,
     Changes,
     History,
 }
 
 impl View {
-    pub const ALL: [View; 4] = [View::Map, View::Flow, View::Changes, View::History];
+    pub const ALL: [View; 2] = [View::Changes, View::History];
 
     pub fn name(self) -> &'static str {
         match self {
-            View::Map => "map",
-            View::Flow => "flow",
             View::Changes => "changes",
             View::History => "history",
         }
@@ -43,10 +30,8 @@ impl View {
 
     pub fn parse(s: &str) -> Option<View> {
         match s.to_ascii_lowercase().as_str() {
-            "map" | "1" | "open" => Some(View::Map),
-            "flow" | "2" => Some(View::Flow),
-            "changes" | "review" | "3" => Some(View::Changes),
-            "history" | "graph" | "4" => Some(View::History),
+            "changes" | "review" | "1" => Some(View::Changes),
+            "history" | "graph" | "2" => Some(View::History),
             _ => None,
         }
     }
@@ -57,7 +42,6 @@ pub enum Scope {
     Turn,
     Session,
     Head,
-    Commit(String),
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -142,14 +126,11 @@ pub struct WorktreeRow {
 pub struct RepoLoad {
     pub root: PathBuf,
     pub repo: Result<RepoInfo, Option<String>>,
-    pub files: Vec<String>,
-    pub truncated: bool,
     pub agent: Option<AgentInfo>,
 }
 
 pub enum Msg {
     Repo(Box<RepoLoad>),
-    Parsed(Vec<(String, FileSymbols, (SystemTime, u64))>, bool),
     Changes(Box<ChangeSet>),
     History {
         commits: Result<Vec<Commit>, String>,
@@ -164,7 +145,6 @@ pub struct ChangeSet {
     pub scope: Scope,
     pub pane_key: Option<String>,
     pub diffs: Result<Vec<FileDiff>, String>,
-    pub old_quals: BTreeMap<String, BTreeSet<String>>,
     pub info: ScopeInfo,
     pub agents: Vec<AgentRow>,
 }
@@ -174,41 +154,6 @@ pub enum Focus {
     #[default]
     Body,
     Rail,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Select {
-    Path(String),
-    Symbol(String, usize),
-}
-
-#[derive(Debug, Default)]
-pub struct MapState {
-    pub level: Option<Level>,
-    pub page: usize,
-    pub scene: Option<Scene>,
-    pub cursor: Cursor,
-    pub scroll: (usize, usize),
-    pub focus: Focus,
-    pub rail_sel: usize,
-    pub dirty: bool,
-    pub pending_select: Option<Select>,
-    pub built_width: usize,
-    pub built_page: usize,
-}
-
-#[derive(Debug, Default)]
-pub struct FlowState {
-    pub target: Option<SymId>,
-    pub back: Vec<SymId>,
-    pub chart: Option<FlowChart>,
-    pub layout: Option<FlowLayout>,
-    pub selected: usize,
-    pub scroll: (usize, usize),
-    pub error: Option<String>,
-    pub focus: Focus,
-    pub rail_sel: usize,
-    pub dirty: bool,
 }
 
 #[derive(Debug, Default)]
@@ -237,7 +182,6 @@ pub struct HistoryState {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InputKind {
-    Search,
     Comment {
         path: String,
         start: u32,
@@ -276,28 +220,19 @@ pub struct App {
     pub repo_known: bool,
     pub repo_error: Option<String>,
     pub agent: Option<AgentInfo>,
-    pub index: Index,
-    pub files_loaded: bool,
-    pub parse_pending: bool,
     pub scope: Scope,
     pub scope_info: ScopeInfo,
     pub pane_key: Option<String>,
     pub diffs: Vec<FileDiff>,
     pub diffs_loaded: bool,
     pub diff_error: Option<String>,
-    pub old_quals: BTreeMap<String, BTreeSet<String>>,
-    pub marks: Marks,
     pub agents: Vec<AgentRow>,
-    pub map: MapState,
-    pub flow: FlowState,
     pub changes: ChangesState,
     pub history: HistoryState,
     pub history_loaded: bool,
     pub reviews: Reviews,
     pub drafts: Vec<Comment>,
     pub input: Option<Input>,
-    pub search_hits: Vec<SearchHit>,
-    pub search_sel: usize,
     pub message: Option<String>,
     pub show_help: bool,
     pub outcome: Option<Outcome>,
@@ -343,31 +278,19 @@ impl App {
             repo_known: false,
             repo_error: None,
             agent,
-            index: Index::default(),
-            files_loaded: false,
-            parse_pending: false,
             scope,
             scope_info: ScopeInfo::default(),
             pane_key: None,
             diffs: Vec::new(),
             diffs_loaded: false,
             diff_error: None,
-            old_quals: BTreeMap::new(),
-            marks: Marks::default(),
             agents: Vec::new(),
-            map: MapState {
-                dirty: true,
-                ..Default::default()
-            },
-            flow: FlowState::default(),
             changes: ChangesState::default(),
             history: HistoryState::default(),
             history_loaded: false,
             reviews: Reviews::default(),
             drafts: Vec::new(),
             input: None,
-            search_hits: Vec::new(),
-            search_sel: 0,
             message: None,
             show_help: false,
             outcome: None,
@@ -389,7 +312,7 @@ impl App {
     }
 
     pub fn is_loading(&self) -> bool {
-        !self.files_loaded || self.parse_pending || (self.repo.is_some() && !self.diffs_loaded)
+        !self.repo_known || (self.repo.is_some() && !self.diffs_loaded)
     }
 
     pub fn start(&mut self) {
@@ -450,54 +373,24 @@ impl App {
     pub fn apply(&mut self, msg: Msg) {
         match msg {
             Msg::Repo(load) => {
-                let RepoLoad {
-                    root,
-                    repo,
-                    files,
-                    truncated,
-                    agent,
-                } = *load;
-                self.root = root.clone();
+                let RepoLoad { root, repo, agent } = *load;
+                self.root = root;
                 self.repo_known = true;
                 match repo {
                     Ok(info) => self.repo = Some(info),
                     Err(e) => {
                         self.repo = None;
                         self.repo_error = e;
-                        if self.scope != Scope::Head {
-                            self.scope = Scope::Head;
-                        }
+                        self.scope = Scope::Head;
                     }
                 }
                 if let Some(a) = agent {
                     self.agent = Some(a);
                 }
-                let mut index = Index::new(&root, files);
-                index.truncated = truncated;
-                self.index = index;
-                self.files_loaded = true;
                 self.reviews = self.store.load_reviews(&self.repo_key());
                 self.drafts = self.store.load_drafts(&self.repo_key());
-                if self.map.level.is_none() {
-                    self.map.level = Some(Level::Dir(self.initial_dir()));
-                }
-                self.map.dirty = true;
-                self.flow.dirty = true;
-                self.request_parse_initial();
                 self.request_changes();
                 self.request_history();
-            }
-            Msg::Parsed(items, done) => {
-                for (file, syms, stamp) in items {
-                    self.index.insert_parsed(&file, syms, stamp);
-                }
-                self.index.resolve();
-                if done {
-                    self.parse_pending = false;
-                }
-                self.recompute_marks();
-                self.map.dirty = true;
-                self.flow.dirty = true;
             }
             Msg::Changes(set) => {
                 let set = *set;
@@ -517,18 +410,15 @@ impl App {
                         self.diff_error = Some(e);
                     }
                 }
-                self.old_quals = set.old_quals;
                 self.diffs_loaded = true;
-                self.recompute_marks();
                 if self.changes.file >= self.diffs.len() {
                     self.changes = ChangesState {
                         focus: self.changes.focus,
                         ..Default::default()
                     };
                 }
-                self.map.dirty = true;
-                self.flow.dirty = true;
             }
+
             Msg::History {
                 commits,
                 total,
@@ -555,101 +445,6 @@ impl App {
             }
             Msg::Notice(s) => self.message = Some(s),
         }
-    }
-
-    fn initial_dir(&self) -> String {
-        let start = self
-            .context
-            .as_ref()
-            .and_then(|c| c.focused_pane_cwd.clone())
-            .map(PathBuf::from);
-        if let Some(cwd) = start {
-            let cwd = cwd.canonicalize().unwrap_or(cwd);
-            if let Ok(rel) = cwd.strip_prefix(&self.root) {
-                let rel = rel.to_string_lossy().replace('\\', "/");
-                if !rel.is_empty() && self.index.files.iter().any(|f| in_dir(f, &rel)) {
-                    return rel;
-                }
-            }
-        }
-        let subs = self.index.subdirs("");
-        let root_code = self
-            .index
-            .files_in("")
-            .iter()
-            .filter(|f| Lang::from_path(f).is_some())
-            .count();
-        let code_subs: Vec<&(String, usize)> = subs
-            .iter()
-            .filter(|(d, _)| {
-                self.index
-                    .files
-                    .iter()
-                    .any(|f| in_dir(f, d) && Lang::from_path(f).is_some())
-            })
-            .collect();
-        if code_subs.len() == 1 && root_code == 0 {
-            return code_subs[0].0.clone();
-        }
-        String::new()
-    }
-
-    fn request_parse_initial(&mut self) {
-        let sources: Vec<String> = self.index.source_files().cloned().collect();
-        let targets: Vec<String> = if sources.len() <= EAGER_PARSE {
-            sources
-        } else {
-            let dir = match &self.map.level {
-                Some(Level::Dir(d)) => d.clone(),
-                _ => String::new(),
-            };
-            sources
-                .into_iter()
-                .filter(|f| parent_dir(f) == dir)
-                .collect()
-        };
-        self.request_parse(targets);
-    }
-
-    pub fn request_parse(&mut self, files: Vec<String>) {
-        let files: Vec<String> = files
-            .into_iter()
-            .filter(|f| !self.index.is_parsed(f))
-            .collect();
-        if files.is_empty() {
-            return;
-        }
-        self.parse_pending = true;
-        let root = self.root.clone();
-        self.spawn(move |tx| {
-            let mut batch = Vec::new();
-            let mut last = Instant::now();
-            let n = files.len();
-            for (i, f) in files.into_iter().enumerate() {
-                if let Some(item) = parse_file(&root, &f) {
-                    batch.push(item);
-                }
-                let done = i + 1 == n;
-                if done || (batch.len() >= 32 && last.elapsed().as_millis() > 50) {
-                    let _ = tx.send(Msg::Parsed(std::mem::take(&mut batch), done));
-                    last = Instant::now();
-                }
-            }
-        });
-    }
-
-    pub fn ensure_dir_parsed(&mut self, dir: &str) {
-        let files: Vec<String> = self
-            .index
-            .files
-            .iter()
-            .filter(|f| {
-                parent_dir(f) == dir && Lang::from_path(f).is_some() && !self.index.is_parsed(f)
-            })
-            .take(1_000)
-            .cloned()
-            .collect();
-        self.request_parse(files);
     }
 
     pub fn request_changes(&mut self) {
@@ -703,13 +498,6 @@ impl App {
         });
     }
 
-    fn recompute_marks(&mut self) {
-        let old = &self.old_quals;
-        self.marks = map::compute_marks(&self.index, &self.diffs, &|d: &FileDiff| {
-            old.get(d.old_path.as_deref().unwrap_or(&d.path)).cloned()
-        });
-    }
-
     pub fn set_scope(&mut self, scope: Scope) {
         if self.scope == scope {
             return;
@@ -730,7 +518,7 @@ impl App {
         let next = match self.scope {
             Scope::Turn => Scope::Session,
             Scope::Session => Scope::Head,
-            Scope::Head | Scope::Commit(_) => Scope::Turn,
+            Scope::Head => Scope::Turn,
         };
         self.set_scope(next);
         self.message = Some(format!("scope: {}", scope_name(&self.scope)));
@@ -744,7 +532,7 @@ impl App {
         let cur = self.agents.iter().position(|a| a.selected).unwrap_or(0);
         let next = &self.agents[(cur + 1) % self.agents.len()];
         self.pane_key = Some(next.pane_key.clone());
-        if matches!(self.scope, Scope::Head | Scope::Commit(_)) {
+        if self.scope == Scope::Head {
             self.scope = Scope::Turn;
         }
         self.request_changes();
@@ -755,453 +543,6 @@ impl App {
         if self.sync {
             self.drain();
         }
-    }
-
-    pub fn map_level(&self) -> Level {
-        self.map.level.clone().unwrap_or(Level::Dir(String::new()))
-    }
-
-    pub fn ensure_scene(&mut self, width: usize) {
-        if !self.files_loaded {
-            return;
-        }
-        if !self.map.dirty && self.map.scene.is_some() && self.map.built_width == width {
-            return;
-        }
-        let level = self.map_level();
-        if let Level::Dir(d) = &level {
-            if self.index.source_files().count() > EAGER_PARSE {
-                let d = d.clone();
-                self.ensure_dir_parsed(&d);
-            }
-        }
-        if let Level::File(f) = &level {
-            if !self.index.is_parsed(f) && Lang::from_path(f).is_some() {
-                let f = f.clone();
-                self.request_parse(vec![f]);
-                self.drain_if_sync();
-            }
-        }
-        if self.map.pending_select.is_none() {
-            if let Some(scene) = &self.map.scene {
-                if scene.level == level && self.map.built_page == self.map.page {
-                    self.map.pending_select = selection_of(scene, self.map.cursor);
-                }
-            }
-        }
-        let mut scene = map::build(
-            &self.index,
-            &self.marks,
-            &level,
-            self.map.page,
-            width.max(40),
-        );
-        self.map.page = scene.page;
-        let mut cursor = Cursor::default();
-        if let Some(sel) = self.map.pending_select.take() {
-            let find = |scene: &Scene| match &sel {
-                Select::Path(p) => {
-                    map::node_for_path(scene, p).map(|n| Cursor { node: n, row: None })
-                }
-                Select::Symbol(f, i) => map::node_for_symbol(scene, f, *i),
-            };
-            let mut found = find(&scene);
-            if found.is_none() && scene.pages > 1 {
-                for page in 0..scene.pages {
-                    let other = map::build(&self.index, &self.marks, &level, page, width.max(40));
-                    if let Some(c) = find(&other) {
-                        found = Some(c);
-                        scene = other;
-                        self.map.page = page;
-                        break;
-                    }
-                }
-            }
-            if let Some(c) = found {
-                cursor = c;
-            }
-        } else if self.map.scene.as_ref().is_some_and(|s| s.level == level)
-            && self.map.built_page == self.map.page
-        {
-            cursor = self.map.cursor;
-        } else if let Some(first_changed) = scene.nodes.iter().position(|n| n.mark.is_some()) {
-            cursor.node = first_changed;
-        }
-        if cursor.node >= scene.nodes.len() {
-            cursor = Cursor::default();
-        }
-        if let Some(r) = cursor.row {
-            if scene
-                .nodes
-                .get(cursor.node)
-                .is_none_or(|n| r >= n.rows.len())
-            {
-                cursor.row = None;
-            }
-        }
-        self.map.cursor = cursor;
-        self.map.scene = Some(scene);
-        self.map.dirty = false;
-        self.map.built_width = width;
-        self.map.built_page = self.map.page;
-    }
-
-    pub fn map_canvas(&self) -> Option<Canvas> {
-        self.map.scene.as_ref().map(|s| {
-            map::draw(
-                s,
-                (self.map.focus == Focus::Body).then_some(self.map.cursor),
-            )
-        })
-    }
-
-    pub fn current_function(&self) -> Option<SymId> {
-        let scene = self.map.scene.as_ref()?;
-        let node = scene.nodes.get(self.map.cursor.node)?;
-        let candidate = match self.map.cursor.row {
-            Some(r) => node.rows.get(r).and_then(|row| row.sym.clone()),
-            None => node.symbol(),
-        };
-        let (file, idx) = candidate.or_else(|| node.rows.iter().find_map(|r| r.sym.clone()))?;
-        let fs = self.index.symbols(&file)?;
-        let s = fs.symbols.get(idx)?;
-        if s.kind.is_callable() {
-            Some(SymId { file, idx })
-        } else {
-            let m = map::methods_of(fs, idx).into_iter().next()?;
-            Some(SymId { file, idx: m })
-        }
-    }
-
-    pub fn map_move(&mut self, dx: i32, dy: i32) {
-        let Some(scene) = &self.map.scene else { return };
-        if let Some(n) = layout::neighbor(&scene.layout, self.map.cursor.node, dx, dy) {
-            self.map.cursor = Cursor { node: n, row: None };
-        } else if scene.nodes.is_empty() {
-            self.map.cursor = Cursor::default();
-        }
-    }
-
-    pub fn map_row(&mut self, delta: i32) {
-        let Some(scene) = &self.map.scene else { return };
-        let Some(node) = scene.nodes.get(self.map.cursor.node) else {
-            return;
-        };
-        let selectable: Vec<usize> = node
-            .rows
-            .iter()
-            .enumerate()
-            .filter(|(_, r)| r.sym.is_some())
-            .map(|(i, _)| i)
-            .collect();
-        let pos = self
-            .map
-            .cursor
-            .row
-            .and_then(|r| selectable.iter().position(|&x| x == r));
-        let next = match (pos, delta > 0) {
-            (None, true) => selectable.first().copied(),
-            (Some(p), true) => selectable.get(p + 1).copied(),
-            (Some(0), false) => None,
-            (Some(p), false) => selectable.get(p - 1).copied(),
-            (None, false) => None,
-        };
-        match (next, pos, delta > 0) {
-            (Some(r), _, _) => self.map.cursor.row = Some(r),
-            (None, Some(0), false) => self.map.cursor.row = None,
-            _ => {
-                let mut order: Vec<usize> = (0..scene.nodes.len()).collect();
-                order.sort_by_key(|&i| (scene.layout.nodes[i].y, scene.layout.nodes[i].x));
-                let at = order
-                    .iter()
-                    .position(|&i| i == self.map.cursor.node)
-                    .unwrap_or(0);
-                let target = if delta > 0 {
-                    order.get(at + 1)
-                } else if at > 0 {
-                    order.get(at - 1)
-                } else {
-                    None
-                };
-                if let Some(&t) = target {
-                    let rows = &scene.nodes[t].rows;
-                    let row = if delta < 0 {
-                        rows.iter().rposition(|r| r.sym.is_some())
-                    } else {
-                        None
-                    };
-                    self.map.cursor = Cursor { node: t, row };
-                }
-            }
-        }
-    }
-
-    pub fn map_enter(&mut self) {
-        let Some(scene) = &self.map.scene else { return };
-        let Some(node) = scene.nodes.get(self.map.cursor.node).cloned() else {
-            return;
-        };
-        let row_sym = self
-            .map
-            .cursor
-            .row
-            .and_then(|r| node.rows.get(r))
-            .and_then(|r| r.sym.clone());
-        match &node.kind {
-            NodeKind::Dir(d) => self.zoom_to(Level::Dir(d.clone()), None),
-            NodeKind::File(f) => {
-                let sel = row_sym.map(|(f, i)| Select::Symbol(f, i));
-                if Lang::from_path(f).is_some() {
-                    self.zoom_to(Level::File(f.clone()), sel);
-                } else {
-                    self.message = Some(format!(
-                        "no grammar for {} · codeMap reads {}",
-                        f,
-                        lang::supported_extensions()
-                    ));
-                }
-            }
-            NodeKind::External(f) => self.zoom_to(Level::File(f.clone()), None),
-            NodeKind::Symbol { file, idx } => {
-                let target = match row_sym {
-                    Some((f, i)) => Some(SymId { file: f, idx: i }),
-                    None => self.current_function().or_else(|| {
-                        Some(SymId {
-                            file: file.clone(),
-                            idx: *idx,
-                        })
-                    }),
-                };
-                if let Some(t) = target {
-                    self.open_flow(t);
-                }
-            }
-            NodeKind::More => self.map_page(1),
-        }
-    }
-
-    pub fn zoom_to(&mut self, level: Level, select: Option<Select>) {
-        self.map.level = Some(level);
-        self.map.page = 0;
-        self.map.pending_select = select;
-        self.map.scroll = (0, 0);
-        self.map.dirty = true;
-    }
-
-    pub fn map_back(&mut self) {
-        let level = self.map_level();
-        if let Some(parent) = level.parent() {
-            let path = match &level {
-                Level::File(f) => f.clone(),
-                Level::Dir(d) => d.clone(),
-            };
-            self.zoom_to(parent, Some(Select::Path(path)));
-        }
-    }
-
-    pub fn map_page(&mut self, delta: i32) {
-        let pages = self.map.scene.as_ref().map(|s| s.pages).unwrap_or(1);
-        let next = (self.map.page as i32 + delta).clamp(0, pages as i32 - 1) as usize;
-        if next != self.map.page {
-            self.map.page = next;
-            self.map.cursor = Cursor::default();
-            self.map.scroll = (0, 0);
-            self.map.dirty = true;
-        }
-    }
-
-    pub fn reveal(&mut self, file: &str, sym: Option<usize>) {
-        match sym {
-            Some(i) => self.zoom_to(
-                Level::File(file.to_string()),
-                Some(Select::Symbol(file.to_string(), i)),
-            ),
-            None => self.zoom_to(
-                Level::Dir(parent_dir(file).to_string()),
-                Some(Select::Path(file.to_string())),
-            ),
-        }
-    }
-
-    pub fn open_flow(&mut self, target: SymId) {
-        if let Some(cur) = self.flow.target.take() {
-            if cur != target {
-                self.flow.back.push(cur);
-            }
-        }
-        self.flow.target = Some(target);
-        self.flow.selected = 0;
-        self.flow.scroll = (0, 0);
-        self.flow.dirty = true;
-        self.view = View::Flow;
-    }
-
-    pub fn flow_back(&mut self) {
-        if let Some(prev) = self.flow.back.pop() {
-            self.flow.target = Some(prev);
-            self.flow.selected = 0;
-            self.flow.scroll = (0, 0);
-            self.flow.dirty = true;
-        }
-    }
-
-    pub fn ensure_flow(&mut self) {
-        if !self.flow.dirty && (self.flow.layout.is_some() || self.flow.error.is_some()) {
-            return;
-        }
-        if self.flow.target.is_none() {
-            self.flow.target = self
-                .current_function()
-                .or_else(|| self.first_changed_function());
-        }
-        self.flow.dirty = false;
-        self.flow.error = None;
-        let Some(target) = self.flow.target.clone() else {
-            self.flow.chart = None;
-            self.flow.layout = None;
-            return;
-        };
-        let Some(lang) = Lang::from_path(&target.file) else {
-            self.flow.error = Some(format!(
-                "no flow for {} · codeMap has grammars for {}",
-                target.file,
-                lang::supported_extensions()
-            ));
-            return;
-        };
-        let Some(fs) = self.index.symbols(&target.file).cloned() else {
-            self.request_parse(vec![target.file.clone()]);
-            self.drain_if_sync();
-            self.flow.dirty = true;
-            return;
-        };
-        let Some(sym) = fs.symbols.get(target.idx) else {
-            self.flow.error = Some("that function is gone; the file changed".into());
-            return;
-        };
-        let src = match std::fs::read(self.root.join(&target.file)) {
-            Ok(b) => String::from_utf8_lossy(&b).into_owned(),
-            Err(e) => {
-                self.flow.error = Some(format!("cannot read {}: {e}", target.file));
-                return;
-            }
-        };
-        match flow::build(lang, &src, sym) {
-            Some(chart) => {
-                let l = flow::layout(&chart);
-                if self.flow.selected >= l.boxes.len() {
-                    self.flow.selected = 0;
-                }
-                self.flow.layout = Some(l);
-                self.flow.chart = Some(chart);
-            }
-            None => self.flow.error = Some(format!("could not chart {}", sym.name)),
-        }
-    }
-
-    fn first_changed_function(&self) -> Option<SymId> {
-        self.marks
-            .changed_symbols(&self.index)
-            .into_iter()
-            .next()
-            .map(|(file, idx, _)| SymId { file, idx })
-    }
-
-    pub fn flow_symbol(&self) -> Option<&lang::Symbol> {
-        let t = self.flow.target.as_ref()?;
-        self.index.symbols(&t.file)?.symbols.get(t.idx)
-    }
-
-    pub fn flow_line_marks(&self) -> BTreeMap<u32, char> {
-        self.flow
-            .target
-            .as_ref()
-            .and_then(|t| self.marks.lines.get(&t.file).cloned())
-            .unwrap_or_default()
-    }
-
-    pub fn flow_move(&mut self, delta: i32) {
-        let Some(l) = &self.flow.layout else { return };
-        if l.boxes.is_empty() {
-            return;
-        }
-        let n = l.boxes.len() as i32;
-        self.flow.selected = (self.flow.selected as i32 + delta).clamp(0, n - 1) as usize;
-    }
-
-    pub fn flow_side(&mut self, dir: i32) {
-        let Some(l) = &self.flow.layout else { return };
-        let Some(cur) = l.boxes.get(self.flow.selected) else {
-            return;
-        };
-        let cy = cur.y + cur.h / 2;
-        let cx = cur.x + cur.w / 2;
-        let best = l
-            .boxes
-            .iter()
-            .enumerate()
-            .filter(|(_, b)| {
-                let bx = b.x + b.w / 2;
-                if dir > 0 {
-                    bx > cx + cur.w / 2
-                } else {
-                    bx + cur.w / 2 < cx
-                }
-            })
-            .min_by_key(|(_, b)| {
-                let by = b.y + b.h / 2;
-                let bx = b.x + b.w / 2;
-                (by as i64 - cy as i64).abs() * 4 + (bx as i64 - cx as i64).abs()
-            })
-            .map(|(i, _)| i);
-        if let Some(i) = best {
-            self.flow.selected = i;
-        }
-    }
-
-    pub fn flow_calls_in_box(&self) -> Vec<SymId> {
-        let (Some(t), Some(l)) = (&self.flow.target, &self.flow.layout) else {
-            return Vec::new();
-        };
-        let Some(b) = l.boxes.get(self.flow.selected) else {
-            return Vec::new();
-        };
-        let lines: BTreeSet<u32> = b.lines.iter().map(|x| x.line).collect();
-        let mut out = Vec::new();
-        for c in self.index.calls_from(&t.file, t.idx) {
-            if lines.contains(&c.line) && !out.contains(&c.to) {
-                out.push(c.to.clone());
-            }
-        }
-        out
-    }
-
-    pub fn flow_enter(&mut self) {
-        let calls = self.flow_calls_in_box();
-        match calls.into_iter().find(|c| {
-            self.index
-                .symbols(&c.file)
-                .and_then(|f| f.symbols.get(c.idx))
-                .is_some_and(|s| s.kind.is_callable())
-        }) {
-            Some(c) => self.open_flow(c),
-            None => self.message = Some("no call to a known function in this box".into()),
-        }
-    }
-
-    pub fn flow_rail_functions(&self) -> Vec<(usize, String)> {
-        let Some(t) = &self.flow.target else {
-            return Vec::new();
-        };
-        let Some(fs) = self.index.symbols(&t.file) else {
-            return Vec::new();
-        };
-        fs.symbols
-            .iter()
-            .enumerate()
-            .filter(|(_, s)| s.kind.is_callable())
-            .map(|(i, s)| (i, s.qual()))
-            .collect()
     }
 
     pub fn change_rows(&self, file: usize) -> Vec<CRow> {
@@ -1443,30 +784,6 @@ impl App {
 
     pub fn location(&self) -> Option<(String, u32)> {
         match self.view {
-            View::Map => {
-                let t = self.current_function();
-                if let Some(t) = t {
-                    let s = self.index.symbols(&t.file)?.symbols.get(t.idx)?;
-                    return Some((t.file, s.start_line));
-                }
-                let scene = self.map.scene.as_ref()?;
-                match &scene.nodes.get(self.map.cursor.node)?.kind {
-                    NodeKind::File(f) | NodeKind::External(f) => Some((f.clone(), 1)),
-                    _ => None,
-                }
-            }
-            View::Flow => {
-                let t = self.flow.target.as_ref()?;
-                let line = self
-                    .flow
-                    .layout
-                    .as_ref()
-                    .and_then(|l| l.boxes.get(self.flow.selected))
-                    .map(|b| b.first_line())
-                    .filter(|l| *l > 0)
-                    .or_else(|| self.flow_symbol().map(|s| s.start_line))?;
-                Some((t.file.clone(), line))
-            }
             View::Changes => {
                 let f = self.diffs.get(self.changes.file)?;
                 let (start, _, _) = self
@@ -1476,53 +793,6 @@ impl App {
             }
             View::History => None,
         }
-    }
-
-    pub fn start_search(&mut self) {
-        self.input = Some(Input {
-            kind: InputKind::Search,
-            text: String::new(),
-        });
-        self.search_hits.clear();
-        self.search_sel = 0;
-    }
-
-    pub fn update_search(&mut self) {
-        let q = match &self.input {
-            Some(Input {
-                kind: InputKind::Search,
-                text,
-            }) => text.clone(),
-            _ => return,
-        };
-        self.search_hits = if q.is_empty() {
-            Vec::new()
-        } else {
-            self.index.search(&q, 40)
-        };
-        self.search_sel = 0;
-    }
-
-    pub fn accept_search(&mut self) {
-        if let Some(hit) = self.search_hits.get(self.search_sel).cloned() {
-            let callable = hit.sym.and_then(|i| {
-                self.index
-                    .symbols(&hit.file)
-                    .and_then(|f| f.symbols.get(i))
-                    .map(|s| s.kind.is_callable())
-            });
-            if self.view == View::Flow && callable == Some(true) {
-                self.open_flow(SymId {
-                    file: hit.file.clone(),
-                    idx: hit.sym.unwrap(),
-                });
-            } else {
-                self.view = View::Map;
-                self.reveal(&hit.file, hit.sym);
-            }
-        }
-        self.input = None;
-        self.search_hits.clear();
     }
 
     pub fn history_open(&mut self) {
@@ -1565,14 +835,6 @@ impl App {
             self.drain_if_sync();
         }
     }
-
-    pub fn map_of_commit(&mut self) {
-        if let Some(c) = self.history.commits.get(self.history.sel) {
-            let sha = c.sha.clone();
-            self.set_scope(Scope::Commit(sha));
-            self.view = View::Map;
-        }
-    }
 }
 
 pub fn scope_name(s: &Scope) -> String {
@@ -1580,47 +842,7 @@ pub fn scope_name(s: &Scope) -> String {
         Scope::Turn => "last turn".into(),
         Scope::Session => "this agent's session".into(),
         Scope::Head => "since HEAD".into(),
-        Scope::Commit(sha) => format!("commit {}", &sha[..sha.len().min(7)]),
     }
-}
-
-fn selection_of(scene: &Scene, cursor: Cursor) -> Option<Select> {
-    let node = scene.nodes.get(cursor.node)?;
-    if let Some(r) = cursor.row {
-        if let Some((f, i)) = node.rows.get(r).and_then(|r| r.sym.clone()) {
-            return Some(Select::Symbol(f, i));
-        }
-    }
-    match &node.kind {
-        NodeKind::Dir(d) => Some(Select::Path(d.clone())),
-        NodeKind::File(f) | NodeKind::External(f) => Some(Select::Path(f.clone())),
-        NodeKind::Symbol { file, idx } => Some(Select::Symbol(file.clone(), *idx)),
-        NodeKind::More => None,
-    }
-}
-
-fn parse_file(root: &std::path::Path, f: &str) -> Option<(String, FileSymbols, (SystemTime, u64))> {
-    let lang = Lang::from_path(f)?;
-    let path = root.join(f);
-    let meta = std::fs::metadata(&path).ok()?;
-    let stamp = (
-        meta.modified().unwrap_or(SystemTime::UNIX_EPOCH),
-        meta.len(),
-    );
-    let syms = if meta.len() > crate::index::MAX_PARSE_BYTES {
-        FileSymbols {
-            lang,
-            symbols: Vec::new(),
-            calls: Vec::new(),
-            imports: Vec::new(),
-            lines: 0,
-            has_errors: false,
-        }
-    } else {
-        let src = String::from_utf8_lossy(&std::fs::read(&path).ok()?).into_owned();
-        lang::extract(lang, &src)
-    };
-    Some((f.to_string(), syms, stamp))
 }
 
 fn load_repo(tx: &Sender<Msg>, root: PathBuf, client: Option<Client>, agent: Option<AgentInfo>) {
@@ -1653,30 +875,17 @@ fn load_repo(tx: &Sender<Msg>, root: PathBuf, client: Option<Client>, agent: Opt
             }
         }
     }
-    let (repo, root, files, truncated) = match git::discover(&root) {
+    let (repo, root) = match git::discover(&root) {
         Ok(info) => {
-            let mut files = git::list_files(&info.root).unwrap_or_default();
-            let truncated = files.len() > MAX_FILES;
-            files.truncate(MAX_FILES);
             let r = info.root.clone();
-            (Ok(info), r, files, truncated)
+            (Ok(info), r)
         }
         Err(e) => {
             let root = root.canonicalize().unwrap_or(root);
-            let files = git::walk_files(&root, MAX_FILES + 1);
-            let truncated = files.len() > MAX_FILES;
-            let mut files = files;
-            files.truncate(MAX_FILES);
-            (Err(e.map(|e| e.0)), root, files, truncated)
+            (Err(e.map(|e| e.0)), root)
         }
     };
-    let _ = tx.send(Msg::Repo(Box::new(RepoLoad {
-        root,
-        repo,
-        files,
-        truncated,
-        agent,
-    })));
+    let _ = tx.send(Msg::Repo(Box::new(RepoLoad { root, repo, agent })));
 }
 
 pub fn compute_changes(
@@ -1756,7 +965,7 @@ pub fn compute_changes(
     }
 
     let mut info = ScopeInfo::default();
-    let result: Result<(Vec<FileDiff>, Option<String>), String> = match scope {
+    let diffs: Result<Vec<FileDiff>, String> = match scope {
         Scope::Turn | Scope::Session => {
             let turn_pair = chosen.and_then(|p| {
                 let last = p.last_turn(&repo.root)?;
@@ -1796,10 +1005,7 @@ pub fn compute_changes(
                         format!("last turn · done {}", util::clock(when))
                     };
                     match to {
-                        Some(to) => shadow
-                            .diff(&start.tree, &to)
-                            .map(|d| (d, Some(start.commit.clone())))
-                            .map_err(|e| e.0),
+                        Some(to) => shadow.diff(&start.tree, &to).map_err(|e| e.0),
                         None => Err("could not snapshot the work tree".into()),
                     }
                 }
@@ -1810,45 +1016,11 @@ pub fn compute_changes(
             }
         }
         Scope::Head => head_changes(store, repo, &mut info),
-        Scope::Commit(sha) => {
-            info.noun = format!("commit {}", &sha[..sha.len().min(7)]);
-            info.rail = format!("commit {}", &sha[..sha.len().min(7)]);
-            info.header = info.rail.clone();
-            git::show_commit(&repo.root, sha)
-                .map(|d| (d, Some(format!("{sha}^"))))
-                .map_err(|e| e.0)
-        }
     };
-    let (diffs, base) = match result {
-        Ok((d, base)) => (Ok(d), base),
-        Err(e) => (Err(e), None),
-    };
-    let mut old_quals = BTreeMap::new();
-    if let (Ok(d), Some(base)) = (&diffs, &base) {
-        for f in d
-            .iter()
-            .filter(|f| matches!(f.status, FileStatus::Modified | FileStatus::Renamed))
-            .take(200)
-        {
-            let path = f.old_path.as_deref().unwrap_or(&f.path);
-            if Lang::from_path(path).is_none() {
-                continue;
-            }
-            let src = if base.len() == 40 && !base.ends_with('^') {
-                shadow.read_file(base, path)
-            } else {
-                git::run(&repo.root, &["show", &format!("{base}:{path}")]).ok()
-            };
-            if let Some(q) = src.and_then(|s| map::quals_of(path, &s)) {
-                old_quals.insert(path.to_string(), q);
-            }
-        }
-    }
     ChangeSet {
         scope: scope.clone(),
         pane_key: chosen.map(|p| p.pane_key.clone()),
         diffs,
-        old_quals,
         info,
         agents,
     }
@@ -1858,7 +1030,7 @@ fn head_changes(
     store: &Store,
     repo: &RepoInfo,
     info: &mut ScopeInfo,
-) -> Result<(Vec<FileDiff>, Option<String>), String> {
+) -> Result<Vec<FileDiff>, String> {
     info.noun = "since HEAD".into();
     info.rail = match &repo.head {
         Some(h) => format!("since HEAD · {}", &h[..h.len().min(7)]),
@@ -1868,9 +1040,7 @@ fn head_changes(
         info.header = String::new();
     }
     let scratch = store.shadow(repo).dir;
-    git::diff_head(repo, &scratch)
-        .map(|d| (d, repo.head.as_ref().map(|_| "HEAD".to_string())))
-        .map_err(|e| e.0)
+    git::diff_head(repo, &scratch).map_err(|e| e.0)
 }
 
 fn worktree_rows(repo: &RepoInfo, client: Option<&Client>) -> Vec<WorktreeRow> {

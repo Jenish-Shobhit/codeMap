@@ -3,8 +3,6 @@ use std::path::{Path, PathBuf};
 use ratatui::style::Color;
 use serde::Deserialize;
 
-use crate::canvas::{Band, Tone};
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Palette {
     pub accent: Color,
@@ -810,29 +808,6 @@ impl Theme {
     pub fn load_from(path: &Path) -> Theme {
         let text = std::fs::read_to_string(path).unwrap_or_default();
         Theme::from_config_text(&text)
-    }
-
-    pub fn tone(&self, tone: Tone) -> Color {
-        match tone {
-            Tone::Rule => self.rule,
-            Tone::Text => self.text,
-            Tone::Dim => self.text2,
-            Tone::Muted => self.muted,
-            Tone::Add => self.add,
-            Tone::Mod => self.modified,
-            Tone::Del => self.del,
-            Tone::Branch => self.branch,
-            Tone::Blue => self.renamed,
-            Tone::Accent => self.accent,
-            Tone::Warn => self.conflict,
-        }
-    }
-
-    pub fn band(&self, band: Band) -> Color {
-        match band {
-            Band::Active => self.active_row,
-            Band::Selection => self.selection,
-        }
     }
 }
 

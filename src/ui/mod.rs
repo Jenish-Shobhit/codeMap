@@ -1,7 +1,5 @@
 mod changes;
-mod flow_view;
 mod history;
-mod map_view;
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -9,7 +7,6 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::Frame;
 
 use crate::app::{App, Focus, InputKind, View};
-use crate::canvas::Canvas;
 use crate::theme::Theme;
 use crate::util;
 
@@ -88,8 +85,6 @@ pub fn render_buf(buf: &mut Buffer, area: Rect, app: &mut App) {
     }
     header(buf, a.header, app);
     match app.view {
-        View::Map => map_view::render(buf, &a, app),
-        View::Flow => flow_view::render(buf, &a, app),
         View::Changes => changes::render(buf, &a, app),
         View::History => history::render(buf, &a, app),
     }
@@ -240,76 +235,6 @@ impl<'a> Rail<'a> {
     }
 }
 
-pub fn blit(
-    buf: &mut Buffer,
-    area: Rect,
-    canvas: &Canvas,
-    scroll: (usize, usize),
-    t: &Theme,
-    bg: Color,
-) {
-    for dy in 0..area.height as usize {
-        let cy = scroll.1 + dy;
-        if cy >= canvas.h {
-            break;
-        }
-        let mut dx = 0usize;
-        while dx < area.width as usize {
-            let cx = scroll.0 + dx;
-            if cx >= canvas.w {
-                break;
-            }
-            let cell = canvas.get(cx, cy).copied().unwrap_or_default();
-            let g = cell.glyph();
-            if g == '\0' {
-                dx += 1;
-                continue;
-            }
-            let mut st = Style::default().fg(t.tone(cell.tone)).bg(match cell.band {
-                Some(b) => t.band(b),
-                None => bg,
-            });
-            if cell.bold {
-                st = st.add_modifier(Modifier::BOLD);
-            }
-            let x = area.x + dx as u16;
-            let y = area.y + dy as u16;
-            let w = util::char_width(g).max(1);
-            if dx + w > area.width as usize {
-                break;
-            }
-            let mut tmp = [0u8; 4];
-            buf.set_string(x, y, g.encode_utf8(&mut tmp), st);
-            dx += w;
-        }
-    }
-}
-
-pub fn follow(
-    scroll: &mut (usize, usize),
-    view: (usize, usize),
-    rect: (usize, usize, usize, usize),
-    content: (usize, usize),
-) {
-    let (vw, vh) = view;
-    let (x, y, w, h) = rect;
-    if vw == 0 || vh == 0 {
-        return;
-    }
-    if x < scroll.0 {
-        scroll.0 = x.saturating_sub(2);
-    } else if x + w.min(vw) > scroll.0 + vw {
-        scroll.0 = (x + w.min(vw)).saturating_sub(vw) + 2;
-    }
-    if y < scroll.1 {
-        scroll.1 = y.saturating_sub(1);
-    } else if y + h.min(vh) > scroll.1 + vh {
-        scroll.1 = (y + h.min(vh)).saturating_sub(vh) + 1;
-    }
-    scroll.0 = scroll.0.min(content.0.saturating_sub(vw.min(content.0)));
-    scroll.1 = scroll.1.min(content.1.saturating_sub(vh.min(content.1)));
-}
-
 fn header(buf: &mut Buffer, r: Rect, app: &App) {
     let t = app.theme;
     let mut x = r.x + 1;
@@ -381,35 +306,6 @@ fn header(buf: &mut Buffer, r: Rect, app: &App) {
 
 fn view_hints(app: &App) -> Vec<(&'static str, String)> {
     match app.view {
-        View::Map => {
-            let mut h = vec![
-                ("⏎", "zoom in".to_string()),
-                ("⌫", "zoom out".into()),
-                ("/", "search".into()),
-            ];
-            if let Some(f) = app.current_function() {
-                if let Some(s) = app
-                    .index
-                    .symbols(&f.file)
-                    .and_then(|fs| fs.symbols.get(f.idx))
-                {
-                    h.push(("2", format!("flow of {}", s.name)));
-                }
-            }
-            if app.map.scene.as_ref().is_some_and(|s| s.pages > 1) {
-                h.push(("] [", "page".into()));
-            }
-            h.push(("?", "keys".into()));
-            h
-        }
-        View::Flow => vec![
-            ("⏎", "open a call in Flow".to_string()),
-            ("⌫", "back".into()),
-            ("e", "edit at line".into()),
-            ("1", "map".into()),
-            ("3", "changes".into()),
-            ("?", "keys".into()),
-        ],
         View::Changes => vec![
             ("] [", "hunk".to_string()),
             ("space", "reviewed".into()),
@@ -427,11 +323,7 @@ fn view_hints(app: &App) -> Vec<(&'static str, String)> {
                     ("?", "keys".into()),
                 ]
             } else {
-                vec![
-                    ("⏎", "diff".to_string()),
-                    ("1", "map of this commit".into()),
-                    ("?", "keys".into()),
-                ]
+                vec![("⏎", "diff".to_string()), ("?", "keys".into())]
             }
         }
     }
@@ -442,8 +334,6 @@ fn hints_line(buf: &mut Buffer, a: &Areas, app: &App) {
     if a.rail_hints.width > 0 {
         let rail_hint = match (app.view, app.focus()) {
             (_, Focus::Rail) => "tab body",
-            (View::Map, _) => "/ search  tab list",
-            (View::Flow, _) => "tab functions",
             (View::Changes, _) => "tab files",
             (View::History, _) => "j k commit",
         };
@@ -458,27 +348,17 @@ fn hints_line(buf: &mut Buffer, a: &Areas, app: &App) {
     }
     let r = a.hints;
     if let Some(input) = &app.input {
-        let (prompt, text, keys) = match &input.kind {
-            InputKind::Search => (
-                "/ ".to_string(),
-                input.text.clone(),
-                "   ↑↓ pick  ⏎ go  ⎋ cancel",
-            ),
-            InputKind::Comment {
-                path, start, end, ..
-            } => {
-                let anchor = if end > start {
-                    format!("{path}:{start}-{end}")
-                } else {
-                    format!("{path}:{start}")
-                };
-                (
-                    format!("comment on {anchor} › "),
-                    input.text.clone(),
-                    "   ⏎ save  ⎋ cancel",
-                )
-            }
+        let InputKind::Comment {
+            path, start, end, ..
+        } = &input.kind;
+        let anchor = if end > start {
+            format!("{path}:{start}-{end}")
+        } else {
+            format!("{path}:{start}")
         };
+        let prompt = format!("comment on {anchor} › ");
+        let text = input.text.clone();
+        let keys = "   ⏎ save  ⎋ cancel";
         let line = Line::new()
             .push(prompt, style(t.text2, t.body))
             .push(text, style(t.text, t.body))
@@ -507,31 +387,14 @@ pub const KEYS: &[(&str, &[(&str, &str)])] = &[
     (
         "views",
         &[
-            ("1 2 3 4", "map, flow, changes, history"),
+            ("1 2", "changes, history"),
             ("tab", "move between rail and body"),
-            ("/", "search a symbol or file"),
             ("e  y", "edit in $EDITOR at the line, copy path:line"),
             (
                 "p  T",
                 "pin as a split that follows the agent, open in a tab",
             ),
             ("?  q ⎋", "keys, close"),
-        ],
-    ),
-    (
-        "map",
-        &[
-            ("← → ↑ ↓", "move between boxes"),
-            ("j k", "move through a box's rows"),
-            ("⏎  ⌫", "zoom in, zoom out"),
-            ("] [", "next or previous page"),
-        ],
-    ),
-    (
-        "flow",
-        &[
-            ("↑ ↓  ← →", "move between boxes"),
-            ("⏎  ⌫", "open a call, go back"),
         ],
     ),
     (
@@ -550,10 +413,23 @@ pub const KEYS: &[(&str, &[(&str, &str)])] = &[
         &[
             ("j k", "move between commits"),
             ("⏎  ⌫", "show the diff, back"),
-            ("1", "map of this commit"),
         ],
     ),
 ];
+
+fn frame(buf: &mut Buffer, r: Rect, st: Style) {
+    if r.width < 2 || r.height < 2 {
+        return;
+    }
+    let (right, bottom) = (r.x + r.width - 1, r.y + r.height - 1);
+    let side = "─".repeat(r.width as usize - 2);
+    put(buf, r.x, r.y, &format!("╭{side}╮"), st, r.width);
+    put(buf, r.x, bottom, &format!("╰{side}╯"), st, r.width);
+    for y in r.y + 1..bottom {
+        put(buf, r.x, y, "│", st, 1);
+        put(buf, right, y, "│", st, 1);
+    }
+}
 
 fn help(buf: &mut Buffer, area: Rect, app: &App) {
     let t = app.theme;
@@ -564,17 +440,8 @@ fn help(buf: &mut Buffer, area: Rect, app: &App) {
     let y = area.y + (area.height.saturating_sub(h)) / 2;
     let r = Rect::new(x, y, w, h);
     fill(buf, r, t.rail);
-    let mut c = Canvas::new(w as usize, h as usize);
-    c.rect(
-        0,
-        0,
-        w as usize,
-        h as usize,
-        crate::canvas::Tone::Rule,
-        true,
-    );
-    c.text(2, 0, " keys ", crate::canvas::Tone::Text, true);
-    blit(buf, r, &c, (0, 0), &t, t.rail);
+    frame(buf, r, style(t.rule, t.rail));
+    put(buf, x + 2, y, " keys ", bold(style(t.text, t.rail)), w - 4);
     let mut yy = y + 1;
     for (section, keys) in KEYS {
         if yy >= y + h - 1 {
@@ -604,8 +471,6 @@ fn help(buf: &mut Buffer, area: Rect, app: &App) {
 impl App {
     pub fn focus(&self) -> Focus {
         match self.view {
-            View::Map => self.map.focus,
-            View::Flow => self.flow.focus,
             View::Changes => self.changes.focus,
             View::History => Focus::Body,
         }
@@ -641,67 +506,4 @@ pub fn buffer_text(buf: &Buffer) -> String {
         out.push('\n');
     }
     out
-}
-
-#[cfg(kani)]
-mod proofs {
-    use super::follow;
-
-    const CELLS: usize = 1 << 20;
-
-    type Inputs = (
-        (usize, usize),
-        (usize, usize),
-        (usize, usize, usize, usize),
-        (usize, usize),
-    );
-
-    fn inputs() -> Inputs {
-        let view: (u16, u16) = kani::any();
-        kani::assume(view.0 > 0 && view.1 > 0);
-        let scroll: (usize, usize) = kani::any();
-        let rect: (usize, usize, usize, usize) = kani::any();
-        let content: (usize, usize) = kani::any();
-        kani::assume(scroll.0 <= CELLS && scroll.1 <= CELLS);
-        kani::assume(rect.0 <= CELLS && rect.1 <= CELLS && rect.2 <= CELLS && rect.3 <= CELLS);
-        kani::assume(content.0 <= CELLS && content.1 <= CELLS);
-        (scroll, (view.0 as usize, view.1 as usize), rect, content)
-    }
-
-    #[kani::proof]
-    #[kani::unwind(2)]
-    fn follow_shows_a_box_that_fits() {
-        let (before, (vw, vh), (x, y, w, h), content) = inputs();
-        kani::assume(w + 2 <= vw && h + 1 <= vh);
-        kani::assume(x + w <= content.0 && y + h <= content.1);
-
-        let mut scroll = before;
-        follow(&mut scroll, (vw, vh), (x, y, w, h), content);
-
-        kani::cover!(x < before.0, "the box was left of the view");
-        kani::cover!(x + w > before.0 + vw, "the box was right of the view");
-        kani::cover!(y < before.1, "the box was above the view");
-        kani::cover!(y + h > before.1 + vh, "the box was below the view");
-
-        assert!(scroll.0 <= x && x + w <= scroll.0 + vw);
-        assert!(scroll.1 <= y && y + h <= scroll.1 + vh);
-    }
-
-    #[kani::proof]
-    #[kani::unwind(2)]
-    fn follow_never_scrolls_past_the_content() {
-        let (before, view, rect, content) = inputs();
-
-        let mut scroll = before;
-        follow(&mut scroll, view, rect, content);
-
-        kani::cover!(
-            content.0 > view.0 && scroll.0 == content.0 - view.0,
-            "scrolled to the right edge"
-        );
-        kani::cover!(content.1 < view.1, "a canvas shorter than the view");
-
-        assert!(scroll.0 <= content.0.saturating_sub(view.0));
-        assert!(scroll.1 <= content.1.saturating_sub(view.1));
-    }
 }

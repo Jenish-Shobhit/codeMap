@@ -120,7 +120,7 @@ fn manifest_passes_herdr_validation() {
         assert!(resolves_to_our_binary(&a.command), "{:?}", a.command);
         assert_eq!(a.command[1], "open");
     }
-    for want in ["open", "flow", "changes", "history"] {
+    for want in ["open", "changes", "history"] {
         assert!(
             m.actions.iter().any(|a| a.id == want),
             "missing action {want}"

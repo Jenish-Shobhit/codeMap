@@ -16,6 +16,7 @@ updates:
       # ratatui and crossterm move together; herdr uses the same pair.
       tui:
         patterns: ["ratatui", "crossterm"]
+      # Only tests/no_comments.rs uses tree-sitter.
       tree-sitter:
         patterns: ["tree-sitter*"]
       minor-and-patch:

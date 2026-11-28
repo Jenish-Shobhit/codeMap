@@ -191,6 +191,10 @@ pub fn tilde(path: &Path) -> String {
     path.display().to_string()
 }
 
+pub fn parent_dir(file: &str) -> &str {
+    file.rsplit_once('/').map(|(d, _)| d).unwrap_or("")
+}
+
 pub fn sanitize_line(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut col = 0;
@@ -208,18 +212,6 @@ pub fn sanitize_line(s: &str) -> String {
             out.push(c);
             col += char_width(c);
         }
-    }
-    out
-}
-
-pub fn thousands(n: usize) -> String {
-    let s = n.to_string();
-    let mut out = String::new();
-    for (i, c) in s.chars().enumerate() {
-        if i > 0 && (s.len() - i).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(c);
     }
     out
 }
@@ -304,12 +296,5 @@ mod tests {
         let b = fuzzy_score("sel", "some_else_long").unwrap();
         assert!(a > b);
         assert!(fuzzy_score("xyz", "selector").is_none());
-    }
-
-    #[test]
-    fn thousands_sep() {
-        assert_eq!(thousands(1204), "1,204");
-        assert_eq!(thousands(12), "12");
-        assert_eq!(thousands(1_000_000), "1,000,000");
     }
 }
