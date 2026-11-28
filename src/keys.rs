@@ -52,6 +52,10 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
                 app.files.focus = Focus::Rail;
                 return Action::Redraw;
             }
+            if app.view == View::Status && app.status.focus == Focus::Body {
+                app.status.focus = Focus::Rail;
+                return Action::Redraw;
+            }
             return quit(app);
         }
         KeyCode::Char('?') => {
@@ -120,6 +124,7 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
     let r = match app.view {
         View::Files => files_key(app, key),
         View::Custom => custom_key(app, key),
+        View::Status => status_key(app, key),
         View::Changes => changes_key(app, key),
         View::History => history_key(app, key),
     };
@@ -149,6 +154,7 @@ fn open(app: &App, opener: Opener) -> Action {
 fn toggle_focus(app: &mut App) {
     let focus = match app.view {
         View::Files => &mut app.files.focus,
+        View::Status => &mut app.status.focus,
         View::Changes => &mut app.changes.focus,
         View::Custom | View::History => return,
     };
@@ -284,6 +290,36 @@ fn files_key(app: &mut App, key: KeyEvent) -> Action {
             }
             app.files_toggle();
         }
+        _ => return Action::None,
+    }
+    Action::Redraw
+}
+
+fn status_key(app: &mut App, key: KeyEvent) -> Action {
+    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    if app.status.focus == Focus::Body {
+        match key.code {
+            KeyCode::Char('d') if ctrl => app.status.scroll_by(15),
+            KeyCode::Char('u') if ctrl => app.status.scroll_by(-15),
+            KeyCode::Up | KeyCode::Char('k') => app.status.scroll_by(-1),
+            KeyCode::Down | KeyCode::Char('j') => app.status.scroll_by(1),
+            KeyCode::PageDown => app.status.scroll_by(30),
+            KeyCode::PageUp => app.status.scroll_by(-30),
+            KeyCode::Char('g') | KeyCode::Home => app.status.scroll = 0,
+            KeyCode::Char('G') | KeyCode::End => app.status.scroll_by(i32::MAX / 2),
+            _ => return Action::None,
+        }
+        return Action::Redraw;
+    }
+    match key.code {
+        KeyCode::Char('d') if ctrl => app.status.move_by(15),
+        KeyCode::Char('u') if ctrl => app.status.move_by(-15),
+        KeyCode::Up | KeyCode::Char('k') => app.status.move_by(-1),
+        KeyCode::Down | KeyCode::Char('j') => app.status.move_by(1),
+        KeyCode::PageDown => app.status.move_by(30),
+        KeyCode::PageUp => app.status.move_by(-30),
+        KeyCode::Char('g') | KeyCode::Home => app.status.move_by(-(i32::MAX / 2)),
+        KeyCode::Char('G') | KeyCode::End => app.status.move_by(i32::MAX / 2),
         _ => return Action::None,
     }
     Action::Redraw

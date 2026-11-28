@@ -9,6 +9,7 @@ pub enum FileStatus {
     Deleted,
     Renamed,
     Copied,
+    Untracked,
 }
 
 impl FileStatus {
@@ -19,6 +20,7 @@ impl FileStatus {
             FileStatus::Deleted => 'D',
             FileStatus::Renamed => 'R',
             FileStatus::Copied => 'C',
+            FileStatus::Untracked => '?',
         }
     }
 }

@@ -7,6 +7,7 @@ pub mod hook;
 pub mod keys;
 pub mod open;
 pub mod run;
+pub mod status;
 pub mod store;
 pub mod theme;
 pub mod ui;

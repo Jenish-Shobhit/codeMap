@@ -8,6 +8,7 @@ use crate::custom::{self, CustomState, Group, Roots};
 use crate::files::{FilesState, MAX_FILES};
 use crate::git::{self, graph, Commit, FileDiff, GraphRow, LineKind, RepoInfo};
 use crate::herdr::{Client, PluginContext};
+use crate::status::StatusState;
 use crate::store::{Comment, PaneState, Reviews, Store};
 use crate::theme::Theme;
 use crate::util;
@@ -18,19 +19,36 @@ pub const HISTORY_LIMIT: usize = 2_000;
 pub enum View {
     Files,
     Custom,
+    Status,
     Changes,
     History,
 }
 
 impl View {
-    pub const ALL: [View; 4] = [View::Files, View::Custom, View::Changes, View::History];
+    pub const ALL: [View; 5] = [
+        View::Files,
+        View::Custom,
+        View::Status,
+        View::Changes,
+        View::History,
+    ];
+
+    const GIT_TABS: [View; 3] = [View::Status, View::Changes, View::History];
 
     pub fn name(self) -> &'static str {
         match self {
             View::Files => "files",
             View::Custom => "customisations",
+            View::Status => "status",
             View::Changes => "changes",
             View::History => "history",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            View::Changes => "review",
+            other => other.name(),
         }
     }
 
@@ -38,6 +56,7 @@ impl View {
         match s.to_ascii_lowercase().as_str() {
             "files" => Some(View::Files),
             "customisations" | "customizations" | "custom" => Some(View::Custom),
+            "status" | "git" => Some(View::Status),
             "changes" | "review" => Some(View::Changes),
             "history" | "graph" => Some(View::History),
             _ => None,
@@ -48,7 +67,7 @@ impl View {
         match self {
             View::Files => &[View::Files],
             View::Custom => &[View::Custom],
-            View::Changes | View::History => &[View::Changes, View::History],
+            View::Status | View::Changes | View::History => &View::GIT_TABS,
         }
     }
 }
@@ -156,6 +175,7 @@ pub enum Msg {
         first: custom::Scope,
     },
     Changes(Box<ChangeSet>),
+    Status(Result<git::Status, String>),
     History {
         commits: Result<Vec<Commit>, String>,
         total: usize,
@@ -260,6 +280,7 @@ pub struct App {
     pub agents: Vec<AgentRow>,
     pub files: FilesState,
     pub custom: CustomState,
+    pub status: StatusState,
     pub changes: ChangesState,
     pub history: HistoryState,
     pub history_loaded: bool,
@@ -323,6 +344,10 @@ impl App {
                 ..Default::default()
             },
             custom: CustomState::default(),
+            status: StatusState {
+                focus: Focus::Rail,
+                ..Default::default()
+            },
             changes: ChangesState::default(),
             history: HistoryState::default(),
             history_loaded: false,
@@ -430,6 +455,7 @@ impl App {
                 self.request_files();
                 self.request_custom();
                 self.request_changes();
+                self.request_status();
                 self.request_history();
             }
             Msg::Custom { scanned, first } => {
@@ -470,6 +496,7 @@ impl App {
                 }
                 self.place_files();
             }
+            Msg::Status(result) => self.status.load(result),
             Msg::History {
                 commits,
                 total,
@@ -544,6 +571,21 @@ impl App {
         self.spawn(move |tx| {
             let set = compute_changes(&store, &repo, &scope, agent.as_ref(), wanted);
             let _ = tx.send(Msg::Changes(Box::new(set)));
+        });
+    }
+
+    pub fn request_status(&mut self) {
+        if !View::GIT_TABS.contains(&self.view) {
+            return;
+        }
+        let Some(repo) = self.repo.clone() else {
+            self.status.loaded = true;
+            return;
+        };
+        let scratch = self.store.shadow(&repo).dir;
+        self.spawn(move |tx| {
+            let status = git::status(&repo, &scratch).map_err(|e| e.0);
+            let _ = tx.send(Msg::Status(status));
         });
     }
 
@@ -874,6 +916,7 @@ impl App {
                 line: None,
                 dir: item.dir,
             }),
+            View::Status => self.status.location(),
             View::Changes => {
                 let f = self.diffs.get(self.changes.file)?;
                 let (start, _, _) = self

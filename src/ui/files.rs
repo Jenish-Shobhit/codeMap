@@ -49,16 +49,16 @@ fn note(buf: &mut Buffer, body: Rect, t: &Theme, text: &str) {
     );
 }
 
-fn status_color(t: &Theme, status: FileStatus) -> Color {
+pub(super) fn status_color(t: &Theme, status: FileStatus) -> Color {
     match status {
-        FileStatus::Added => t.add,
+        FileStatus::Added | FileStatus::Untracked => t.add,
         FileStatus::Deleted => t.del,
         FileStatus::Renamed | FileStatus::Copied => t.renamed,
         FileStatus::Modified => t.modified,
     }
 }
 
-fn counts(line: Line<'static>, d: &FileDiff, t: &Theme, bg: Color) -> Line<'static> {
+pub(super) fn counts(line: Line<'static>, d: &FileDiff, t: &Theme, bg: Color) -> Line<'static> {
     let mut line = line;
     if d.adds() > 0 {
         line = line.push(format!(" +{}", d.adds()), style(t.add, bg));

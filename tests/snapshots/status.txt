@@ -1,0 +1,50 @@
+  status   review   history                                                                                                   ○ paneMorph · selector-fix   main
+
+ staged · 4                               panemorph/__init__.py   +1 −2    staged
+ panemorph/                               @@ top level · 1–3
+ M __init__.py          +1 −2                 1  """paneMorph: live pane and tab workflows for Herdr."""
+ R checkup.py                                 2
+ D topology.py          −89                   3− __version__ = "0.1.0"
+ panemorph/actions/                           4−
+ A undo.py              +3                    3+ __version__ = "0.1.2"
+
+ not staged · 4
+ ./
+ ? notes.md             +3
+ panemorph/
+ M __init__.py          +2
+ panemorph/actions/
+ M open_selector.py     +50 −13
+ M selector.py          +11 −11
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ tab diff                                 j k file  e editor  E VS Code  b browser  B GitHub  y copy  ? keys

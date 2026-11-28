@@ -120,11 +120,36 @@ fn manifest_passes_herdr_validation() {
         assert!(resolves_to_our_binary(&a.command), "{:?}", a.command);
         assert_eq!(a.command[1], "open");
     }
-    for want in ["open", "files", "customisations", "changes", "history"] {
+    for want in [
+        "open",
+        "files",
+        "customisations",
+        "git",
+        "changes",
+        "history",
+    ] {
         assert!(
             m.actions.iter().any(|a| a.id == want),
             "missing action {want}"
         );
+    }
+    let opens = |id: &str| -> Vec<&str> {
+        let action = m.actions.iter().find(|a| a.id == id).unwrap();
+        action.command[2..].iter().map(String::as_str).collect()
+    };
+    assert!(opens("open").is_empty());
+    assert_eq!(opens("git"), ["--view", "status"]);
+    assert_eq!(opens("changes"), ["--view", "changes"]);
+    assert_eq!(opens("history"), ["--view", "history"]);
+    for a in &m.actions {
+        if let [flag, view] = &a.command[2..] {
+            assert_eq!(flag, "--view");
+            assert!(
+                codemap::app::View::parse(view).is_some(),
+                "action {} opens an unknown view {view}",
+                a.id
+            );
+        }
     }
 
     assert_eq!(m.events.len(), 1);

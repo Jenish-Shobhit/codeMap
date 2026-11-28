@@ -19,6 +19,7 @@ use serde_json::{json, Value};
 
 const FILES: (u16, u16) = (140, 40);
 const CUSTOM: (u16, u16) = (140, 34);
+const STATUS: (u16, u16) = (140, 36);
 const CHANGES: (u16, u16) = (150, 46);
 const HISTORY: (u16, u16) = (128, 40);
 const NOW: i64 = 1_790_027_160;
@@ -45,9 +46,9 @@ fn main() {
     serve_mock_herdr(&socket, &repo);
 
     codemap::util::freeze_time(NOW);
-    let mut app = App::new(Options {
+    let over_the_agent = |view: View| Options {
         path: None,
-        view: View::Files,
+        view,
         context: Some(PluginContext {
             workspace_label: Some("paneMorph".into()),
             tab_label: Some("selector-fix".into()),
@@ -58,9 +59,10 @@ fn main() {
             ..Default::default()
         }),
         client: Some(Client::new(&socket)),
-        store,
+        store: store.clone(),
         theme: dracula(),
-    });
+    };
+    let mut app = App::new(over_the_agent(View::Files));
     app.load_blocking();
 
     let mut shots: Vec<(&str, &str, Buffer)> = Vec::new();
@@ -91,13 +93,20 @@ fn main() {
         key(&mut app, KeyCode::Char(c));
     }
     key(&mut app, KeyCode::Enter);
-    shots.push(("changes", "Changes", frame(&mut app, CHANGES)));
+    shots.push(("changes", "Review", frame(&mut app, CHANGES)));
 
     app.view = View::History;
     frame(&mut app, HISTORY);
     key(&mut app, KeyCode::Char('j'));
     key(&mut app, KeyCode::Char('j'));
     shots.push(("history", "History", frame(&mut app, HISTORY)));
+
+    demo::stage_part_of_the_turn(&repo.root);
+    let mut status = App::new(over_the_agent(View::Status));
+    status.load_blocking();
+    frame(&mut status, STATUS);
+    key(&mut status, KeyCode::Char('j'));
+    shots.push(("status", "Status", frame(&mut status, STATUS)));
 
     demo::add_customisations(&repo.root, &home);
     let mut custom = App::new(Options {
