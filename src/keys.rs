@@ -1,6 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use crate::app::{App, Focus, Input, InputKind, Location, Outcome, View};
+use crate::commit::Field;
 use crate::custom::Scope;
 use crate::open::Opener;
 
@@ -23,6 +24,12 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
         app.outcome = Some(Outcome::Quit);
         return Action::Quit;
+    }
+    if app.confirm.is_some() {
+        return confirm_key(app, key);
+    }
+    if app.commit.open {
+        return commit_key(app, key);
     }
     if app.input.is_some() {
         return input_key(app, key);
@@ -133,6 +140,45 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
     } else {
         r
     }
+}
+
+pub fn paste(app: &mut App, text: &str) -> Action {
+    if app.confirm.is_some() {
+        app.answer_discard(false);
+        return Action::Redraw;
+    }
+    if app.commit.open && !app.commit.busy {
+        app.commit.paste(text);
+        return Action::Redraw;
+    }
+    Action::None
+}
+
+fn confirm_key(app: &mut App, key: KeyEvent) -> Action {
+    let yes = key.code == KeyCode::Char('y')
+        && key.modifiers.is_empty()
+        && key.kind == KeyEventKind::Press;
+    app.answer_discard(yes);
+    Action::Redraw
+}
+
+fn commit_key(app: &mut App, key: KeyEvent) -> Action {
+    if app.commit.busy {
+        return Action::None;
+    }
+    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    let alt = key.modifiers.contains(KeyModifiers::ALT);
+    match key.code {
+        KeyCode::Esc => app.commit.close(),
+        KeyCode::Enter if app.commit.field == Field::Subject => app.submit_commit(),
+        KeyCode::Enter => app.commit.new_line(),
+        KeyCode::Tab | KeyCode::BackTab => app.commit.other_field(),
+        KeyCode::Backspace => app.commit.backspace(),
+        KeyCode::Char('u') if ctrl => app.commit.clear_field(),
+        KeyCode::Char(c) if !ctrl && !alt => app.commit.type_char(c),
+        _ => return Action::None,
+    }
+    Action::Redraw
 }
 
 fn quit(app: &mut App) -> Action {
@@ -296,9 +342,23 @@ fn files_key(app: &mut App, key: KeyEvent) -> Action {
 }
 
 fn status_key(app: &mut App, key: KeyEvent) -> Action {
+    let held = KeyModifiers::CONTROL | KeyModifiers::ALT;
+    match key.code {
+        _ if key.modifiers.intersects(held) => return status_move_key(app, key),
+        KeyCode::Char(' ') => app.toggle_staged(),
+        KeyCode::Char('c') => app.open_commit_box(),
+        KeyCode::Char('x') => app.ask_discard(),
+        _ => return status_move_key(app, key),
+    }
+    Action::Redraw
+}
+
+fn status_move_key(app: &mut App, key: KeyEvent) -> Action {
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
     if app.status.focus == Focus::Body {
         match key.code {
+            KeyCode::Char(']') => app.status.next_hunk(1),
+            KeyCode::Char('[') => app.status.next_hunk(-1),
             KeyCode::Char('d') if ctrl => app.status.scroll_by(15),
             KeyCode::Char('u') if ctrl => app.status.scroll_by(-15),
             KeyCode::Up | KeyCode::Char('k') => app.status.scroll_by(-1),

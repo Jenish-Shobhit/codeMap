@@ -125,7 +125,7 @@ fn status_tab_shows_what_is_staged_and_what_is_not() {
     write(root, "docs/guide.md", "# Guide\n\nRun it.\n");
     git(root, &["add", "app.py", "docs/guide.md"]);
     write(root, "util.py", "def helper():\n    return 3\n");
-    let before = fingerprint(root);
+    let before = (fingerprint(root), tree_bytes(root));
     let state = TempDir::new("pty-status-state");
     let state_s = state.path().display().to_string();
     let root_s = root.display().to_string();
@@ -150,6 +150,16 @@ fn status_tab_shows_what_is_staged_and_what_is_not() {
     }
     press(&mut p, b"G", "util.py   +1 −1    not staged");
     press(&mut p, b"\t", "j k scroll");
+    press(&mut p, b"]", "hunk 1 of 1");
+    press(
+        &mut p,
+        b"x",
+        "discard 2 changed lines in util.py (hunk 1 of 1)?",
+    );
+    press(&mut p, b"\r", "nothing discarded");
+    press(&mut p, b"c", "commit to main");
+    press(&mut p, b"not yet", "subject  not yet");
+    press(&mut p, b"\x1b", "j k scroll");
     p.send(b"\x1b");
     std::thread::sleep(Duration::from_millis(150));
     assert!(
@@ -162,9 +172,89 @@ fn status_tab_shows_what_is_staged_and_what_is_not() {
         .wait_exit(Duration::from_secs(5))
         .expect("q quits")
         .success());
-    let after = fingerprint(root);
-    assert_eq!(before.0, after.0, ".git changed while the popup was open");
-    assert_eq!(before.1, after.1, "git status changed");
+    let after = (fingerprint(root), tree_bytes(root));
+    assert_eq!(
+        before.0 .0, after.0 .0,
+        ".git changed while the popup was open"
+    );
+    assert_eq!(before.0 .1, after.0 .1, "git status changed");
+    assert_eq!(before.1, after.1, "the working tree changed");
+}
+
+#[test]
+fn status_tab_stages_a_file_and_commits_it() {
+    let repo = repo_with(&[
+        ("app.py", "def main():\n    return 1\n"),
+        ("util.py", "def helper():\n    pass\n"),
+    ]);
+    let root = repo.path();
+    commits_as_test(root);
+    write(root, "app.py", "def main():\n    return 2\n");
+    write(root, "util.py", "def helper():\n    return 3\n");
+    let state = TempDir::new("pty-commit-state");
+    let state_s = state.path().display().to_string();
+    let root_s = root.display().to_string();
+    let mut p = spawn(
+        &[&root_s, "--view", "status"],
+        &[("CODEMAP_STATE_DIR", &state_s)],
+        120,
+        30,
+    );
+    p.wait_for("not staged · 2", 0, Duration::from_secs(5))
+        .expect("the not staged group");
+    assert!(p.screen().contains("app.py   +1 −1    not staged"));
+    assert!(
+        p.text().contains("\x1b[?2004h"),
+        "the status tab asks the terminal to mark pasted text"
+    );
+    press(&mut p, b" ", "staged app.py");
+    assert!(p.screen().contains(" staged · 1"), "{}", p.screen());
+    assert_eq!(
+        git(root, &["status", "--porcelain=v1"]),
+        "M  app.py\n M util.py\n"
+    );
+
+    p.send(b"\x1b[200~xy\x1b[201~");
+    press(&mut p, b"?", "stage or unstage the file");
+    press(&mut p, b"\x1b", "j k file");
+    assert_eq!(
+        std::fs::read_to_string(root.join("util.py")).unwrap(),
+        "def helper():\n    return 3\n",
+        "a pasted x and y discard nothing"
+    );
+
+    press(&mut p, b"c", "commit to main");
+    assert!(p.screen().contains("1 file staged"), "{}", p.screen());
+    press(&mut p, b"fix: return two", "subject  fix: return two");
+    press(&mut p, b"\r", "committed ");
+    let screen = p.screen();
+    assert!(!screen.contains("commit to main"), "{screen}");
+    assert!(screen.contains(" staged · 0"), "{screen}");
+    assert!(screen.contains(" not staged · 1"), "{screen}");
+    assert_eq!(
+        git(root, &["log", "--format=%an <%ae> %s"]),
+        "Test <test@example.com> fix: return two\nTest <test@example.com> initial\n"
+    );
+    assert_eq!(
+        git(root, &["show", "--format=", "--name-only", "HEAD"]),
+        "app.py\n"
+    );
+    assert_eq!(git(root, &["status", "--porcelain=v1"]), " M util.py\n");
+    let short = git(root, &["rev-parse", "--short", "HEAD"]);
+    assert!(
+        screen.contains(&format!("committed {} fix: return two", short.trim())),
+        "{screen}"
+    );
+    press(&mut p, b"3", "fix: return two");
+    p.send(b"q");
+    assert!(p
+        .wait_exit(Duration::from_secs(5))
+        .expect("q quits")
+        .success());
+    assert!(
+        p.text().contains("\x1b[?2004l"),
+        "paste marking is off again"
+    );
 }
 
 #[test]

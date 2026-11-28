@@ -4,11 +4,12 @@ use std::time::Instant;
 
 use serde_json::Value;
 
+use crate::commit::CommitBox;
 use crate::custom::{self, CustomState, Group, Roots};
 use crate::files::{FilesState, MAX_FILES};
 use crate::git::{self, graph, Commit, FileDiff, GraphRow, LineKind, RepoInfo};
 use crate::herdr::{Client, PluginContext};
-use crate::status::StatusState;
+use crate::status::{Discard, StatusState};
 use crate::store::{Comment, PaneState, Reviews, Store};
 use crate::theme::Theme;
 use crate::util;
@@ -182,6 +183,7 @@ pub enum Msg {
         worktrees: Vec<WorktreeRow>,
     },
     CommitDiff(String, Result<Vec<FileDiff>, String>),
+    Committed(Result<(String, String), String>),
     Notice(String),
 }
 
@@ -281,6 +283,8 @@ pub struct App {
     pub files: FilesState,
     pub custom: CustomState,
     pub status: StatusState,
+    pub commit: CommitBox,
+    pub confirm: Option<Discard>,
     pub changes: ChangesState,
     pub history: HistoryState,
     pub history_loaded: bool,
@@ -293,6 +297,7 @@ pub struct App {
     pub started: Instant,
     pub first_paint_ms: Option<f64>,
     pub pinned: bool,
+    pub repaint: bool,
     tx: Sender<Msg>,
     rx: Receiver<Msg>,
     sync: bool,
@@ -348,6 +353,8 @@ impl App {
                 focus: Focus::Rail,
                 ..Default::default()
             },
+            commit: CommitBox::default(),
+            confirm: None,
             changes: ChangesState::default(),
             history: HistoryState::default(),
             history_loaded: false,
@@ -360,6 +367,7 @@ impl App {
             started: Instant::now(),
             first_paint_ms: None,
             pinned: false,
+            repaint: false,
             tx,
             rx,
             sync: false,
@@ -521,6 +529,7 @@ impl App {
                     Err(e) => self.message = Some(e),
                 }
             }
+            Msg::Committed(result) => self.commit_finished(result),
             Msg::Notice(s) => self.message = Some(s),
         }
     }
@@ -587,6 +596,40 @@ impl App {
             let status = git::status(&repo, &scratch).map_err(|e| e.0);
             let _ = tx.send(Msg::Status(status));
         });
+    }
+
+    pub fn reload_status(&mut self) {
+        let Some(repo) = self.repo.clone() else {
+            return;
+        };
+        let scratch = self.store.shadow(&repo).dir;
+        self.status
+            .load(git::status(&repo, &scratch).map_err(|e| e.0));
+    }
+
+    pub fn reload_review(&mut self) {
+        self.request_changes();
+        self.drain_if_sync();
+    }
+
+    pub fn reload_after_commit(&mut self) {
+        if let Ok(repo) = git::discover(&self.root) {
+            self.repo = Some(repo);
+        }
+        self.reload_status();
+        self.request_changes();
+        self.request_history();
+    }
+
+    pub fn request_commit(&mut self, subject: String, body: String) {
+        let root = self.root.clone();
+        self.spawn(move |tx| {
+            let done = git::write::commit(&root, &subject, &body)
+                .map(|short| (short, subject))
+                .map_err(|e| e.0);
+            let _ = tx.send(Msg::Committed(done));
+        });
+        self.drain_if_sync();
     }
 
     pub fn request_history(&mut self) {

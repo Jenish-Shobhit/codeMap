@@ -1,5 +1,6 @@
 mod changes;
 mod custom;
+mod dialog;
 mod files;
 mod history;
 mod status;
@@ -97,6 +98,12 @@ pub fn render_buf(buf: &mut Buffer, area: Rect, app: &mut App) {
         View::History => history::render(buf, &a, app),
     }
     hints_line(buf, &a, app);
+    if app.commit.open {
+        dialog::commit_box(buf, area, app);
+    }
+    if let Some(asked) = &app.confirm {
+        dialog::discard_question(buf, area, asked, &t);
+    }
     if app.show_help {
         help(buf, area, app);
     }
@@ -349,21 +356,7 @@ fn view_hints(app: &App) -> Vec<(&'static str, String)> {
             ("/", "find".into()),
             ("?", "keys".into()),
         ],
-        View::Status => vec![
-            (
-                "j k",
-                match app.status.focus {
-                    Focus::Rail => "file".to_string(),
-                    Focus::Body => "scroll".into(),
-                },
-            ),
-            ("e", "editor".into()),
-            ("E", "VS Code".into()),
-            ("b", "browser".into()),
-            ("B", "GitHub".into()),
-            ("y", "copy".into()),
-            ("?", "keys".into()),
-        ],
+        View::Status => status::hints(&app.status),
         View::Changes => vec![
             ("] [", "hunk".to_string()),
             ("space", "reviewed".into()),
@@ -436,6 +429,9 @@ fn hints_line(buf: &mut Buffer, a: &Areas, app: &App) {
         put(buf, r.x, r.y, msg, style(t.text2, t.body), r.width);
         return;
     }
+    if app.commit.open || app.confirm.is_some() {
+        return;
+    }
     let mut line = Line::new();
     for (i, (k, v)) in view_hints(app).into_iter().enumerate() {
         if i > 0 {
@@ -487,6 +483,9 @@ pub const KEYS: &[(&str, &[(&str, &str)])] = &[
             ("1 2 3", "status, review, history"),
             ("j k", "move through the staged and not staged files"),
             ("tab  ⎋", "read the diff, go back to the files"),
+            ("] [", "next or previous hunk of the diff"),
+            ("space", "stage or unstage the file, in the diff the hunk"),
+            ("c  x", "commit what is staged, discard after asking"),
         ],
     ),
     (

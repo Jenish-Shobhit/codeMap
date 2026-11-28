@@ -38,6 +38,7 @@ pub struct DiffLine {
     pub old_no: Option<u32>,
     pub new_no: Option<u32>,
     pub text: String,
+    pub no_newline: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -169,6 +170,8 @@ impl FileDiff {
     }
 }
 
+const ADDED_FILE_LINES: usize = 20_000;
+
 pub fn added_file(root: &std::path::Path, rel: &str) -> FileDiff {
     let bytes = std::fs::read(root.join(rel)).unwrap_or_default();
     let probe = &bytes[..bytes.len().min(8000)];
@@ -176,17 +179,22 @@ pub fn added_file(root: &std::path::Path, rel: &str) -> FileDiff {
     let mut hunks = Vec::new();
     if !binary && !bytes.is_empty() {
         let text = String::from_utf8_lossy(&bytes);
-        let lines: Vec<DiffLine> = text
+        let mut lines: Vec<DiffLine> = text
             .lines()
-            .take(20_000)
+            .take(ADDED_FILE_LINES)
             .enumerate()
             .map(|(i, l)| DiffLine {
                 kind: LineKind::Add,
                 old_no: None,
                 new_no: Some(i as u32 + 1),
                 text: l.to_string(),
+                no_newline: false,
             })
             .collect();
+        let whole = text.lines().nth(ADDED_FILE_LINES).is_none();
+        if let Some(last) = lines.last_mut().filter(|_| whole) {
+            last.no_newline = !text.ends_with('\n');
+        }
         let n = lines.len() as u32;
         hunks.push(Hunk {
             old_start: 0,
@@ -256,6 +264,7 @@ pub fn parse(text: &str) -> Vec<FileDiff> {
                 old_no: None,
                 new_no: Some(new_no),
                 text: t.to_string(),
+                no_newline: false,
             });
             new_no += 1;
         } else if let Some(t) = line.strip_prefix('-') {
@@ -264,6 +273,7 @@ pub fn parse(text: &str) -> Vec<FileDiff> {
                 old_no: Some(old_no),
                 new_no: None,
                 text: t.to_string(),
+                no_newline: false,
             });
             old_no += 1;
         } else if let Some(t) = line.strip_prefix(' ') {
@@ -272,9 +282,14 @@ pub fn parse(text: &str) -> Vec<FileDiff> {
                 old_no: Some(old_no),
                 new_no: Some(new_no),
                 text: t.to_string(),
+                no_newline: false,
             });
             old_no += 1;
             new_no += 1;
+        } else if line.starts_with('\\') {
+            if let Some(last) = h.lines.last_mut() {
+                last.no_newline = true;
+            }
         }
     }
     flush_hunk(&mut cur, &mut hunk);
@@ -447,6 +462,16 @@ fn unquote(s: &str) -> String {
                     out.push(b'\t');
                     i += 2;
                 }
+                b'a' | b'b' | b'f' | b'r' | b'v' => {
+                    out.push(match n {
+                        b'a' => 0x07,
+                        b'b' => 0x08,
+                        b'f' => 0x0c,
+                        b'r' => b'\r',
+                        _ => 0x0b,
+                    });
+                    i += 2;
+                }
                 b'"' | b'\\' => {
                     out.push(n);
                     i += 2;
@@ -570,6 +595,78 @@ Binary files a/logo.png and b/logo.png differ
         let text = "diff --git \"a/sp\\303\\244ce.py\" \"b/sp\\303\\244ce.py\"\nnew file mode 100644\n--- /dev/null\n+++ \"b/sp\\303\\244ce.py\"\n@@ -0,0 +1 @@\n+x\n";
         let files = parse(text);
         assert_eq!(files[0].path, "späce.py");
+    }
+
+    #[test]
+    fn quoted_paths_with_control_characters() {
+        let text = "diff --git \"a/bell\\a tab\\t cr\\r.py\" \"b/bell\\a tab\\t cr\\r.py\"\n--- \"a/bell\\a tab\\t cr\\r.py\"\n+++ \"b/bell\\a tab\\t cr\\r.py\"\n@@ -1 +1 @@\n-x\n+y\n";
+        let files = parse(text);
+        assert_eq!(files[0].path, "bell\u{7} tab\t cr\r.py");
+        assert_eq!(unquote("\"\\b\\f\\v\""), "\u{8}\u{c}\u{b}");
+    }
+
+    fn without_newline(text: &str) -> Vec<(LineKind, String, bool)> {
+        let file = parse(text).remove(0);
+        assert_eq!(file.hunks.len(), 1);
+        file.hunks[0]
+            .lines
+            .iter()
+            .map(|l| (l.kind, l.text.clone(), l.no_newline))
+            .collect()
+    }
+
+    #[test]
+    fn a_missing_final_newline_is_kept_on_the_line_it_follows() {
+        let head = "diff --git a/f b/f\n--- a/f\n+++ b/f\n";
+        let marker = "\\ No newline at end of file\n";
+        let old_side = format!("{head}@@ -1,2 +1,2 @@\n one\n-last\n{marker}+last\n");
+        assert_eq!(
+            without_newline(&old_side),
+            [
+                (LineKind::Context, "one".to_string(), false),
+                (LineKind::Del, "last".into(), true),
+                (LineKind::Add, "last".into(), false),
+            ]
+        );
+        let new_side = format!("{head}@@ -1,2 +1,2 @@\n one\n-last\n+last\n{marker}");
+        assert_eq!(
+            without_newline(&new_side)
+                .iter()
+                .map(|l| l.2)
+                .collect::<Vec<_>>(),
+            [false, false, true]
+        );
+        let both = format!("{head}@@ -1,2 +1,2 @@\n-one\n+ONE\n last\n{marker}");
+        assert_eq!(
+            without_newline(&both).last(),
+            Some(&(LineKind::Context, "last".to_string(), true))
+        );
+        let neither = format!("{head}@@ -1,2 +1,2 @@\n-one\n+ONE\n last\n");
+        assert!(without_newline(&neither).iter().all(|l| !l.2));
+        let counted = parse(&both).remove(0);
+        assert_eq!(
+            (counted.adds(), counted.dels()),
+            (1, 1),
+            "the marker is no line"
+        );
+    }
+
+    #[test]
+    fn an_added_file_knows_whether_it_ends_with_a_newline() {
+        let dir = std::env::temp_dir().join(format!("codemap-diff-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("ends.txt"), "one\ntwo\n").unwrap();
+        std::fs::write(dir.join("stops.txt"), "one\ntwo").unwrap();
+        let flags = |name: &str| -> Vec<bool> {
+            added_file(&dir, name).hunks[0]
+                .lines
+                .iter()
+                .map(|l| l.no_newline)
+                .collect()
+        };
+        assert_eq!(flags("ends.txt"), [false, false]);
+        assert_eq!(flags("stops.txt"), [false, true]);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

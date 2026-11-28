@@ -704,7 +704,7 @@ fn status_view_lists_staged_and_unstaged_files() {
         "@@ top level · 1–3",
         "   3+ __version__ = \"0.1.2\"",
         "tab diff",
-        "j k file  e editor  E VS Code  b browser  B GitHub  y copy  ? keys",
+        "j k file  space unstage  c commit  e editor  ? keys",
     ] {
         assert!(t.contains(needle), "missing {needle:?}\n{t}");
     }
@@ -777,7 +777,6 @@ fn status_selection_moves_through_both_groups() {
     assert_eq!(app.status.sel, 0);
     assert_eq!(key(&mut app, KeyCode::Char('s')), Action::None);
     assert_eq!(app.scope, Scope::Turn, "s belongs to the review tab");
-    assert_eq!(key(&mut app, KeyCode::Char(' ')), Action::None);
     assert_eq!(key(&mut app, KeyCode::Enter), Action::None);
 }
 
@@ -802,7 +801,10 @@ fn status_body_scrolls_and_escape_returns_to_the_list() {
     assert_eq!(app.status.focus, Focus::Body);
     let t = text(&mut app);
     assert!(t.contains("tab files"), "{t}");
-    assert!(t.contains("j k scroll  e editor"), "{t}");
+    assert!(
+        t.contains("j k scroll  ] [ hunk  space stage hunk  x discard  c commit  e editor  ? keys"),
+        "{t}"
+    );
     for _ in 0..4 {
         key(&mut app, KeyCode::Char('j'));
     }
@@ -1007,4 +1009,1012 @@ fn status_of_a_repository_with_no_commits() {
     }
     key(&mut app, KeyCode::Char('j'));
     assert!(text(&mut app).contains("second.py   +1    untracked"));
+}
+
+fn ctrl(app: &mut App, c: char) -> Action {
+    keys::handle(app, KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL))
+}
+
+fn numbered(changed: &[usize]) -> String {
+    (1..=30)
+        .map(|n| {
+            if changed.contains(&n) {
+                format!("line {n} changed\n")
+            } else {
+                format!("line {n}\n")
+            }
+        })
+        .collect()
+}
+
+fn work_repo() -> (TempDir, TempDir) {
+    let repo = repo_with(&[
+        ("a.py", "x = 1\n"),
+        ("b.py", "y = 1\n"),
+        ("f.txt", &numbered(&[])),
+        ("gone.py", "z = 1\n"),
+    ]);
+    let p = repo.path();
+    commits_as_test(p);
+    write(p, "a.py", "x = 2\n");
+    write(p, "b.py", "y = 2\n");
+    write(p, "f.txt", &numbered(&[1, 15, 30]));
+    write(p, "notes.md", "# Notes\n\nKeep the timeout.\n");
+    std::fs::remove_file(p.join("gone.py")).unwrap();
+    (repo, TempDir::new("work-state"))
+}
+
+fn work_app(root: &std::path::Path, state: &TempDir) -> App {
+    let mut app = App::new(Options {
+        path: Some(root.to_path_buf()),
+        view: View::Status,
+        context: Some(agent_context()),
+        client: None,
+        store: codemap::store::Store::new(state.path()),
+        theme: dracula(),
+    });
+    app.load_blocking();
+    app
+}
+
+fn porcelain(repo: &std::path::Path) -> Vec<String> {
+    fingerprint(repo).1.lines().map(str::to_string).collect()
+}
+
+fn in_index(repo: &std::path::Path, path: &str) -> String {
+    git(repo, &["cat-file", "blob", &format!(":{path}")])
+}
+
+fn on_disk(repo: &std::path::Path, path: &str) -> String {
+    std::fs::read_to_string(repo.join(path)).unwrap()
+}
+
+fn heading(app: &mut App) -> String {
+    let buf = draw(app, W, H);
+    let body = ui::areas(buf.area, View::Status).body;
+    let row: String = (body.x..W)
+        .map(|x| buf[(x, body.y)].symbol().to_string())
+        .collect();
+    row.trim().to_string()
+}
+
+fn select(app: &mut App, path: &str, staged: bool) {
+    let first = if staged { 0 } else { app.status.staged.len() };
+    let group = if staged {
+        &app.status.staged
+    } else {
+        &app.status.unstaged
+    };
+    let at = group
+        .iter()
+        .position(|f| f.path == path)
+        .unwrap_or_else(|| panic!("{path} is not listed"));
+    key(app, KeyCode::Char('g'));
+    for _ in 0..first + at {
+        key(app, KeyCode::Char('j'));
+    }
+    assert_eq!(app.status.selected().unwrap().path, path);
+    assert_eq!(app.status.selected_is_staged(), staged);
+}
+
+fn bar_rows(app: &mut App) -> Vec<String> {
+    let buf = draw(app, W, H);
+    let accent = app.theme.accent;
+    let x = ui::areas(buf.area, View::Status).body.x - 1;
+    (0..H)
+        .filter(|&y| buf[(x, y)].symbol() == "│" && buf[(x, y)].fg == accent)
+        .map(|y| {
+            let row: String = (x + 1..W)
+                .map(|x| buf[(x, y)].symbol().to_string())
+                .collect();
+            row.trim().to_string()
+        })
+        .collect()
+}
+
+#[test]
+fn space_stages_the_selected_file_and_moves_to_the_next() {
+    let (repo, state) = work_repo();
+    let p = repo.path();
+    let mut app = work_app(p, &state);
+    let t = text(&mut app);
+    for needle in [
+        " staged · 0",
+        " not staged · 5",
+        "a.py   +1 −1    not staged",
+        "j k file  space stage  x discard  c commit  e editor  ? keys",
+    ] {
+        assert!(t.contains(needle), "missing {needle:?}\n{t}");
+    }
+    assert_eq!(key(&mut app, KeyCode::Char(' ')), Action::Redraw);
+    assert_eq!(app.message.as_deref(), Some("staged a.py"));
+    let t = text(&mut app);
+    assert!(
+        t.contains(" staged · 1") && t.contains(" not staged · 4"),
+        "{t}"
+    );
+    assert!(
+        t.contains("b.py   +1 −1    not staged"),
+        "the next file\n{t}"
+    );
+    assert_eq!(
+        porcelain(p),
+        [
+            "M  a.py",
+            " M b.py",
+            " M f.txt",
+            " D gone.py",
+            "?? notes.md"
+        ]
+    );
+    key(&mut app, KeyCode::Char(' '));
+    assert_eq!(heading(&mut app), "f.txt   +3 −3    not staged");
+    key(&mut app, KeyCode::Char('j'));
+    key(&mut app, KeyCode::Char(' '));
+    assert_eq!(app.message.as_deref(), Some("staged gone.py"));
+    assert_eq!(heading(&mut app), "notes.md   +3    untracked");
+    key(&mut app, KeyCode::Char(' '));
+    assert_eq!(
+        heading(&mut app),
+        "f.txt   +3 −3    not staged",
+        "the last file of the list gives way to the one above"
+    );
+    assert_eq!(
+        porcelain(p),
+        [
+            "M  a.py",
+            "M  b.py",
+            " M f.txt",
+            "D  gone.py",
+            "A  notes.md"
+        ]
+    );
+    key(&mut app, KeyCode::Char(' '));
+    assert_eq!(app.status.unstaged.len(), 0);
+    assert_eq!(
+        heading(&mut app),
+        "f.txt   +3 −3    staged",
+        "with nothing left the selection follows the file"
+    );
+    assert_eq!(app.status.focus, Focus::Rail);
+}
+
+#[test]
+fn space_unstages_a_staged_file() {
+    let (repo, state) = work_repo();
+    let p = repo.path();
+    git(p, &["add", "-A"]);
+    let mut app = work_app(p, &state);
+    assert_eq!((app.status.staged.len(), app.status.unstaged.len()), (5, 0));
+    select(&mut app, "gone.py", true);
+    key(&mut app, KeyCode::Char(' '));
+    assert_eq!(app.message.as_deref(), Some("unstaged gone.py"));
+    assert_eq!(heading(&mut app), "notes.md   +3    staged");
+    key(&mut app, KeyCode::Char(' '));
+    assert_eq!(app.message.as_deref(), Some("unstaged notes.md"));
+    assert_eq!(heading(&mut app), "f.txt   +3 −3    staged");
+    assert_eq!(
+        porcelain(p),
+        [
+            "M  a.py",
+            "M  b.py",
+            "M  f.txt",
+            " D gone.py",
+            "?? notes.md"
+        ]
+    );
+    assert_eq!(on_disk(p, "notes.md"), "# Notes\n\nKeep the timeout.\n");
+}
+
+#[test]
+fn a_staged_rename_unstages_both_of_its_names() {
+    let repo = repo_with(&[("old_name.py", "def keep():\n    return 1\n")]);
+    let state = TempDir::new("rename-state");
+    let p = repo.path();
+    git(p, &["mv", "old_name.py", "new_name.py"]);
+    let mut app = work_app(p, &state);
+    assert_eq!(heading(&mut app), "new_name.py  ← old_name.py      staged");
+    key(&mut app, KeyCode::Tab);
+    assert!(text(&mut app).contains("space unstage file"));
+    key(&mut app, KeyCode::Char(' '));
+    assert_eq!(porcelain(p), [" D old_name.py", "?? new_name.py"]);
+}
+
+#[test]
+fn the_hunk_cursor_follows_the_top_row_of_the_diff() {
+    let (repo, state) = work_repo();
+    let mut app = work_app(repo.path(), &state);
+    select(&mut app, "f.txt", false);
+    assert_eq!(bar_rows(&mut app), [""; 0], "the list acts on whole files");
+    assert_eq!(heading(&mut app), "f.txt   +3 −3    not staged");
+    key(&mut app, KeyCode::Tab);
+    assert_eq!(
+        heading(&mut app),
+        "f.txt   +3 −3    not staged    hunk 1 of 3"
+    );
+    assert_eq!(
+        bar_rows(&mut app),
+        [
+            "@@ top level · 1–4",
+            "1− line 1",
+            "1+ line 1 changed",
+            "2  line 2",
+            "3  line 3",
+            "4  line 4"
+        ]
+    );
+    key(&mut app, KeyCode::Char(']'));
+    assert_eq!(
+        heading(&mut app),
+        "f.txt   +3 −3    not staged    hunk 2 of 3"
+    );
+    let t = text(&mut app);
+    snapshot("status_hunk_cursor", &normalize(&t, repo.path()));
+    assert_eq!(bar_rows(&mut app).len(), 9);
+    assert_eq!(bar_rows(&mut app)[5], "15+ line 15 changed");
+    for _ in 0..3 {
+        key(&mut app, KeyCode::Char('j'));
+    }
+    assert_eq!(app.status.hunk_at_cursor(), Some(1), "inside the hunk");
+    assert_eq!(bar_rows(&mut app).len(), 6, "what is left of it on screen");
+    key(&mut app, KeyCode::Char('['));
+    assert_eq!(app.status.scroll, 6, "back to the heading of this hunk");
+    key(&mut app, KeyCode::Char('['));
+    assert_eq!(
+        (app.status.scroll, app.status.hunk_at_cursor()),
+        (0, Some(0))
+    );
+    assert_eq!(key(&mut app, KeyCode::Char('[')), Action::Redraw);
+    assert_eq!(app.status.scroll, 0);
+    key(&mut app, KeyCode::Char('G'));
+    assert_eq!(app.status.hunk_at_cursor(), Some(2));
+    key(&mut app, KeyCode::Char(']'));
+    assert_eq!(
+        app.status.hunk_at_cursor(),
+        Some(2),
+        "there is no hunk below"
+    );
+    key(&mut app, KeyCode::Esc);
+    assert_eq!(bar_rows(&mut app), [""; 0]);
+    assert_eq!(key(&mut app, KeyCode::Char(']')), Action::None);
+}
+
+#[test]
+fn space_in_the_diff_stages_and_unstages_the_hunk_under_the_cursor() {
+    let (repo, state) = work_repo();
+    let p = repo.path();
+    let mut app = work_app(p, &state);
+    select(&mut app, "f.txt", false);
+    key(&mut app, KeyCode::Tab);
+    key(&mut app, KeyCode::Char(']'));
+    key(&mut app, KeyCode::Char('j'));
+    key(&mut app, KeyCode::Char(' '));
+    assert_eq!(app.message.as_deref(), Some("staged hunk 2 of 3 in f.txt"));
+    assert_eq!(in_index(p, "f.txt"), numbered(&[15]));
+    assert_eq!(on_disk(p, "f.txt"), numbered(&[1, 15, 30]));
+    assert_eq!(
+        heading(&mut app),
+        "f.txt   +2 −2    not staged    hunk 2 of 2",
+        "the hunk that was below is under the cursor"
+    );
+    let t = text(&mut app);
+    assert!(t.contains(" staged · 1") && t.contains("M f.txt"), "{t}");
+    assert!(t.contains("│@@ line 26 · 27–30"), "{t}");
+    key(&mut app, KeyCode::Char(' '));
+    assert_eq!(in_index(p, "f.txt"), numbered(&[15, 30]));
+    assert_eq!(
+        heading(&mut app),
+        "f.txt   +1 −1    not staged    hunk 1 of 1"
+    );
+    key(&mut app, KeyCode::Char(' '));
+    assert_eq!(in_index(p, "f.txt"), numbered(&[1, 15, 30]));
+    assert_eq!(porcelain(p)[2], "M  f.txt");
+    assert_eq!(
+        heading(&mut app),
+        "gone.py   −1    not staged",
+        "the file left the list, so the next one is shown"
+    );
+    assert_eq!(app.status.focus, Focus::Body);
+
+    key(&mut app, KeyCode::Esc);
+    select(&mut app, "f.txt", true);
+    key(&mut app, KeyCode::Tab);
+    assert!(text(&mut app).contains("space unstage hunk  c commit"));
+    key(&mut app, KeyCode::Char(']'));
+    key(&mut app, KeyCode::Char(' '));
+    assert_eq!(
+        app.message.as_deref(),
+        Some("unstaged hunk 2 of 3 in f.txt")
+    );
+    assert_eq!(in_index(p, "f.txt"), numbered(&[1, 30]));
+    assert_eq!(heading(&mut app), "f.txt   +2 −2    staged    hunk 2 of 2");
+    assert_eq!(on_disk(p, "f.txt"), numbered(&[1, 15, 30]));
+}
+
+#[test]
+fn space_in_the_diff_takes_the_whole_file_where_a_hunk_means_nothing() {
+    let (repo, state) = work_repo();
+    let p = repo.path();
+    let mut app = work_app(p, &state);
+    select(&mut app, "notes.md", false);
+    key(&mut app, KeyCode::Tab);
+    let t = text(&mut app);
+    assert!(t.contains("space stage file  x discard  c commit"), "{t}");
+    assert!(!t.contains("hunk 1 of 1"), "{t}");
+    assert_eq!(bar_rows(&mut app), [""; 0]);
+    key(&mut app, KeyCode::Char(' '));
+    assert_eq!(app.message.as_deref(), Some("staged notes.md"));
+    assert_eq!(porcelain(p)[4], "A  notes.md");
+    key(&mut app, KeyCode::Esc);
+    select(&mut app, "gone.py", false);
+    key(&mut app, KeyCode::Tab);
+    key(&mut app, KeyCode::Char(' '));
+    assert_eq!(porcelain(p)[3], "D  gone.py");
+}
+
+#[test]
+fn a_write_that_git_refuses_is_a_message_and_the_list_is_read_again() {
+    let (repo, state) = work_repo();
+    let p = repo.path();
+    let mut app = work_app(p, &state);
+    select(&mut app, "notes.md", false);
+    std::fs::remove_file(p.join("notes.md")).unwrap();
+    assert_eq!(key(&mut app, KeyCode::Char(' ')), Action::Redraw);
+    let said = app.message.clone().unwrap();
+    assert!(
+        said.contains("notes.md") && said.contains("did not match"),
+        "{said}"
+    );
+    assert_eq!(app.status.unstaged.len(), 4, "the list is fresh");
+    assert_eq!(heading(&mut app), "gone.py   −1    not staged");
+
+    select(&mut app, "f.txt", false);
+    key(&mut app, KeyCode::Tab);
+    write(p, "f.txt", &numbered(&[1, 2, 15, 30]));
+    let before = fingerprint(p);
+    key(&mut app, KeyCode::Char(' '));
+    assert_eq!(
+        app.message.as_deref(),
+        Some("f.txt changed since this diff was read")
+    );
+    assert_eq!(before, fingerprint(p));
+    assert_eq!(
+        heading(&mut app),
+        "f.txt   +4 −4    not staged    hunk 1 of 3"
+    );
+    key(&mut app, KeyCode::Char(' '));
+    assert_eq!(in_index(p, "f.txt"), numbered(&[1, 2]));
+}
+
+fn type_commit(app: &mut App, subject: &str) {
+    key(app, KeyCode::Char('c'));
+    assert!(app.commit.open, "{:?}", app.message);
+    chars(app, subject);
+}
+
+#[test]
+fn c_opens_the_commit_box_only_when_something_is_staged() {
+    let (repo, state) = work_repo();
+    let p = repo.path();
+    let mut app = work_app(p, &state);
+    assert_eq!(key(&mut app, KeyCode::Char('c')), Action::Redraw);
+    assert!(!app.commit.open);
+    let t = text(&mut app);
+    assert!(
+        t.contains("nothing staged to commit · space stages the selected file"),
+        "{t}"
+    );
+    assert!(!t.contains("commit to main"), "{t}");
+    key(&mut app, KeyCode::Char(' '));
+    key(&mut app, KeyCode::Char(' '));
+    key(&mut app, KeyCode::Char('c'));
+    assert!(app.commit.open);
+    let t = text(&mut app);
+    for needle in [
+        "╭─ commit to main ─",
+        "subject  █",
+        "body",
+        "2 files staged",
+        "⏎ commit   tab body   ⌃u clear   ⎋ close, keeps the draft",
+    ] {
+        assert!(t.contains(needle), "missing {needle:?}\n{t}");
+    }
+    assert!(
+        !t.contains("space stage"),
+        "the hints under the box are off\n{t}"
+    );
+    chars(&mut app, "fix: q? 1 x y");
+    assert_eq!(app.commit.subject, "fix: q? 1 x y");
+    assert!(app.commit.open && !app.show_help && app.view == View::Status);
+    assert!(app.confirm.is_none() && app.outcome.is_none());
+    assert_eq!(key(&mut app, KeyCode::Esc), Action::Redraw);
+    assert!(!app.commit.open && app.outcome.is_none());
+    assert_eq!(porcelain(p)[..2], ["M  a.py", "M  b.py"]);
+    assert_eq!(git(p, &["rev-list", "--count", "HEAD"]).trim(), "1");
+}
+
+#[test]
+fn the_commit_box_edits_a_subject_and_a_body() {
+    let (repo, state) = work_repo();
+    let p = repo.path();
+    let mut app = work_app(p, &state);
+    key(&mut app, KeyCode::Char(' '));
+    type_commit(&mut app, "fix: count from twoo");
+    key(&mut app, KeyCode::Backspace);
+    assert_eq!(key(&mut app, KeyCode::Tab), Action::Redraw);
+    chars(&mut app, "One was never right.");
+    key(&mut app, KeyCode::Enter);
+    key(&mut app, KeyCode::Enter);
+    chars(&mut app, "Counting starts at two.");
+    assert_eq!(
+        app.commit.body,
+        "One was never right.\n\nCounting starts at two."
+    );
+    let t = text(&mut app);
+    for needle in [
+        "subject  fix: count from two",
+        "body     One was never right.",
+        "         Counting starts at two.█",
+        "1 file staged",
+        "⏎ new line   tab subject",
+    ] {
+        assert!(t.contains(needle), "missing {needle:?}\n{t}");
+    }
+    snapshot("status_commit_box", &normalize(&t, p));
+    ctrl(&mut app, 'u');
+    assert_eq!(app.commit.body, "");
+    assert_eq!(app.commit.subject, "fix: count from two");
+    chars(&mut app, "Second try.");
+    key(&mut app, KeyCode::Esc);
+    assert!(!app.commit.open);
+    assert!(!text(&mut app).contains("commit to main"));
+    assert_eq!(git(p, &["rev-list", "--count", "HEAD"]).trim(), "1");
+
+    key(&mut app, KeyCode::Char('c'));
+    let t = text(&mut app);
+    assert!(
+        t.contains("subject  fix: count from two"),
+        "the draft is back\n{t}"
+    );
+    assert!(t.contains("body     Second try.█"), "{t}");
+    key(&mut app, KeyCode::BackTab);
+    ctrl(&mut app, 'u');
+    assert_eq!(app.commit.subject, "");
+    assert_eq!(key(&mut app, KeyCode::Enter), Action::Redraw);
+    let t = text(&mut app);
+    assert!(app.commit.open);
+    assert!(
+        t.contains("an empty subject does not commit · write one first"),
+        "{t}"
+    );
+    assert_eq!(app.commit.body, "Second try.");
+    chars(&mut app, "   ");
+    key(&mut app, KeyCode::Enter);
+    assert!(app.commit.open, "blanks are no subject");
+    assert_eq!(git(p, &["rev-list", "--count", "HEAD"]).trim(), "1");
+    assert_eq!(porcelain(p)[0], "M  a.py");
+}
+
+#[test]
+fn enter_in_the_subject_commits_what_is_staged() {
+    let (repo, state) = work_repo();
+    let p = repo.path();
+    let mut app = work_app(p, &state);
+    assert_eq!(app.history.commits.len(), 1);
+    key(&mut app, KeyCode::Char(' '));
+    type_commit(&mut app, "fix: count from two");
+    key(&mut app, KeyCode::Tab);
+    chars(&mut app, "One was never right.");
+    key(&mut app, KeyCode::Enter);
+    chars(&mut app, "  Two is.");
+    key(&mut app, KeyCode::Tab);
+    assert_eq!(key(&mut app, KeyCode::Enter), Action::Redraw);
+    assert!(!app.commit.open, "{:?}", app.commit.problem);
+    let short = git(p, &["rev-parse", "--short", "HEAD"]);
+    assert_eq!(
+        app.message.clone().unwrap(),
+        format!("committed {} fix: count from two", short.trim())
+    );
+    assert_eq!(
+        git(p, &["log", "-1", "--format=%an%n%B"]),
+        "Test\nfix: count from two\n\nOne was never right.\n  Two is.\n\n"
+    );
+    assert_eq!(
+        porcelain(p),
+        [" M b.py", " M f.txt", " D gone.py", "?? notes.md"]
+    );
+    let t = text(&mut app);
+    assert!(
+        t.contains(" staged · 0") && t.contains(" not staged · 4"),
+        "{t}"
+    );
+    assert!(t.contains(&format!("committed {}", short.trim())), "{t}");
+    assert_eq!(app.history.commits.len(), 2, "history is read again");
+    assert_eq!(app.history.commits[0].subject, "fix: count from two");
+    assert!(
+        app.diffs.iter().all(|d| d.path != "a.py"),
+        "the review diff is read again"
+    );
+    assert_eq!(
+        app.repo.as_ref().unwrap().head.as_deref().map(|h| &h[..7]),
+        Some(&short.trim()[..7])
+    );
+
+    key(&mut app, KeyCode::Char(' '));
+    key(&mut app, KeyCode::Char('c'));
+    assert_eq!(
+        (app.commit.subject.as_str(), app.commit.body.as_str()),
+        ("", ""),
+        "a commit clears the draft"
+    );
+    assert!(text(&mut app).contains("subject  █"));
+}
+
+#[test]
+fn a_commit_that_fails_keeps_the_box_and_the_draft() {
+    let (repo, state) = work_repo();
+    let p = repo.path();
+    hook(
+        p,
+        "pre-commit",
+        "#!/bin/sh\necho 'lint: a.py is not formatted' >&2\necho 'run the formatter first' >&2\nexit 1\n",
+    );
+    let mut app = work_app(p, &state);
+    key(&mut app, KeyCode::Char(' '));
+    type_commit(&mut app, "fix: count from two");
+    key(&mut app, KeyCode::Tab);
+    chars(&mut app, "One was never right.");
+    key(&mut app, KeyCode::Tab);
+    let head = git(p, &["rev-parse", "HEAD"]);
+    assert_eq!(key(&mut app, KeyCode::Enter), Action::Redraw);
+    assert!(app.commit.open && !app.commit.busy);
+    assert_eq!(
+        app.commit.problem,
+        ["lint: a.py is not formatted", "run the formatter first"]
+    );
+    let t = text(&mut app);
+    for needle in [
+        "╭─ commit to main ─",
+        "subject  fix: count from two█",
+        "body     One was never right.",
+        "1 file staged",
+        "lint: a.py is not formatted",
+        "run the formatter first",
+    ] {
+        assert!(t.contains(needle), "missing {needle:?}\n{t}");
+    }
+    assert_eq!(git(p, &["rev-parse", "HEAD"]), head);
+    assert_eq!(porcelain(p)[0], "M  a.py");
+    chars(&mut app, "!");
+    assert!(
+        app.commit.problem.is_empty(),
+        "an edit clears the complaint"
+    );
+    key(&mut app, KeyCode::Backspace);
+
+    std::fs::remove_file(p.join(".git/hooks/pre-commit")).unwrap();
+    key(&mut app, KeyCode::Enter);
+    assert!(!app.commit.open);
+    assert_eq!(
+        git(p, &["log", "-1", "--format=%B"]),
+        "fix: count from two\n\nOne was never right.\n\n"
+    );
+}
+
+#[test]
+fn the_commit_box_names_a_detached_head_and_makes_the_first_commit() {
+    let (repo, state) = work_repo();
+    let p = repo.path();
+    git(p, &["checkout", "-q", "--detach"]);
+    let mut app = work_app(p, &state);
+    key(&mut app, KeyCode::Char(' '));
+    key(&mut app, KeyCode::Char('c'));
+    assert!(text(&mut app).contains("╭─ commit on a detached HEAD ─"));
+
+    let unborn = TempDir::new("commit-unborn");
+    let unborn_state = TempDir::new("commit-unborn-state");
+    let p = unborn.path();
+    git(p, &["init", "-q"]);
+    commits_as_test(p);
+    write(p, "first.py", "x = 1\n");
+    let mut app = work_app(p, &unborn_state);
+    assert!(text(&mut app).contains("no commits yet"));
+    key(&mut app, KeyCode::Char(' '));
+    assert_eq!(porcelain(p), ["A  first.py"]);
+    key(&mut app, KeyCode::Char(' '));
+    assert_eq!(
+        porcelain(p),
+        ["?? first.py"],
+        "unstaged with no HEAD to restore from"
+    );
+    key(&mut app, KeyCode::Char(' '));
+    type_commit(&mut app, "feat: the first file");
+    assert!(text(&mut app).contains("╭─ commit to main ─"));
+    key(&mut app, KeyCode::Enter);
+    assert!(!app.commit.open, "{:?}", app.commit.problem);
+    assert_eq!(git(p, &["log", "--format=%s"]), "feat: the first file\n");
+    let t = text(&mut app);
+    assert!(!t.contains("no commits yet"), "{t}");
+    assert!(t.contains("nothing to commit, working tree clean"), "{t}");
+    assert_eq!(app.history.commits.len(), 1);
+}
+
+fn question(app: &mut App) -> Vec<String> {
+    let t = text(app);
+    let lines: Vec<&str> = t.lines().collect();
+    let top = lines
+        .iter()
+        .position(|l| l.contains("╭─ discard ─"))
+        .unwrap_or_else(|| panic!("no question on screen\n{t}"));
+    lines[top + 1..]
+        .iter()
+        .take_while(|l| !l.contains('╰'))
+        .map(|l| {
+            let inside = l.split('│').nth(1).unwrap_or_default();
+            inside.trim().to_string()
+        })
+        .filter(|l| !l.is_empty())
+        .collect()
+}
+
+#[test]
+fn x_asks_before_it_discards_a_file() {
+    let (repo, state) = work_repo();
+    let p = repo.path();
+    let mut app = work_app(p, &state);
+    assert_eq!(key(&mut app, KeyCode::Char('x')), Action::Redraw);
+    assert!(app.confirm.is_some());
+    assert_eq!(
+        question(&mut app),
+        [
+            "discard 2 changed lines in a.py?",
+            "this cannot be undone",
+            "y discards · any other key keeps"
+        ]
+    );
+    let t = text(&mut app);
+    assert!(!t.contains("space stage"), "{t}");
+    snapshot("status_discard_question", &normalize(&t, p));
+    assert_eq!(on_disk(p, "a.py"), "x = 2\n", "asking changes nothing");
+    assert_eq!(key(&mut app, KeyCode::Char('y')), Action::Redraw);
+    assert!(app.confirm.is_none());
+    assert_eq!(on_disk(p, "a.py"), "x = 1\n");
+    assert_eq!(
+        app.message.as_deref(),
+        Some("discarded the changes to a.py")
+    );
+    assert_eq!(
+        porcelain(p),
+        [" M b.py", " M f.txt", " D gone.py", "?? notes.md"]
+    );
+    assert_eq!(heading(&mut app), "b.py   +1 −1    not staged");
+    assert!(
+        app.diffs.iter().all(|d| d.path != "a.py"),
+        "the review diff is read again"
+    );
+}
+
+#[test]
+fn x_deletes_an_untracked_file_and_restores_a_deleted_one() {
+    let (repo, state) = work_repo();
+    let p = repo.path();
+    let mut app = work_app(p, &state);
+    select(&mut app, "notes.md", false);
+    key(&mut app, KeyCode::Char('x'));
+    assert_eq!(
+        question(&mut app),
+        [
+            "delete the untracked file notes.md?",
+            "this cannot be undone",
+            "y deletes · any other key keeps"
+        ]
+    );
+    assert!(p.join("notes.md").exists());
+    key(&mut app, KeyCode::Char('y'));
+    assert!(!p.join("notes.md").exists());
+    assert_eq!(app.message.as_deref(), Some("deleted notes.md"));
+    assert_eq!(heading(&mut app), "gone.py   −1    not staged");
+    key(&mut app, KeyCode::Tab);
+    key(&mut app, KeyCode::Char('x'));
+    assert_eq!(question(&mut app)[0], "discard the deletion of gone.py?");
+    key(&mut app, KeyCode::Char('y'));
+    assert_eq!(on_disk(p, "gone.py"), "z = 1\n");
+    assert_eq!(app.message.as_deref(), Some("restored gone.py"));
+    assert_eq!(porcelain(p), [" M a.py", " M b.py", " M f.txt"]);
+}
+
+#[test]
+fn x_in_the_diff_discards_the_hunk_under_the_cursor_only() {
+    let (repo, state) = work_repo();
+    let p = repo.path();
+    let mut app = work_app(p, &state);
+    select(&mut app, "f.txt", false);
+    key(&mut app, KeyCode::Tab);
+    key(&mut app, KeyCode::Char(']'));
+    key(&mut app, KeyCode::Char('x'));
+    assert_eq!(
+        question(&mut app)[0],
+        "discard 2 changed lines in f.txt (hunk 2 of 3)?"
+    );
+    let before = fingerprint(p).0;
+    key(&mut app, KeyCode::Char('y'));
+    assert_eq!(on_disk(p, "f.txt"), numbered(&[1, 30]));
+    assert_eq!(before, fingerprint(p).0, "the index is not touched");
+    assert_eq!(
+        app.message.as_deref(),
+        Some("discarded hunk 2 of 3 in f.txt")
+    );
+    assert_eq!(
+        heading(&mut app),
+        "f.txt   +2 −2    not staged    hunk 2 of 2"
+    );
+    key(&mut app, KeyCode::Char('x'));
+    key(&mut app, KeyCode::Char('y'));
+    assert_eq!(on_disk(p, "f.txt"), numbered(&[1]));
+    assert_eq!(
+        heading(&mut app),
+        "f.txt   +1 −1    not staged    hunk 1 of 1"
+    );
+}
+
+#[test]
+fn only_y_discards() {
+    let (repo, state) = work_repo();
+    let p = repo.path();
+    git(p, &["add", "b.py"]);
+    let mut app = work_app(p, &state);
+    let before = (fingerprint(p), tree_bytes(p));
+    let plain = |code| KeyEvent::new(code, KeyModifiers::NONE);
+    let held = |c, modifiers| KeyEvent::new(KeyCode::Char(c), modifiers);
+    let mut repeated = plain(KeyCode::Char('y'));
+    repeated.kind = crossterm::event::KeyEventKind::Repeat;
+    let other_keys = [
+        plain(KeyCode::Enter),
+        plain(KeyCode::Esc),
+        plain(KeyCode::Char('n')),
+        plain(KeyCode::Char('Y')),
+        plain(KeyCode::Char('q')),
+        plain(KeyCode::Char('x')),
+        plain(KeyCode::Char(' ')),
+        plain(KeyCode::Char('c')),
+        plain(KeyCode::Char('?')),
+        plain(KeyCode::Char('2')),
+        plain(KeyCode::Tab),
+        plain(KeyCode::Backspace),
+        plain(KeyCode::Down),
+        held('y', KeyModifiers::CONTROL),
+        held('y', KeyModifiers::ALT),
+        held('y', KeyModifiers::SHIFT),
+        repeated,
+    ];
+    for target in ["a.py", "notes.md", "gone.py", "f.txt"] {
+        select(&mut app, target, false);
+        for in_diff in [false, true] {
+            for other in other_keys {
+                if in_diff {
+                    app.status.focus = Focus::Body;
+                }
+                key(&mut app, KeyCode::Char('x'));
+                assert!(app.confirm.is_some(), "{target}");
+                assert_eq!(keys::handle(&mut app, other), Action::Redraw, "{other:?}");
+                assert!(app.confirm.is_none(), "{other:?} answers the question");
+                assert_eq!(app.message.as_deref(), Some("nothing discarded"));
+                assert!(app.outcome.is_none() && !app.show_help && !app.commit.open);
+                assert_eq!(app.view, View::Status);
+                assert_eq!(app.status.selected().unwrap().path, target, "{other:?}");
+                app.status.focus = Focus::Rail;
+            }
+        }
+    }
+    key(&mut app, KeyCode::Char('x'));
+    assert_eq!(keys::paste(&mut app, "y"), Action::Redraw);
+    assert!(app.confirm.is_none(), "pasted text is not an answer");
+    assert_eq!(before, (fingerprint(p), tree_bytes(p)));
+}
+
+#[test]
+fn x_leaves_what_is_staged_and_what_has_nothing_to_restore_from() {
+    let (repo, state) = work_repo();
+    let p = repo.path();
+    git(p, &["add", "b.py"]);
+    write(p, "later.py", "w = 4\n");
+    git(p, &["add", "--intent-to-add", "later.py"]);
+    let mut app = work_app(p, &state);
+    let before = (fingerprint(p), tree_bytes(p));
+    select(&mut app, "b.py", true);
+    for focus in [Focus::Rail, Focus::Body] {
+        app.status.focus = focus;
+        assert_eq!(key(&mut app, KeyCode::Char('x')), Action::Redraw);
+        assert!(app.confirm.is_none());
+        assert_eq!(
+            app.message.as_deref(),
+            Some("x discards only what is not staged · space unstages this first")
+        );
+        key(&mut app, KeyCode::Char('y'));
+    }
+    app.status.focus = Focus::Rail;
+    select(&mut app, "later.py", false);
+    key(&mut app, KeyCode::Char('x'));
+    assert!(app.confirm.is_none());
+    assert_eq!(
+        app.message.as_deref(),
+        Some("later.py is new to the index · there is nothing to restore it from")
+    );
+    key(&mut app, KeyCode::Char('y'));
+    assert_eq!(before, (fingerprint(p), tree_bytes(p)));
+}
+
+#[test]
+fn pasted_text_is_never_a_command_in_the_status_tab() {
+    let (repo, state) = work_repo();
+    let p = repo.path();
+    let mut app = work_app(p, &state);
+    let before = (fingerprint(p), tree_bytes(p));
+    assert_eq!(keys::paste(&mut app, "xy cq \n"), Action::None);
+    assert!(app.confirm.is_none() && !app.commit.open && app.outcome.is_none());
+    assert_eq!(before, (fingerprint(p), tree_bytes(p)));
+
+    key(&mut app, KeyCode::Char(' '));
+    key(&mut app, KeyCode::Char('c'));
+    assert_eq!(
+        keys::paste(&mut app, "fix: count\nfrom two\n"),
+        Action::Redraw
+    );
+    assert_eq!(app.commit.subject, "fix: count from two");
+    assert!(app.commit.open, "a pasted line break does not commit");
+    key(&mut app, KeyCode::Tab);
+    keys::paste(&mut app, "One.\r\nTwo.");
+    assert_eq!(app.commit.body, "One.\nTwo.");
+    assert_eq!(git(p, &["rev-list", "--count", "HEAD"]).trim(), "1");
+}
+
+#[test]
+fn walking_the_status_tab_writes_nothing() {
+    let (repo, state) = work_repo();
+    let p = repo.path();
+    git(p, &["add", "a.py"]);
+    write(p, "a.py", "x = 3\n");
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    write(p, "b.py", "y = 2\n");
+    let before = (fingerprint(p), tree_bytes(p));
+    let mut app = work_app(p, &state);
+    assert_eq!((app.status.staged.len(), app.status.unstaged.len()), (1, 5));
+    text(&mut app);
+    for _ in 0..7 {
+        key(&mut app, KeyCode::Char('j'));
+        text(&mut app);
+    }
+    key(&mut app, KeyCode::Char('g'));
+    ctrl(&mut app, 'd');
+    ctrl(&mut app, 'u');
+    select(&mut app, "f.txt", false);
+    key(&mut app, KeyCode::Tab);
+    for step in [']', ']', ']', '[', 'j', 'j', 'k', 'G', 'g'] {
+        key(&mut app, KeyCode::Char(step));
+        text(&mut app);
+    }
+    ctrl(&mut app, 'd');
+    key(&mut app, KeyCode::PageDown);
+    key(&mut app, KeyCode::PageUp);
+    key(&mut app, KeyCode::Char('x'));
+    assert!(app.confirm.is_some());
+    text(&mut app);
+    key(&mut app, KeyCode::Enter);
+    key(&mut app, KeyCode::Esc);
+    key(&mut app, KeyCode::Char('x'));
+    key(&mut app, KeyCode::Char('n'));
+    select(&mut app, "notes.md", false);
+    key(&mut app, KeyCode::Char('x'));
+    key(&mut app, KeyCode::Esc);
+    key(&mut app, KeyCode::Char('c'));
+    assert!(app.commit.open);
+    chars(&mut app, "fix: not yet");
+    key(&mut app, KeyCode::Tab);
+    chars(&mut app, "A body.");
+    key(&mut app, KeyCode::Enter);
+    text(&mut app);
+    key(&mut app, KeyCode::Tab);
+    ctrl(&mut app, 'u');
+    key(&mut app, KeyCode::Enter);
+    assert!(app.commit.open, "an empty subject commits nothing");
+    key(&mut app, KeyCode::Esc);
+    for held in [KeyModifiers::CONTROL, KeyModifiers::ALT] {
+        for c in [' ', 'x'] {
+            keys::handle(&mut app, KeyEvent::new(KeyCode::Char(c), held));
+            assert!(
+                app.confirm.is_none() && app.message.is_none(),
+                "{held:?} {c:?}"
+            );
+        }
+    }
+    keys::handle(
+        &mut app,
+        KeyEvent::new(KeyCode::Char('c'), KeyModifiers::ALT),
+    );
+    assert!(!app.commit.open);
+    keys::paste(&mut app, "xy cy \n");
+    key(&mut app, KeyCode::Char('?'));
+    text(&mut app);
+    key(&mut app, KeyCode::Esc);
+    for tab in ['2', '3', '1'] {
+        key(&mut app, KeyCode::Char(tab));
+        text(&mut app);
+    }
+    assert_eq!(
+        key(&mut app, KeyCode::Char('y')),
+        Action::Copy("notes.md:1".into())
+    );
+    assert_eq!(key(&mut app, KeyCode::Esc), Action::Quit);
+    let after = (fingerprint(p), tree_bytes(p));
+    assert_eq!(before.0 .0, after.0 .0, ".git changed while looking");
+    assert_eq!(before.0 .1, after.0 .1, "git status changed while looking");
+    assert_eq!(before.1, after.1, "the working tree changed while looking");
+}
+
+#[test]
+fn the_commit_box_and_the_question_fit_small_terminals() {
+    let (repo, state) = work_repo();
+    let p = repo.path();
+    let mut app = work_app(p, &state);
+    key(&mut app, KeyCode::Char(' '));
+    type_commit(&mut app, &"a long subject ".repeat(12));
+    key(&mut app, KeyCode::Tab);
+    for line in 0..12 {
+        chars(&mut app, &format!("body line {line}"));
+        key(&mut app, KeyCode::Enter);
+    }
+    app.commit.refuse("one\ntwo\nthree\nfour\nfive\n");
+    for (w, h) in [
+        (20u16, 6u16),
+        (24, 8),
+        (40, 10),
+        (60, 20),
+        (80, 24),
+        (200, 60),
+    ] {
+        let _ = draw(&mut app, w, h);
+    }
+    let short = ui::buffer_text(&draw(&mut app, 100, 18));
+    assert!(
+        short.contains("four") && short.contains("close, keeps the draft"),
+        "a short window gives up body lines before what git said\n{short}"
+    );
+    assert!(short.contains("body     body line 10"), "{short}");
+    let t = text(&mut app);
+    assert!(
+        t.contains("subject  …"),
+        "a long subject shows its end\n{t}"
+    );
+    assert!(
+        t.contains("body     body line 7"),
+        "the last lines of the body\n{t}"
+    );
+    assert!(t.contains("four") && !t.contains("five"), "{t}");
+    key(&mut app, KeyCode::Esc);
+    write(
+        p,
+        "a/very/long/folder/name/that/goes/on/and/on/and/on/and/on/and/on/for/a/while/notes.md",
+        "x\n",
+    );
+    app.reload_status();
+    key(&mut app, KeyCode::Char('G'));
+    select(
+        &mut app,
+        "a/very/long/folder/name/that/goes/on/and/on/and/on/and/on/and/on/for/a/while/notes.md",
+        false,
+    );
+    key(&mut app, KeyCode::Char('x'));
+    for (w, h) in [
+        (20u16, 6u16),
+        (24, 8),
+        (40, 10),
+        (60, 20),
+        (80, 24),
+        (200, 60),
+    ] {
+        let _ = draw(&mut app, w, h);
+    }
+    let asked = question(&mut app);
+    assert_eq!(asked[0], "delete the untracked file");
+    assert!(asked[1].ends_with("for/a/while/notes.md?"), "{asked:?}");
 }
