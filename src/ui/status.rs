@@ -102,6 +102,7 @@ pub(super) fn hints(status: &StatusState) -> Vec<(&'static str, String)> {
     hints.extend([("c", "commit".to_string()), ("e", "editor".into())]);
     if status.selected().is_some() {
         hints.push(("L", "history".into()));
+        hints.push(("A", "blame".into()));
     }
     hints.push(("?", "keys".into()));
     hints

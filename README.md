@@ -176,6 +176,7 @@ Inside the popup:
 | `b` / `B` | Files, Customisations, Status, Review | open the file in the browser / on GitHub |
 | `y` | Files, Customisations, Status, Review | copy `path:line` |
 | `L` | Files, Customisations, Status, Review | the history of the selected file, following renames; `⎋` comes back. In Customisations, only for a file inside the repository |
+| `A` | Files, Customisations, Status, Review, history of a file | blame the selected file as it is in the working tree, on the line `e` would open; `⎋` comes back. In Customisations, only for a file inside the repository |
 | `s` / `a` | Files, Review | what counts as changed: last turn, the agent's session, since `HEAD` / next agent |
 | `tab` | Files, Status, Review | move between the list and the body |
 | `p` / `T` | inside herdr | pin codeMap as a split that follows the focused pane / open it in its own tab |
@@ -199,6 +200,10 @@ Inside the popup:
 | `j` `k`, `⏎`, `⌫` | History | move between commits, show the diff, go back |
 | `B` / `y` | History | open the selected commit on GitHub, once `origin` has it / copy its full sha |
 | `⎋`, `e` / `E`, `b` | History of a file | go back to where `L` was pressed, open the file in the editor / in VS Code, in the browser |
+| `j` `k`, `g` `G` | Blame | move by line, to the first or the last |
+| `⏎`, `⌫` | Blame | show what the selected line's commit did to the file, go back to the same line |
+| `B` / `y` | Blame | open the line's commit on GitHub, once `origin` has it / copy its full sha |
+| `e` / `E`, `b`, `L`, `⎋` | Blame | open the file at the selected line in the editor / in VS Code, in the browser, show the file's history, go back to where `A` was pressed |
 | `j` `k`, `g` `G` | Branches | move between the local branches |
 | `⏎` | Branches | switch to the selected branch; asks first when the agent is working in this worktree |
 | `n` | Branches | name a new branch: `⏎` creates it from `HEAD` and switches to it, `⎋` cancels |
@@ -342,6 +347,22 @@ still switch tabs, so `3` always shows the full history. Over Files and
 Customisations, which have no History tab, the file's history is a page over
 the popup. `e`, `E` and `b` open the file. A file with no commits yet, new or
 untracked, says so.
+
+<img src="docs/assets/blame.svg" width="100%" alt="The blame of open_selector.py over the Review tab: each line with the short commit id, author and date of the commit that last changed it, shown once per run of lines from the same commit, lines the turn added marked as not committed, the selected line marked, and above the lines the selected line's commit and subject.">
+
+`A` on a file, in the same places as `L` and from the history of a file,
+blames the file as it is in the working tree, so the line numbers are the
+editor's. Each line shows the commit that last changed it: its short id,
+author and date, once for each run of lines from the same commit. Lines that
+are not committed yet say so. The page opens on the line `e` would open, in
+Review the line under the cursor, and the strip above the lines names the
+selected line's commit and subject. `⏎` shows what that commit did to the
+file, `B` opens it on GitHub with the same checks as History, `y` copies its
+sha, `e`, `E` and `b` open the file at the line, and `L` shows the file's
+history. A new or untracked file, a deleted one, a binary one, an empty one
+and one over 1 MB say why there is nothing to blame. Blame runs `git blame
+--porcelain` in the background, through a private copy of the index, and only
+the lines on screen are drawn.
 
 ### Branches
 
@@ -513,16 +534,17 @@ stash, no index changes and no objects.
 - Commands that write objects never see your object store, so git cannot
   "freshen" (touch) objects in it. Read-only diffs borrow it for one process
   through `GIT_ALTERNATE_OBJECT_DIRECTORIES`.
-- The "since `HEAD`" diff, the Status tab and the Worktrees tab read private
-  copies of the index: one for each read, and for the Worktrees tab one for
-  each worktree.
+- The "since `HEAD`" diff, the Status tab, the Worktrees tab and blame read
+  private copies of the index: one for each read, and for the Worktrees tab
+  one for each worktree.
 - The test suite fingerprints every file under `.git` before and after each
   read, after a walk through the Status tab that opens and cancels the commit
   box and the discard question, after a walk through the Branches tab that
   opens and cancels every question and the name prompt, and after a walk
   through the Worktrees tab that jumps to every worktree and through every
-  tab there, and after reading the history of a file and its diffs, and
-  fails on any change in any worktree.
+  tab there, after reading the history of a file and its diffs, and after
+  reading a blame and the diff of a blamed line, and fails on any change in
+  any worktree.
 - codeMap itself opens no network connection. It talks to the local herdr
   socket, the git commands it runs stay on this machine, and it sends text to
   an agent only when you press `P` or `S`.

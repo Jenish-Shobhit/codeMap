@@ -47,4 +47,4 @@
 
 
 
- tab diff                                 j k file  space unstage  c commit  e editor  L history  ? keys
+ tab diff                                 j k file  space unstage  c commit  e editor  L history  A blame  ? keys

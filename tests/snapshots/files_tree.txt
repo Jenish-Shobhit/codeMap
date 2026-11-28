@@ -47,4 +47,4 @@
 
 
  marks  last turn · done 9:44 PM
- tab preview                                      ⏎ open  e editor  E VS Code  b browser  B GitHub  L history  / find  ? keys
+ tab preview                                      ⏎ open  e editor  E VS Code  b browser  B GitHub  L history  A blame  / find  ? keys

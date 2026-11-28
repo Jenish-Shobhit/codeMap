@@ -47,4 +47,4 @@
 
 
 
- tab files                                j k scroll  ] [ hunk  space stage hunk  x discard  c commit  e editor  L history  ? keys
+ tab files                                j k scroll  ] [ hunk  space stage hunk  x discard  c commit  e editor  L history  A blame  ? keys

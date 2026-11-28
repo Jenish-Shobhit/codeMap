@@ -1,3 +1,4 @@
+mod blame;
 mod branches;
 mod changes;
 mod custom;
@@ -27,7 +28,7 @@ pub struct Areas {
 
 pub fn areas(area: Rect, view: View) -> Areas {
     let w = area.width;
-    let rail_w = if w < 70 {
+    let rail_w = if w < 70 || view == View::Blame {
         0
     } else if view == View::History {
         ((w as u32 * 60 / 100) as u16).clamp(40, w.saturating_sub(30))
@@ -103,6 +104,7 @@ pub fn render_buf(buf: &mut Buffer, area: Rect, app: &mut App) {
         View::History => history::render(buf, &a, app),
         View::Branches => branches::render(buf, &a, app),
         View::Worktrees => worktrees::render(buf, &a, app),
+        View::Blame => blame::render(buf, &a, app),
     }
     hints_line(buf, &a, app);
     if app.commit.open {
@@ -289,7 +291,9 @@ fn header(buf: &mut Buffer, r: Rect, app: &App) {
         x += 1;
     }
     let mut ctx = Line::new();
-    if let Some(line) = history::file_summary(app) {
+    if let Some(line) = blame::summary(app) {
+        ctx = ctx.push(line, style(t.muted, t.body));
+    } else if let Some(line) = history::file_summary(app) {
         ctx = ctx.push(line, style(t.muted, t.body));
     } else if app.view == View::History {
         if let Some(line) = history::header_summary(app) {
@@ -360,6 +364,9 @@ fn view_hints(app: &App) -> Vec<(&'static str, String)> {
             if app.file_for_history().is_ok() {
                 hints.push(("L", "history".into()));
             }
+            if app.file_for_blame().is_ok() {
+                hints.push(("A", "blame".into()));
+            }
             hints.push(("?", "keys".into()));
             hints
         }
@@ -373,6 +380,9 @@ fn view_hints(app: &App) -> Vec<(&'static str, String)> {
             ];
             if app.file_for_history().is_ok() {
                 hints.push(("L", "history".into()));
+            }
+            if app.file_for_blame().is_ok() {
+                hints.push(("A", "blame".into()));
             }
             hints.extend([("/", "find".to_string()), ("?", "keys".into())]);
             hints
@@ -390,12 +400,16 @@ fn view_hints(app: &App) -> Vec<(&'static str, String)> {
             if app.file_for_history().is_ok() {
                 hints.push(("L", "history".into()));
             }
+            if app.file_for_blame().is_ok() {
+                hints.push(("A", "blame".into()));
+            }
             hints.push(("?", "keys".into()));
             hints
         }
         View::History => history::hints(app),
         View::Branches => branches::hints(app),
         View::Worktrees => worktrees::hints(app),
+        View::Blame => blame::hints(app),
     }
 }
 
@@ -412,6 +426,7 @@ fn hints_line(buf: &mut Buffer, a: &Areas, app: &App) {
             (_, Focus::Rail) => "tab body",
             (View::Status | View::Changes, _) => "tab files",
             (View::History, _) => "j k commit",
+            (View::Blame, _) => "j k line",
         };
         put(
             buf,
@@ -478,6 +493,7 @@ pub const KEYS: &[(&str, &[(&str, &str)])] = &[
             ("b  B", "open the file in the browser, on GitHub"),
             ("y", "copy path:line"),
             ("L", "history of a file in Files, Status, Review"),
+            ("A", "blame of a file in Files, Status, Review"),
             ("s", "what counts as changed: turn, session, HEAD"),
             (
                 "p  T",
@@ -502,6 +518,7 @@ pub const KEYS: &[(&str, &[(&str, &str)])] = &[
             ("j k  h l", "move through the list, change scope"),
             ("⏎", "open the file in the editor"),
             ("L", "history of a file inside the repository"),
+            ("A", "blame of a file inside the repository"),
         ],
     ),
     (
@@ -534,6 +551,17 @@ pub const KEYS: &[(&str, &[(&str, &str)])] = &[
             ("B  y", "open the commit on GitHub, copy its full sha"),
             ("⎋", "from the history of a file, back to where L was"),
             ("e  E  b", "in the history of a file, open the file"),
+            ("A", "in the history of a file, blame the file"),
+        ],
+    ),
+    (
+        "blame",
+        &[
+            ("j k  g G", "move by line, to the first or the last"),
+            ("⏎  ⌫", "what the line's commit did to the file, back"),
+            ("B  y", "the line's commit on GitHub, copy its full sha"),
+            ("e  E  b", "open the file at the selected line"),
+            ("L  ⎋", "history of the file, back to where A was"),
         ],
     ),
     (
@@ -577,11 +605,18 @@ fn help_sections(
     if app.file_history.is_some() && !names.contains(&View::History.label()) {
         names.push(View::History.label());
     }
-    KEYS.iter()
+    let page = (app.blame.is_some()).then_some(View::Blame.label());
+    let mut sections: Vec<_> = KEYS
+        .iter()
         .enumerate()
-        .filter(|(i, (name, _))| *i == 0 || names.contains(name))
+        .filter(|(i, (name, _))| *i == 0 || names.contains(name) || page == Some(*name))
         .map(|(_, section)| section)
-        .collect()
+        .collect();
+    if let Some(at) = sections.iter().position(|(name, _)| page == Some(*name)) {
+        let shown = sections.remove(at);
+        sections.insert(1.min(sections.len()), shown);
+    }
+    sections
 }
 
 fn help_rows(app: &App) -> Vec<HelpRow> {
@@ -653,6 +688,7 @@ impl App {
             View::Changes => self.changes.focus,
             View::History => Focus::Body,
             View::Branches | View::Worktrees => Focus::Rail,
+            View::Blame => Focus::Body,
         }
     }
 }

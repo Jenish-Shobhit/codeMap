@@ -5,11 +5,13 @@ use std::time::Instant;
 use serde_json::Value;
 
 use crate::ask::Ask;
+use crate::blame::BlamePage;
 use crate::branches::{BranchesState, Pulls};
 use crate::commit::CommitBox;
 use crate::custom::{self, CustomState, Group, Roots};
 use crate::files::{FilesState, MAX_FILES};
 use crate::gh::{Gh, PullRequests};
+use crate::git::blame::BlameRead;
 use crate::git::branch::{Branches, Unique};
 use crate::git::{self, graph, Commit, FileCommit, FileDiff, GraphRow, LineKind, RepoInfo};
 use crate::herdr::{Client, PluginContext};
@@ -31,6 +33,7 @@ pub enum View {
     History,
     Branches,
     Worktrees,
+    Blame,
 }
 
 impl View {
@@ -61,6 +64,7 @@ impl View {
             View::History => "history",
             View::Branches => "branches",
             View::Worktrees => "worktrees",
+            View::Blame => "blame",
         }
     }
 
@@ -91,6 +95,7 @@ impl View {
             View::Status | View::Changes | View::History | View::Branches | View::Worktrees => {
                 &View::GIT_TABS
             }
+            View::Blame => &[],
         }
     }
 }
@@ -203,6 +208,15 @@ pub enum Msg {
         read: Result<Vec<FileCommit>, String>,
     },
     FileCommitDiff {
+        ask: u64,
+        sha: String,
+        read: Result<Vec<FileDiff>, String>,
+    },
+    Blame {
+        ask: u64,
+        read: Result<BlameRead, String>,
+    },
+    BlameDiff {
         ask: u64,
         sha: String,
         read: Result<Vec<FileDiff>, String>,
@@ -329,6 +343,8 @@ pub struct App {
     pub history_loaded: bool,
     pub file_history: Option<FileHistory>,
     pub(crate) file_history_asks: u64,
+    pub blame: Option<BlamePage>,
+    pub(crate) blame_asks: u64,
     pub branches: BranchesState,
     pub worktrees: WorktreesState,
     pub gh: Gh,
@@ -406,6 +422,8 @@ impl App {
             history_loaded: false,
             file_history: None,
             file_history_asks: 0,
+            blame: None,
+            blame_asks: 0,
             branches: BranchesState::default(),
             worktrees: WorktreesState::default(),
             gh: opts.gh,
@@ -638,6 +656,8 @@ impl App {
             }
             Msg::FileHistory { ask, read } => self.file_history_read(ask, read),
             Msg::FileCommitDiff { ask, sha, read } => self.file_commit_diff_read(ask, sha, read),
+            Msg::Blame { ask, read } => self.blame_read(ask, read),
+            Msg::BlameDiff { ask, sha, read } => self.blame_diff_read(ask, sha, read),
             Msg::Committed(result) => self.commit_finished(result),
             Msg::Branches { asked_after, read } => {
                 if asked_after == self.branches.reads {
@@ -1090,6 +1110,9 @@ impl App {
     }
 
     pub fn location(&self) -> Option<Location> {
+        if self.blame.is_some() {
+            return self.blame_location();
+        }
         if self.file_history.is_some() {
             return self.file_history_location();
         }
@@ -1112,7 +1135,7 @@ impl App {
                     dir: false,
                 })
             }
-            View::History | View::Branches => None,
+            View::History | View::Branches | View::Blame => None,
             View::Worktrees => self.worktrees.location(),
         }
     }

@@ -441,7 +441,7 @@ fn find_middle_split(body: &str) -> Option<usize> {
     }
 }
 
-fn unquote(s: &str) -> String {
+pub(super) fn unquote(s: &str) -> String {
     let s = s.trim_end_matches('\t');
     if !(s.starts_with('"') && s.ends_with('"') && s.len() >= 2) {
         return s.to_string();

@@ -65,9 +65,16 @@ impl HistoryFile {
     }
 }
 
-fn not_a_file(dir: bool) -> Result<(), String> {
+pub enum NoFile {
+    NotARepository,
+    NothingSelected,
+    Folder,
+    OutsideTheRepository,
+}
+
+fn not_a_file(dir: bool) -> Result<(), NoFile> {
     if dir {
-        Err("L shows the history of a file · this is a folder".into())
+        Err(NoFile::Folder)
     } else {
         Ok(())
     }
@@ -87,7 +94,9 @@ fn read_file_log(
 
 impl App {
     pub fn page(&self) -> View {
-        if self.file_history.is_some() {
+        if self.blame.is_some() {
+            View::Blame
+        } else if self.file_history.is_some() {
             View::History
         } else {
             self.view
@@ -120,12 +129,21 @@ impl App {
         shown.commits.get(shown.sel)
     }
 
-    pub fn file_for_history(&self) -> Result<HistoryFile, String> {
-        let repo = self
-            .repo
-            .as_ref()
-            .ok_or("not a git repository · no history to show")?;
-        let nothing = || "no file is selected".to_string();
+    pub fn selected_repo_file(&self) -> Result<HistoryFile, NoFile> {
+        let repo = self.repo.as_ref().ok_or(NoFile::NotARepository)?;
+        if let Some(page) = &self.blame {
+            return Ok(HistoryFile {
+                path: page.path.clone(),
+                was: page.was.clone(),
+            });
+        }
+        if let Some(file) = &self.file_history {
+            return Ok(HistoryFile {
+                path: file.path.clone(),
+                was: file.renamed_in_the_tree.clone(),
+            });
+        }
+        let nothing = || NoFile::NothingSelected;
         match self.view {
             View::Files => {
                 let row = self.selected_file_row().ok_or_else(nothing)?;
@@ -152,21 +170,35 @@ impl App {
                 let inside = item
                     .path
                     .strip_prefix(&repo.root)
-                    .map_err(|_| "this file is not in the repository · no history to show")?;
+                    .map_err(|_| NoFile::OutsideTheRepository)?;
                 Ok(HistoryFile::named(inside.to_string_lossy().into_owned()))
             }
-            View::History | View::Branches | View::Worktrees => Err(nothing()),
+            View::History | View::Branches | View::Worktrees | View::Blame => Err(nothing()),
         }
     }
 
-    pub fn open_file_history(&mut self) {
-        let file = match self.file_for_history() {
-            Ok(file) => file,
-            Err(why) => {
-                self.message = Some(why);
-                return;
+    pub fn file_for_history(&self) -> Result<HistoryFile, String> {
+        self.selected_repo_file().map_err(|why| {
+            match why {
+                NoFile::NotARepository => "not a git repository · no history to show",
+                NoFile::NothingSelected => "no file is selected",
+                NoFile::Folder => "L shows the history of a file · this is a folder",
+                NoFile::OutsideTheRepository => {
+                    "this file is not in the repository · no history to show"
+                }
             }
-        };
+            .to_string()
+        })
+    }
+
+    pub fn open_file_history(&mut self) {
+        match self.file_for_history() {
+            Ok(file) => self.show_file_history(file),
+            Err(why) => self.message = Some(why),
+        }
+    }
+
+    pub(crate) fn show_file_history(&mut self, file: HistoryFile) {
         self.file_history_asks += 1;
         let back = self.view;
         if View::GIT_TABS.contains(&back) {
@@ -258,11 +290,15 @@ impl App {
 
     pub fn commit_link(&self) -> Result<String, String> {
         let commit = self.selected_commit().ok_or("no commit is selected")?;
+        self.commit_link_for(&commit.sha)
+    }
+
+    pub fn commit_link_for(&self, sha: &str) -> Result<String, String> {
         let origin = git::run(&self.root, &["remote", "get-url", "origin"])
             .map_err(|_| "this repository has no origin remote · nothing to open")?;
-        let page = open::github_commit_url(&origin, &commit.sha)
+        let page = open::github_commit_url(&origin, sha)
             .ok_or("origin is not on GitHub · nothing to open")?;
-        match branch::on_origin(&self.root, &commit.sha) {
+        match branch::on_origin(&self.root, sha) {
             Ok(true) => Ok(page),
             Ok(false) => Err("this commit is not on origin yet · nothing to open".into()),
             Err(e) => Err(format!(

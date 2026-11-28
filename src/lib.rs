@@ -1,5 +1,6 @@
 pub mod app;
 pub mod ask;
+pub mod blame;
 pub mod branches;
 pub mod commit;
 pub mod custom;
