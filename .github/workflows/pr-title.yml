@@ -1,0 +1,31 @@
+name: PR title
+
+# Pull requests are squash-merged, so the title becomes the commit message on
+# main. The ruleset on main requires this check.
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions: {}
+
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  title:
+    name: PR title
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: The title is a Conventional Commit
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          pattern='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9._/-]+\))?!?: [^ ]'
+          if printf '%s\n' "$TITLE" | grep -Eq "$pattern"; then
+            echo "Conventional Commit title: $TITLE"
+          else
+            echo "::error title=PR title::Use a Conventional Commit title, such as 'fix(flow): keep the gutter visible' or 'docs: explain the hook'. Types: build, chore, ci, docs, feat, fix, perf, refactor, revert, style, test."
+            exit 1
+          fi

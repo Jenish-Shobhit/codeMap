@@ -9,6 +9,7 @@
 - [ ] `cargo fmt --all --check`
 - [ ] `cargo clippy --all-targets --locked -- -D warnings`
 - [ ] `cargo test --locked`
+- [ ] Code a Kani proof covers (see `.claude/skills/`): `python3 scripts/kani.py prove` and `python3 scripts/kani.py mutations` pass
 - [ ] Behaviour changes have a test
 - [ ] UI changes: snapshots updated with `UPDATE_SNAPSHOTS=1 cargo test --test views` and reviewed
 - [ ] UI changes: screenshots regenerated with `cargo run --example screenshots`

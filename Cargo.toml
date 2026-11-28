@@ -41,6 +41,10 @@ tree-sitter-typescript = "0.23"
 tree-sitter-javascript = "0.25"
 tree-sitter-go = "0.25"
 
+[lints.rust]
+# `#[cfg(kani)]` modules hold the formal proofs; `cargo kani` sets the cfg.
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }
+
 [profile.release]
 opt-level = 3
 codegen-units = 4

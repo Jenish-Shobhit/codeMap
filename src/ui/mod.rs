@@ -664,3 +664,89 @@ pub fn buffer_text(buf: &Buffer) -> String {
     }
     out
 }
+
+// Formal verification with Kani: `follow` keeps the selected box on screen.
+//
+// Properties, for every input in the bounds below:
+// - `follow_shows_a_box_that_fits`: a box that fits the viewport with
+//   `follow`'s scroll margin (2 columns, 1 row) and lies inside the canvas is
+//   entirely visible after `follow`, wherever the view was scrolled before.
+// - `follow_never_scrolls_past_the_content`: the view never scrolls past the
+//   right or bottom edge of the canvas.
+// Harm if broken: moving the selection in the Map or Flow view leaves the
+// selected box partly or wholly off screen, or scrolls into empty space.
+//
+// Covers src/ui/mod.rs `follow` (lines 301-327), called from
+// src/ui/map_view.rs (lines 83-88, a node's box) and src/ui/flow_view.rs
+// (lines 68-77, a flow box widened by the change-mark gutter).
+// Source read at 4c75657.
+// Bounds and assumptions: the viewport is a terminal area, so each side is at
+// most `u16::MAX` (both callers pass `Rect` sides); it is not empty, because
+// `follow` returns early for an empty one. Canvas sides, box coordinates and
+// the old scroll position are at most 2^20 cells, far beyond any canvas
+// `Canvas::new` (src/canvas.rs line 151) could allocate as `w * h` cells. No
+// callee is stubbed.
+// Run: `python3 scripts/kani.py prove`. Broken variants each proof must catch:
+// src/ui/mod.mutations, run by `python3 scripts/kani.py mutations`.
+#[cfg(kani)]
+mod proofs {
+    use super::follow;
+
+    const CELLS: usize = 1 << 20;
+
+    type Inputs = (
+        (usize, usize),
+        (usize, usize),
+        (usize, usize, usize, usize),
+        (usize, usize),
+    );
+
+    fn inputs() -> Inputs {
+        let view: (u16, u16) = kani::any();
+        kani::assume(view.0 > 0 && view.1 > 0);
+        let scroll: (usize, usize) = kani::any();
+        let rect: (usize, usize, usize, usize) = kani::any();
+        let content: (usize, usize) = kani::any();
+        kani::assume(scroll.0 <= CELLS && scroll.1 <= CELLS);
+        kani::assume(rect.0 <= CELLS && rect.1 <= CELLS && rect.2 <= CELLS && rect.3 <= CELLS);
+        kani::assume(content.0 <= CELLS && content.1 <= CELLS);
+        (scroll, (view.0 as usize, view.1 as usize), rect, content)
+    }
+
+    #[kani::proof]
+    #[kani::unwind(2)]
+    fn follow_shows_a_box_that_fits() {
+        let (before, (vw, vh), (x, y, w, h), content) = inputs();
+        kani::assume(w + 2 <= vw && h + 1 <= vh);
+        kani::assume(x + w <= content.0 && y + h <= content.1);
+
+        let mut scroll = before;
+        follow(&mut scroll, (vw, vh), (x, y, w, h), content);
+
+        kani::cover!(x < before.0, "the box was left of the view");
+        kani::cover!(x + w > before.0 + vw, "the box was right of the view");
+        kani::cover!(y < before.1, "the box was above the view");
+        kani::cover!(y + h > before.1 + vh, "the box was below the view");
+
+        assert!(scroll.0 <= x && x + w <= scroll.0 + vw);
+        assert!(scroll.1 <= y && y + h <= scroll.1 + vh);
+    }
+
+    #[kani::proof]
+    #[kani::unwind(2)]
+    fn follow_never_scrolls_past_the_content() {
+        let (before, view, rect, content) = inputs();
+
+        let mut scroll = before;
+        follow(&mut scroll, view, rect, content);
+
+        kani::cover!(
+            content.0 > view.0 && scroll.0 == content.0 - view.0,
+            "scrolled to the right edge"
+        );
+        kani::cover!(content.1 < view.1, "a canvas shorter than the view");
+
+        assert!(scroll.0 <= content.0.saturating_sub(view.0));
+        assert!(scroll.1 <= content.1.saturating_sub(view.1));
+    }
+}

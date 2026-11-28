@@ -14,8 +14,11 @@ jobs:
   check-version:
     name: Tag matches the manifests
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Compare the tag with Cargo.toml, herdr-plugin.toml and CHANGELOG.md
         run: |
           tag="${GITHUB_REF_NAME#v}"
@@ -43,38 +46,46 @@ jobs:
           - target: aarch64-unknown-linux-musl
             os: ubuntu-24.04-arm
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
+      # No build cache: release binaries are built from a clean tree.
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
+        with:
+          toolchain: stable
           targets: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.target }}
       # The tree-sitter grammars are C: build them with musl's compiler
       # wrapper so they link into the static binary.
       - name: Install musl tools
         if: contains(matrix.target, 'musl')
+        env:
+          TARGET: ${{ matrix.target }}
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools
-          target_env=$(echo "${{ matrix.target }}" | tr '-' '_')
+          target_env=$(echo "$TARGET" | tr '-' '_')
           echo "CC_${target_env}=musl-gcc" >> "$GITHUB_ENV"
       - name: Build
-        run: cargo build --release --locked --target ${{ matrix.target }}
+        env:
+          TARGET: ${{ matrix.target }}
+        run: cargo build --release --locked --target "$TARGET"
       - name: Package
         id: package
         shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
         run: |
-          name="codemap-${GITHUB_REF_NAME}-${{ matrix.target }}"
+          name="codemap-${GITHUB_REF_NAME}-${TARGET}"
           # The archive is a ready-to-link plugin directory: the manifest
           # runs target/release/codemap relative to the plugin root.
           mkdir -p "dist/$name/target/release"
           cp herdr-plugin.toml README.md CHANGELOG.md LICENSE NOTICE "dist/$name/"
-          cp "target/${{ matrix.target }}/release/codemap" "dist/$name/target/release/"
+          cp "target/${TARGET}/release/codemap" "dist/$name/target/release/"
           bin="dist/$name/target/release/codemap"
           file "$bin"
-          "$bin" --version || arch -x86_64 "$bin" --version || echo "cannot run ${{ matrix.target }} on this runner"
+          "$bin" --version || arch -x86_64 "$bin" --version || echo "cannot run ${TARGET} on this runner"
           cd dist
           tar -czf "$name.tar.gz" "$name"
           if command -v sha256sum >/dev/null; then
@@ -84,7 +95,7 @@ jobs:
           fi
           cat "$name.tar.gz.sha256"
           echo "name=$name" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ steps.package.outputs.name }}
           path: |
@@ -96,11 +107,14 @@ jobs:
     name: Publish the GitHub release
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: dist
           merge-multiple: true

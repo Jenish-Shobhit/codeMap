@@ -5,6 +5,8 @@
 **See your code as a map, and what your agents changed on it.**
 
 [![CI](https://github.com/Jenish-Shobhit/codeMap/actions/workflows/ci.yml/badge.svg)](https://github.com/Jenish-Shobhit/codeMap/actions/workflows/ci.yml)
+[![Kani proofs](https://img.shields.io/badge/proofs-Kani-8be9fd)](CONTRIBUTING.md#formal-verification)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Jenish-Shobhit/codeMap/badge)](https://scorecard.dev/viewer/?uri=github.com/Jenish-Shobhit/codeMap)
 [![Latest release](https://img.shields.io/github/v/release/Jenish-Shobhit/codeMap?sort=semver&color=bd93f9)](https://github.com/Jenish-Shobhit/codeMap/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-50fa7b)](LICENSE)
 [![herdr ≥ 0.9.0](https://img.shields.io/badge/herdr-%E2%89%A5%200.9.0-ff79c6)](https://herdr.dev)
@@ -385,8 +387,9 @@ Suggestions are welcome in [issues](https://github.com/Jenish-Shobhit/codeMap/is
 ## Contributing
 
 Bug reports, fixes and new languages are welcome. [CONTRIBUTING.md](CONTRIBUTING.md)
-covers the setup, the checks CI runs, the snapshot tests and how to run the
-live tests against a throwaway herdr server. Everyone taking part follows the
+covers the setup, the checks CI runs, the Kani proofs, the snapshot tests and
+how to run the live tests against a throwaway herdr server. `main` changes
+only through pull requests that pass CI. Everyone taking part follows the
 [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Security
