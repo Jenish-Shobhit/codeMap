@@ -410,6 +410,14 @@ pub fn render_diff_list(
             head = head.push(format!(" −{}", f.dels()), style(t.del, t.body));
         }
         rows.push(head);
+        if let Some(old) = &f.old_path {
+            let how = match f.status {
+                FileStatus::Copied => "copied",
+                _ => "renamed",
+            };
+            let was = format!("  {how} from {old}");
+            rows.push(Line::new().push(was, style(t.renamed, t.body)));
+        }
         if f.binary {
             rows.push(Line::new().push("  binary", style(t.modified, t.body)));
         }

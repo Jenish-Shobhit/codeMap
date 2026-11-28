@@ -100,7 +100,7 @@ impl BranchesState {
     }
 }
 
-fn told(said: &str) -> String {
+pub(crate) fn told(said: &str) -> String {
     let one_line = said.split_whitespace().collect::<Vec<_>>().join(" ");
     util::sanitize_line(&one_line)
 }

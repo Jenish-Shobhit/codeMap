@@ -23,6 +23,7 @@ const CUSTOM: (u16, u16) = (140, 34);
 const STATUS: (u16, u16) = (140, 36);
 const CHANGES: (u16, u16) = (150, 46);
 const HISTORY: (u16, u16) = (128, 40);
+const FILE_HISTORY: (u16, u16) = (144, 16);
 const BRANCHES: (u16, u16) = (140, 18);
 const WORKTREES: (u16, u16) = (140, 18);
 const NOW: i64 = 1_790_027_160;
@@ -106,6 +107,15 @@ fn main() {
     key(&mut app, KeyCode::Char('j'));
     key(&mut app, KeyCode::Char('j'));
     shots.push(("history", "History", frame(&mut app, HISTORY)));
+
+    app.view = View::Files;
+    app.select_path("README.md");
+    key(&mut app, KeyCode::Char('L'));
+    shots.push((
+        "file-history",
+        "History of README.md",
+        frame(&mut app, FILE_HISTORY),
+    ));
 
     demo::stage_part_of_the_turn(&repo.root);
     let mut status = App::new(over_the_agent(View::Status, &no_gh));

@@ -80,7 +80,8 @@ pub fn render_buf(buf: &mut Buffer, area: Rect, app: &mut App) {
         );
         return;
     }
-    let a = areas(area, app.view);
+    let page = app.page();
+    let a = areas(area, page);
     if a.rail.width > 0 {
         fill(
             buf,
@@ -94,7 +95,7 @@ pub fn render_buf(buf: &mut Buffer, area: Rect, app: &mut App) {
         );
     }
     header(buf, a.header, app);
-    match app.view {
+    match page {
         View::Files => files::render(buf, &a, app),
         View::Custom => custom::render(buf, &a, app),
         View::Status => status::render(buf, &a, app),
@@ -288,7 +289,9 @@ fn header(buf: &mut Buffer, r: Rect, app: &App) {
         x += 1;
     }
     let mut ctx = Line::new();
-    if app.view == View::History {
+    if let Some(line) = history::file_summary(app) {
+        ctx = ctx.push(line, style(t.muted, t.body));
+    } else if app.view == View::History {
         if let Some(line) = history::header_summary(app) {
             ctx = ctx.push(line, style(t.muted, t.body));
         }
@@ -345,45 +348,52 @@ fn header(buf: &mut Buffer, r: Rect, app: &App) {
 }
 
 fn view_hints(app: &App) -> Vec<(&'static str, String)> {
-    match app.view {
-        View::Custom => vec![
-            ("1-4", "scope".to_string()),
-            ("⏎", "open".into()),
-            ("E", "VS Code".into()),
-            ("b", "browser".into()),
-            ("y", "copy path".into()),
-            ("?", "keys".into()),
-        ],
-        View::Files => vec![
-            ("⏎", "open".to_string()),
-            ("e", "editor".into()),
-            ("E", "VS Code".into()),
-            ("b", "browser".into()),
-            ("B", "GitHub".into()),
-            ("/", "find".into()),
-            ("?", "keys".into()),
-        ],
-        View::Status => status::hints(&app.status),
-        View::Changes => vec![
-            ("] [", "hunk".to_string()),
-            ("space", "reviewed".into()),
-            ("v", "select".into()),
-            ("c", "comment".into()),
-            ("P", "send".into()),
-            ("s", "scope".into()),
-            ("?", "keys".into()),
-        ],
-        View::History => {
-            if app.history.show_diff {
-                vec![
-                    ("⌫", "commit".to_string()),
-                    ("j k", "scroll".into()),
-                    ("?", "keys".into()),
-                ]
-            } else {
-                vec![("⏎", "diff".to_string()), ("?", "keys".into())]
+    match app.page() {
+        View::Custom => {
+            let mut hints = vec![
+                ("1-4", "scope".to_string()),
+                ("⏎", "open".into()),
+                ("E", "VS Code".into()),
+                ("b", "browser".into()),
+                ("y", "copy path".into()),
+            ];
+            if app.file_for_history().is_ok() {
+                hints.push(("L", "history".into()));
             }
+            hints.push(("?", "keys".into()));
+            hints
         }
+        View::Files => {
+            let mut hints = vec![
+                ("⏎", "open".to_string()),
+                ("e", "editor".into()),
+                ("E", "VS Code".into()),
+                ("b", "browser".into()),
+                ("B", "GitHub".into()),
+            ];
+            if app.file_for_history().is_ok() {
+                hints.push(("L", "history".into()));
+            }
+            hints.extend([("/", "find".to_string()), ("?", "keys".into())]);
+            hints
+        }
+        View::Status => status::hints(&app.status),
+        View::Changes => {
+            let mut hints = vec![
+                ("] [", "hunk".to_string()),
+                ("space", "reviewed".into()),
+                ("v", "select".into()),
+                ("c", "comment".into()),
+                ("P", "send".into()),
+                ("s", "scope".into()),
+            ];
+            if app.file_for_history().is_ok() {
+                hints.push(("L", "history".into()));
+            }
+            hints.push(("?", "keys".into()));
+            hints
+        }
+        View::History => history::hints(app),
         View::Branches => branches::hints(app),
         View::Worktrees => worktrees::hints(app),
     }
@@ -392,7 +402,7 @@ fn view_hints(app: &App) -> Vec<(&'static str, String)> {
 fn hints_line(buf: &mut Buffer, a: &Areas, app: &App) {
     let t = app.theme;
     if a.rail_hints.width > 0 {
-        let rail_hint = match (app.view, app.focus()) {
+        let rail_hint = match (app.page(), app.focus()) {
             (View::Custom, _) => "j k move  h l scope",
             (View::Files, Focus::Rail) => "tab preview",
             (View::Files, Focus::Body) => "tab tree",
@@ -467,6 +477,7 @@ pub const KEYS: &[(&str, &[(&str, &str)])] = &[
             ("e  E", "open in the editor beside the agent, in VS Code"),
             ("b  B", "open the file in the browser, on GitHub"),
             ("y", "copy path:line"),
+            ("L", "history of a file in Files, Status, Review"),
             ("s", "what counts as changed: turn, session, HEAD"),
             (
                 "p  T",
@@ -490,6 +501,7 @@ pub const KEYS: &[(&str, &[(&str, &str)])] = &[
             ("1 2 3 4", "project, global, tools, other agents"),
             ("j k  h l", "move through the list, change scope"),
             ("⏎", "open the file in the editor"),
+            ("L", "history of a file inside the repository"),
         ],
     ),
     (
@@ -519,6 +531,9 @@ pub const KEYS: &[(&str, &[(&str, &str)])] = &[
         &[
             ("j k", "move between commits"),
             ("⏎  ⌫", "show the diff, back"),
+            ("B  y", "open the commit on GitHub, copy its full sha"),
+            ("⎋", "from the history of a file, back to where L was"),
+            ("e  E  b", "in the history of a file, open the file"),
         ],
     ),
     (
@@ -549,46 +564,89 @@ fn frame(buf: &mut Buffer, r: Rect, st: Style) {
     }
 }
 
-fn help(buf: &mut Buffer, area: Rect, app: &App) {
+enum HelpRow {
+    Section(&'static str),
+    Key(&'static str, &'static str),
+    Gap,
+}
+
+fn help_sections(
+    app: &App,
+) -> Vec<&'static (&'static str, &'static [(&'static str, &'static str)])> {
+    let mut names: Vec<&str> = app.view.tabs().iter().map(|v| v.label()).collect();
+    if app.file_history.is_some() && !names.contains(&View::History.label()) {
+        names.push(View::History.label());
+    }
+    KEYS.iter()
+        .enumerate()
+        .filter(|(i, (name, _))| *i == 0 || names.contains(name))
+        .map(|(_, section)| section)
+        .collect()
+}
+
+fn help_rows(app: &App) -> Vec<HelpRow> {
+    let mut rows = Vec::new();
+    for (name, keys) in help_sections(app) {
+        rows.push(HelpRow::Section(name));
+        rows.extend(keys.iter().map(|(k, d)| HelpRow::Key(k, d)));
+        rows.push(HelpRow::Gap);
+    }
+    rows
+}
+
+fn help(buf: &mut Buffer, area: Rect, app: &mut App) {
     let t = app.theme;
-    let rows: usize = KEYS.iter().map(|(_, k)| k.len() + 2).sum::<usize>() + 1;
+    let rows = help_rows(app);
     let w = 66u16.min(area.width.saturating_sub(4));
-    let h = (rows as u16 + 2).min(area.height.saturating_sub(2));
+    let h = (rows.len() as u16 + 2).min(area.height.saturating_sub(2));
+    if w < 4 || h < 3 {
+        return;
+    }
     let x = area.x + (area.width - w) / 2;
     let y = area.y + (area.height.saturating_sub(h)) / 2;
     let r = Rect::new(x, y, w, h);
+    let room = (h - 2) as usize;
+    let last_top = rows.len().saturating_sub(room);
+    app.help_scroll = app.help_scroll.min(last_top);
+    let top = app.help_scroll;
     fill(buf, r, t.rail);
     frame(buf, r, style(t.rule, t.rail));
     put(buf, x + 2, y, " keys ", bold(style(t.text, t.rail)), w - 4);
-    let mut yy = y + 1;
-    for (section, keys) in KEYS {
-        if yy >= y + h - 1 {
-            break;
-        }
-        put(buf, x + 2, yy, section, bold(style(t.text2, t.rail)), w - 4);
-        yy += 1;
-        for (k, d) in keys.iter() {
-            if yy >= y + h - 1 {
-                break;
+    for (yy, row) in (y + 1..).zip(rows.iter().skip(top).take(room)) {
+        match row {
+            HelpRow::Section(name) => {
+                put(buf, x + 2, yy, name, bold(style(t.text2, t.rail)), w - 4);
             }
-            put(buf, x + 3, yy, k, style(t.text, t.rail), 12);
-            put(
-                buf,
-                x + 17,
-                yy,
-                d,
-                style(t.muted, t.rail),
-                w.saturating_sub(19),
-            );
-            yy += 1;
+            HelpRow::Key(k, d) => {
+                put(buf, x + 3, yy, k, style(t.text, t.rail), 12);
+                put(
+                    buf,
+                    x + 17,
+                    yy,
+                    d,
+                    style(t.muted, t.rail),
+                    w.saturating_sub(19),
+                );
+            }
+            HelpRow::Gap => {}
         }
-        yy += 1;
+    }
+    let more = |text: &str| format!(" {text} ");
+    if top > 0 {
+        let above = more("↑ more");
+        let at = x + w.saturating_sub(util::width(&above) as u16 + 2);
+        put(buf, at, y, &above, style(t.text2, t.rail), w - 4);
+    }
+    if top < last_top {
+        let below = more("↓ more · j k scroll");
+        let at = x + w.saturating_sub(util::width(&below) as u16 + 2);
+        put(buf, at, y + h - 1, &below, style(t.text2, t.rail), w - 4);
     }
 }
 
 impl App {
     pub fn focus(&self) -> Focus {
-        match self.view {
+        match self.page() {
             View::Files => self.files.focus,
             View::Custom => Focus::Rail,
             View::Status => self.status.focus,

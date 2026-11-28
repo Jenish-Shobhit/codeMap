@@ -9,7 +9,7 @@ use std::process::{Command, Output, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 pub use diff::{DiffLine, FileDiff, FileStatus, Hunk, LineKind};
-pub use graph::{Commit, GraphRow};
+pub use graph::{Commit, FileCommit, GraphRow};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GitError(pub String);
@@ -403,10 +403,23 @@ pub fn show_commit(root: &Path, sha: &str) -> Result<Vec<FileDiff>, GitError> {
             "--src-prefix=a/",
             "--dst-prefix=b/",
             "--first-parent",
+            "--end-of-options",
             sha,
         ],
     )?;
     Ok(diff::parse(&out))
+}
+
+pub fn show_commit_paths(
+    root: &Path,
+    sha: &str,
+    paths: &[String],
+) -> Result<Vec<FileDiff>, GitError> {
+    let mut args = vec!["--literal-pathspecs", "show", "--format="];
+    args.extend(DIFF_FORMAT);
+    args.extend(["--first-parent", "--end-of-options", sha, "--"]);
+    args.extend(paths.iter().map(String::as_str));
+    Ok(diff::parse(&run(root, &args)?))
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

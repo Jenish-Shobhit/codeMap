@@ -36,20 +36,19 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
         return input_key(app, key);
     }
     if app.show_help {
-        if matches!(
-            key.code,
-            KeyCode::Esc | KeyCode::Char('?') | KeyCode::Char('q') | KeyCode::Enter
-        ) {
-            app.show_help = false;
-        }
-        return Action::Redraw;
+        return help_key(app, key);
     }
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    let page = app.page();
     match key.code {
         KeyCode::Char('q') if !ctrl => return quit(app),
         KeyCode::Esc => {
-            if app.view == View::History && app.history.show_diff {
-                app.history.show_diff = false;
+            if page == View::History && app.shown_history().show_diff {
+                app.shown_history_mut().show_diff = false;
+                return Action::Redraw;
+            }
+            if app.file_history.is_some() {
+                app.leave_file_history();
                 return Action::Redraw;
             }
             if app.view == View::Changes && app.changes.anchor.is_some() {
@@ -68,12 +67,14 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
         }
         KeyCode::Char('?') => {
             app.show_help = true;
+            app.help_scroll = 0;
             return Action::Redraw;
         }
         KeyCode::Char(c @ '1'..='9') if app.view == View::Custom => {
             let Some(&scope) = Scope::ALL.get(c as usize - '1' as usize) else {
                 return Action::None;
             };
+            app.file_history = None;
             app.custom.set_scope(scope);
             return Action::Redraw;
         }
@@ -81,6 +82,7 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
             let Some(&view) = app.view.tabs().get(c as usize - '1' as usize) else {
                 return Action::None;
             };
+            app.file_history = None;
             app.view = view;
             if view == View::History
                 && app.history.detail.is_none()
@@ -94,6 +96,22 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
             return Action::Redraw;
         }
         KeyCode::Char('B') if app.view == View::Branches => return branch_page(app),
+        KeyCode::Char('B') if page == View::History => return commit_page(app),
+        KeyCode::Char('y') if !ctrl && page == View::History => {
+            return match app.selected_commit() {
+                Some(commit) => Action::Copy(commit.sha.clone()),
+                None => Action::None,
+            };
+        }
+        KeyCode::Char('L')
+            if matches!(
+                page,
+                View::Files | View::Custom | View::Status | View::Changes
+            ) =>
+        {
+            app.open_file_history();
+            return Action::Redraw;
+        }
         KeyCode::Char('y') if !ctrl && app.view == View::Branches => {
             return match app.branches.selected() {
                 Some(branch) => Action::Copy(branch.name.clone()),
@@ -128,7 +146,7 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
                 None => Action::None,
             };
         }
-        KeyCode::Char('/') if app.view == View::Files => {
+        KeyCode::Char('/') if page == View::Files => {
             app.start_filter();
             app.input = Some(Input {
                 kind: InputKind::Filter,
@@ -138,11 +156,11 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
         }
         KeyCode::Char('p') if !ctrl => return Action::Pin("split"),
         KeyCode::Char('T') => return Action::Pin("tab"),
-        KeyCode::Char('s') if !ctrl && matches!(app.view, View::Files | View::Changes) => {
+        KeyCode::Char('s') if !ctrl && matches!(page, View::Files | View::Changes) => {
             app.cycle_scope();
             return Action::Redraw;
         }
-        KeyCode::Char('a') if !ctrl && matches!(app.view, View::Files | View::Changes) => {
+        KeyCode::Char('a') if !ctrl && matches!(page, View::Files | View::Changes) => {
             app.next_agent();
             return Action::Redraw;
         }
@@ -152,7 +170,7 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
         }
         _ => {}
     }
-    let r = match app.view {
+    let r = match page {
         View::Files => files_key(app, key),
         View::Custom => custom_key(app, key),
         View::Status => status_key(app, key),
@@ -238,8 +256,31 @@ fn branch_page(app: &mut App) -> Action {
     }
 }
 
+fn commit_page(app: &mut App) -> Action {
+    match app.commit_link() {
+        Ok(page) => Action::Browse(page),
+        Err(why) => {
+            app.message = Some(why);
+            Action::Redraw
+        }
+    }
+}
+
+fn help_key(app: &mut App, key: KeyEvent) -> Action {
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('?') | KeyCode::Char('q') | KeyCode::Enter => {
+            app.show_help = false;
+            app.help_scroll = 0;
+        }
+        KeyCode::Down | KeyCode::Char('j') => app.help_scroll += 1,
+        KeyCode::Up | KeyCode::Char('k') => app.help_scroll = app.help_scroll.saturating_sub(1),
+        _ => return Action::None,
+    }
+    Action::Redraw
+}
+
 fn toggle_focus(app: &mut App) {
-    let focus = match app.view {
+    let focus = match app.page() {
         View::Files => &mut app.files.focus,
         View::Status => &mut app.status.focus,
         View::Changes => &mut app.changes.focus,
@@ -487,20 +528,19 @@ fn changes_key(app: &mut App, key: KeyEvent) -> Action {
 
 fn history_key(app: &mut App, key: KeyEvent) -> Action {
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-    if app.history.show_diff {
+    let shown = app.shown_history_mut();
+    if shown.show_diff {
         match key.code {
             KeyCode::Up | KeyCode::Char('k') => {
-                app.history.diff_scroll = app.history.diff_scroll.saturating_sub(1)
+                shown.diff_scroll = shown.diff_scroll.saturating_sub(1)
             }
-            KeyCode::Down | KeyCode::Char('j') => app.history.diff_scroll += 1,
-            KeyCode::Char('d') if ctrl => app.history.diff_scroll += 15,
-            KeyCode::Char('u') if ctrl => {
-                app.history.diff_scroll = app.history.diff_scroll.saturating_sub(15)
-            }
-            KeyCode::PageDown | KeyCode::Char(' ') => app.history.diff_scroll += 30,
-            KeyCode::PageUp => app.history.diff_scroll = app.history.diff_scroll.saturating_sub(30),
-            KeyCode::Backspace | KeyCode::Delete | KeyCode::Left => app.history.show_diff = false,
-            KeyCode::Enter => app.history.show_diff = false,
+            KeyCode::Down | KeyCode::Char('j') => shown.diff_scroll += 1,
+            KeyCode::Char('d') if ctrl => shown.diff_scroll += 15,
+            KeyCode::Char('u') if ctrl => shown.diff_scroll = shown.diff_scroll.saturating_sub(15),
+            KeyCode::PageDown | KeyCode::Char(' ') => shown.diff_scroll += 30,
+            KeyCode::PageUp => shown.diff_scroll = shown.diff_scroll.saturating_sub(30),
+            KeyCode::Backspace | KeyCode::Delete | KeyCode::Left => shown.show_diff = false,
+            KeyCode::Enter => shown.show_diff = false,
             _ => return Action::None,
         }
         return Action::Redraw;

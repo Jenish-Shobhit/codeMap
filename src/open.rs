@@ -200,6 +200,12 @@ pub fn github_branch_url(remote: &str, branch: &str) -> Option<String> {
     Some(format!("{base}/tree/{}", branch.join("/")))
 }
 
+pub fn github_commit_url(remote: &str, sha: &str) -> Option<String> {
+    let base = github_base(remote)?;
+    let full = matches!(sha.len(), 40 | 64) && sha.bytes().all(|b| b.is_ascii_hexdigit());
+    full.then(|| format!("{base}/commit/{sha}"))
+}
+
 pub fn web_page(address: &str) -> Result<String, String> {
     open_with_default(address).map(|()| format!("opened {address}"))
 }
@@ -265,6 +271,24 @@ mod tests {
             Some("https://github.com/acme/widgets/tree/main")
         );
         assert_eq!(github_branch_url("/srv/git/widgets.git", "main"), None);
+    }
+
+    #[test]
+    fn a_commit_page_is_named_by_the_full_sha() {
+        let sha = "0123456789abcdef0123456789abcdef01234567";
+        assert_eq!(
+            github_commit_url("git@github.com:acme/widgets.git", sha).as_deref(),
+            Some("https://github.com/acme/widgets/commit/0123456789abcdef0123456789abcdef01234567")
+        );
+        assert_eq!(github_commit_url("/srv/git/widgets.git", sha), None);
+        assert_eq!(
+            github_commit_url("https://github.com/acme/widgets", "0123456"),
+            None
+        );
+        assert_eq!(
+            github_commit_url("https://github.com/acme/widgets", &sha.replace('a', "/")),
+            None
+        );
     }
 
     #[test]

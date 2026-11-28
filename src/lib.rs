@@ -7,6 +7,7 @@ pub mod files;
 pub mod gh;
 pub mod git;
 pub mod herdr;
+pub mod history;
 pub mod hook;
 pub mod keys;
 pub mod open;

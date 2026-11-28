@@ -47,4 +47,4 @@
 
 
 
- j k commit                                                                                       ⏎ diff  ? keys
+ j k commit                                                                                       ⏎ diff  B GitHub  y copy sha  ? keys
