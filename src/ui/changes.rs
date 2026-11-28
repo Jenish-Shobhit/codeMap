@@ -6,10 +6,9 @@ use ratatui::style::{Color, Style};
 
 use super::{bold, put, style, Areas, Line, Rail};
 use crate::app::{App, CRow, Focus};
-use crate::git::{DiffLine, FileDiff, FileStatus, LineKind};
-use crate::index::parent_dir;
+use crate::git::{DiffLine, FileDiff, FileStatus, Hunk, LineKind};
 use crate::theme::Theme;
-use crate::util;
+use crate::util::{self, parent_dir};
 
 pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
     rail(buf, a.rail, app);
@@ -22,14 +21,6 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
             body.y,
             &format!("not a git repository · {}", util::tilde(&app.root)),
             style(t.modified, t.body),
-            body.width,
-        );
-        put(
-            buf,
-            body.x,
-            body.y + 1,
-            "Map and Flow still work.",
-            style(t.muted, t.body),
             body.width,
         );
         return;
@@ -150,8 +141,6 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
         app.changes.scroll = cur + 1 - view_h;
     }
     let sel_range = app.changes.anchor.map(|a| (a.min(cur), a.max(cur)));
-    let marks = app.marks.symbols.get(&f.path);
-    let _ = marks;
     for (i, row) in rows
         .iter()
         .enumerate()
@@ -164,7 +153,7 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
         match row {
             CRow::Hunk(hi) => {
                 let h = &f.hunks[*hi];
-                let name = hunk_name(app, &f, h.new_start, h);
+                let name = hunk_name(h);
                 let reviewed = app.reviews.is_reviewed(&f.path, &h.hash());
                 let bg = if is_cur { t.active_row } else { t.body };
                 let mut line = Line::new()
@@ -206,22 +195,12 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
     }
 }
 
-fn hunk_name(app: &App, f: &FileDiff, _start: u32, h: &crate::git::Hunk) -> String {
-    let first_change = h
-        .lines
-        .iter()
-        .find(|l| l.kind != LineKind::Context)
-        .and_then(|l| l.new_no)
-        .unwrap_or(h.new_start);
-    if let Some(fs) = app.index.symbols(&f.path) {
-        if let Some(i) = fs.callable_at_line(first_change) {
-            return fs.symbols[i].qual();
-        }
+fn hunk_name(h: &Hunk) -> String {
+    if h.section.is_empty() {
+        "top level".into()
+    } else {
+        util::truncate(&h.section, 40)
     }
-    if !h.section.is_empty() {
-        return util::truncate(&h.section, 40);
-    }
-    "top level".into()
 }
 
 fn human(n: u64) -> String {

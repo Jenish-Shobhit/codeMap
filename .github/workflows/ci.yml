@@ -147,46 +147,6 @@ jobs:
         with:
           command: check advisories bans licenses sources
 
-  kani:
-    name: Kani proofs
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    env:
-      # Keep in step with .claude/skills/selection-scroll/SKILL.md.
-      KANI_VERSION: "0.68.0"
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
-        with:
-          toolchain: stable
-      # `cargo kani setup` puts its bundle in ~/.kani and its pinned nightly
-      # in ~/.rustup/toolchains; both are keyed on the Kani version.
-      - name: Restore Kani
-        id: kani-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.kani
-            ~/.cargo/bin/kani
-            ~/.cargo/bin/cargo-kani
-            ~/.rustup/toolchains/nightly-*
-          key: kani-${{ runner.os }}-${{ runner.arch }}-${{ env.KANI_VERSION }}
-      - name: Install Kani
-        if: steps.kani-cache.outputs.cache-hit != 'true'
-        run: |
-          cargo install --locked kani-verifier --version "$KANI_VERSION"
-          cargo kani setup
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          key: kani-${{ env.KANI_VERSION }}
-          cache-directories: target/kani
-      - name: Every proof holds, and every cover is reached
-        run: python3 -I scripts/kani.py prove
-      - name: Every proof catches its broken variants
-        run: python3 -I scripts/kani.py mutations
-
   workflows:
     name: workflow lint
     runs-on: ubuntu-latest
@@ -209,7 +169,7 @@ jobs:
   gate:
     name: CI gate
     if: always()
-    needs: [fmt, clippy, test, screenshots, msrv, docs, deny, kani, workflows]
+    needs: [fmt, clippy, test, screenshots, msrv, docs, deny, workflows]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

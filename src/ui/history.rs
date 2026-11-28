@@ -58,14 +58,6 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
             style(t.modified, t.body),
             body.width,
         );
-        put(
-            buf,
-            body.x,
-            body.y + 1,
-            "Map and Flow still work.",
-            style(t.muted, t.body),
-            body.width,
-        );
         return;
     }
     if !app.history_loaded {

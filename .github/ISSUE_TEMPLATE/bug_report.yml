@@ -22,7 +22,7 @@ body:
       description: The smallest steps that show it. A tiny public repository or a code snippet helps most.
       placeholder: |
         1. Open codeMap with ⌃⌥M over an agent pane
-        2. Press 2 on a Go function with a select statement
+        2. Press } to move to the second changed file
         3. ...
     validations:
       required: true
@@ -31,8 +31,6 @@ body:
     attributes:
       label: Where
       options:
-        - Map
-        - Flow
         - Changes
         - History
         - Turn checkpoints (the hook)

@@ -1,4 +1,4 @@
-  map   flow   changes   history                                                                                ○ paneMorph · selector-fix   main   turn 3 · 2m
+  changes   history                                                                                             ○ paneMorph · selector-fix   main   turn 3 · 2m
 
  agents                                   panemorph/actions/open_selector.py   +50 −13    ✓ 0 of 3
  ○ claude w1:p2   3 files +62 −26         @@ top level · 1–20
@@ -23,7 +23,7 @@
                                              18      return [
                                              19          herdr,
                                              20          "plugin",
-                                          @@ selector_command · 30–64
+                                          @@ def selector_command(herdr: str, plugin… · 30–64
                                              30          f"PANEMORPH_MODE={mode}",
                                              31          "--env",
                                              32          f"PANEMORPH_SOURCE_PANE_ID={source_pane_id}",

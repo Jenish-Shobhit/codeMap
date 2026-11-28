@@ -7,16 +7,16 @@ use codemap::run::{self, Trace};
 use codemap::store::Store;
 use codemap::theme::Theme;
 
-const HELP: &str = "codeMap: see your code as a map, and what your agents changed on it.
+const HELP: &str = "codeMap: review what your agents changed, and the history around it.
 
 usage:
-  codemap [PATH] [--view map|flow|changes|history] [--trace-startup]
+  codemap [PATH] [--view changes|history] [--trace-startup]
   codemap open [--view VIEW] [--placement popup|split|tab]   (herdr action)
   codemap ui [--view VIEW]                                   (herdr pane)
   codemap hook                                               (herdr event hook)
   codemap doctor
 
-keys: 1 map · 2 flow · 3 changes · 4 history · ? all keys · q or esc closes
+keys: 1 changes · 2 history · ? all keys · q or esc closes
 ";
 
 struct Args {
@@ -92,7 +92,7 @@ fn view_from(args: &Args) -> View {
                 .ok()
                 .and_then(|v| View::parse(&v))
         })
-        .unwrap_or(View::Map)
+        .unwrap_or(View::Changes)
 }
 
 fn ui(args: Args, t0: Instant) -> i32 {

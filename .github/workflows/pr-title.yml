@@ -26,6 +26,6 @@ jobs:
           if printf '%s\n' "$TITLE" | grep -Eq "$pattern"; then
             echo "Conventional Commit title: $TITLE"
           else
-            echo "::error title=PR title::Use a Conventional Commit title, such as 'fix(flow): keep the gutter visible' or 'docs: explain the hook'. Types: build, chore, ci, docs, feat, fix, perf, refactor, revert, style, test."
+            echo "::error title=PR title::Use a Conventional Commit title, such as 'fix(changes): keep the gutter visible' or 'docs: explain the hook'. Types: build, chore, ci, docs, feat, fix, perf, refactor, revert, style, test."
             exit 1
           fi

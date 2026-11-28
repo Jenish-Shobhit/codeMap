@@ -164,9 +164,15 @@ pub fn capture(manifest: &Path, fixtures: &Path, out: &Path) -> Result<(), Strin
     )?;
     wait(Duration::from_secs(20), || {
         let t = term.text();
-        t.contains("this turn") && t.contains("PaneMorphService")
+        t.contains("this turn") && t.contains("open_selector.py")
     })
     .ok_or_else(|| format!("the popup did not paint:\n{}", term.text()))?;
+    term.send(b"}");
+    wait(Duration::from_secs(10), || {
+        term.text()
+            .contains("panemorph/actions/open_selector.py   +50")
+    })
+    .ok_or_else(|| format!("the popup did not show the second file:\n{}", term.text()))?;
     std::thread::sleep(Duration::from_millis(800));
 
     let grid = term.grid();

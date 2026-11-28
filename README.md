@@ -2,10 +2,9 @@
 
 # codeMap
 
-**See your code as a map, and what your agents changed on it.**
+**Review what your agents changed, and the history around it.**
 
 [![CI](https://github.com/Jenish-Shobhit/codeMap/actions/workflows/ci.yml/badge.svg)](https://github.com/Jenish-Shobhit/codeMap/actions/workflows/ci.yml)
-[![Kani proofs](https://img.shields.io/badge/proofs-Kani-8be9fd)](CONTRIBUTING.md#formal-verification)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Jenish-Shobhit/codeMap/badge)](https://scorecard.dev/viewer/?uri=github.com/Jenish-Shobhit/codeMap)
 [![Latest release](https://img.shields.io/github/v/release/Jenish-Shobhit/codeMap?sort=semver&color=bd93f9)](https://github.com/Jenish-Shobhit/codeMap/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-50fa7b)](LICENSE)
@@ -17,36 +16,31 @@
 </div>
 
 <p align="center">
-  <img src="docs/assets/herdr.svg" width="100%" alt="codeMap's popup over an agent's pane in herdr. The Map view draws a Python package as boxes joined by call lines, and its rail lists the four functions the agent's last turn changed, marked M for changed and A for added. herdr's sidebar shows the workspace and the agent.">
+  <img src="docs/assets/herdr.svg" width="100%" alt="codeMap's popup over an agent's pane in herdr. The Changes view lists the three files the agent's last turn changed and shows the diff of open_selector.py, with added lines on a green band. herdr's sidebar shows the workspace and the agent.">
   <br>
   <sub>codeMap over an agent's pane, captured from a real herdr client.</sub>
 </p>
 
 ## Why
 
-Coding agents change more code in a turn than anyone reads line by line, and a
-diff alone does not show where a change sits in the codebase. codeMap is a
-[herdr](https://herdr.dev) plugin that opens over the agent you are watching and
-shows its worktree as a map, a function as a flowchart, the last turn as a
-reviewable diff, and the history as a graph, so you see the shape of the code
-and what just changed without opening files one by one.
+Coding agents change more code in a turn than anyone reads line by line.
+codeMap is a [herdr](https://herdr.dev) plugin that opens over the agent you are
+watching and shows its last turn as a reviewable diff and the repository's
+history as a graph, so you see what just changed and answer it without leaving
+the terminal.
 
 ## Features
 
-- **Four views, one key.** ⌃⌥M opens a popup over the focused agent's pane with
-  Map, Flow, Changes and History, switched with `1`–`4`.
+- **Two views, one key.** ⌃⌥M opens a popup over the focused agent's pane with
+  Changes and History, switched with `1` and `2`.
 - **Turn-aware.** An event hook snapshots the worktree whenever an agent starts
-  or finishes a turn, so every view knows what the last turn did: `M` for
-  changed, `A` for added.
+  or finishes a turn, so Changes shows what the last turn did, not only what
+  differs from `HEAD`.
 - **Review without leaving the terminal.** Mark hunks reviewed, comment on
   lines, and send the comments to the agent's prompt as one message.
-- **Parsed, not grepped.** tree-sitter grammars for Python, Rust,
-  TypeScript/TSX, JavaScript and Go, with calls and imports resolved across
-  files.
 - **Read-only.** Checkpoints live in codeMap's own state directory. Your
   repository gets no refs, no stash and no index changes.
-- **Fast.** The frame paints in under a millisecond and a small repository is
-  loaded in about 100 ms. Huge repositories parse one folder at a time.
+- **Fast.** The frame paints in under a millisecond, before git is read.
 - **Follows herdr's theme**, including all 18 built-in palettes and custom
   colours.
 - **Works outside herdr too:** `codemap [path]` opens the same views in any
@@ -57,9 +51,9 @@ and what just changed without opening files one by one.
 - [herdr](https://herdr.dev) 0.9.0 or newer, on macOS or Linux.
 - `git` on your `PATH`.
 - To install from GitHub, herdr builds codeMap with `cargo`, which needs Rust
-  1.90 or newer ([rustup](https://rustup.rs)) and a C compiler for the
-  tree-sitter grammars: Xcode's command line tools on macOS, `gcc` or `clang`
-  on Linux. The [prebuilt binaries](#prebuilt-binaries) need neither.
+  1.90 or newer ([rustup](https://rustup.rs)) and the linker it uses: Xcode's
+  command line tools on macOS, `gcc` or `clang` on Linux. The
+  [prebuilt binaries](#prebuilt-binaries) need neither.
 - For the ⌃⌥M chord, a terminal with the Kitty keyboard protocol, such as
   Ghostty or kitty. Other chords work in any terminal; see the
   [FAQ](#m-does-nothing-or-arrives-as-).
@@ -78,7 +72,7 @@ skip the prompt. Then [bind a key](#keybindings) and check the plugin:
 
 ```sh
 herdr plugin list                               # dev.codemap, enabled
-herdr plugin action list --plugin dev.codemap   # open, flow, changes, history
+herdr plugin action list --plugin dev.codemap   # open, changes, history
 ```
 
 To update, run the install command again; herdr replaces its checkout. To
@@ -116,7 +110,7 @@ herdr plugin link "$PWD/codemap-$v-$t"
 
 ## Keybindings
 
-codeMap declares four herdr actions. Bind the one that opens the Map in
+codeMap declares three herdr actions. Bind the one that opens the popup in
 `~/.config/herdr/config.toml`:
 
 ```toml
@@ -124,37 +118,29 @@ codeMap declares four herdr actions. Bind the one that opens the Map in
 key = "ctrl+alt+m"
 type = "plugin_action"
 command = "dev.codemap.open"
-description = "codeMap: map of the focused agent's code"
+description = "codeMap: what the focused agent changed"
 ```
 
 Then run `herdr config check` and `herdr server reload-config`. To open
-straight into another view, bind `dev.codemap.flow`, `dev.codemap.changes` or
-`dev.codemap.history` the same way.
+straight into a view, bind `dev.codemap.changes` or `dev.codemap.history` the
+same way.
 
 Inside the popup:
 
 | Keys | Where | Action |
 | --- | --- | --- |
-| `1` `2` `3` `4` | everywhere | Map, Flow, Changes, History |
-| `tab` | Map, Flow, Changes | move between the rail and the body |
-| `/` | everywhere | search a function, class or file; `↑` `↓` pick, `⏎` go |
-| `e` / `y` | Map, Flow, Changes | open `$EDITOR` at the line / copy `path:line` |
+| `1` `2` | everywhere | Changes, History |
+| `tab` | Changes | move between the rail and the body |
+| `e` / `y` | Changes | open `$EDITOR` at the line / copy `path:line` |
 | `p` / `T` | inside herdr | pin codeMap as a split that follows the focused pane / open it in its own tab |
 | `?` | everywhere | show every key |
 | `q` or `⎋` | everywhere | close |
-| `←` `→` `↑` `↓` | Map | move between boxes |
-| `j` `k` | Map | move through a box's rows (a file's functions, a class's methods) |
-| `⏎` / `⌫` | Map | zoom in (folder, file, then the Flow of a function) / zoom out |
-| `]` `[` | Map | next or previous page of a big folder |
-| `↑` `↓` `←` `→` | Flow | move between boxes |
-| `⏎` / `⌫` | Flow | open the call in the box / go back |
 | `j` `k`, `]` `[`, `}` `{` | Changes | next or previous line, hunk, file |
 | `space` | Changes | mark the hunk reviewed (kept until the hunk changes) |
 | `v`, `c`, `x` | Changes | select lines, comment on them, delete a comment |
 | `P` / `S` | Changes | type the draft into the agent's prompt and close / submit it through herdr's `agent.prompt` |
-| `s` / `a` | Changes, Map | scope: last turn, the agent's session, since `HEAD` / next agent |
+| `s` / `a` | Changes | scope: last turn, the agent's session, since `HEAD` / next agent |
 | `j` `k`, `⏎`, `⌫` | History | move between commits, show the diff, go back |
-| `1` | History | the Map with this commit's changes marked |
 
 The popup takes every key while it is open: nothing reaches herdr or the agent
 until it closes.
@@ -171,25 +157,6 @@ code with one recorded agent turn. They are rendered from the real UI by
 `cargo run --example screenshots`, and CI checks that they are current. The
 image at the top is a capture of a real herdr client in a throwaway session
 (`-- --herdr`).
-
-### Map
-
-<img src="docs/assets/map-file.svg" width="100%" alt="The Map zoomed into open_selector.py: boxes for its three functions, with lines to the functions they call in model.py, api.py and service.py.">
-
-Folders, files, classes and functions as boxes, and calls and imports as
-lines, in a layered layout. The map opens at folder level; `⏎` zooms into a
-folder, then a file (above), then the Flow of a function, and
-`⌫` zooms out. The rail lists the functions the last turn changed. Boxes for
-code outside the current folder show where calls lead.
-
-### Flow
-
-<img src="docs/assets/flow.svg" width="100%" alt="The Flow view of finish_selection: a while loop with its body, three decisions that raise or return, statements, and an if/else, with an A beside every line the turn added.">
-
-The selected function as a flowchart: statements, decisions, loops,
-try/except, match and returns, with branches merging back below. The gutter
-marks each line the turn added (`A`) or changed (`M`). `⏎` on a box opens the
-function it calls, and `⌫` comes back.
 
 ### Changes
 
@@ -216,7 +183,7 @@ waiting on a question, codeMap says so and keeps the draft.
 
 The commit graph with branches, tags and `HEAD`, and the repository's worktrees
 with the herdr agents working in each (`●` working, `○` idle). `⏎` shows a
-commit's diff, and `1` opens the Map with that commit's changes marked.
+commit's diff.
 
 ## Standalone
 
@@ -224,7 +191,7 @@ The binary runs without herdr:
 
 ```sh
 codemap                          # the current directory
-codemap path/to/repo --view flow
+codemap path/to/repo --view history
 codemap doctor                   # where codeMap looks for herdr, its theme and state
 codemap --help
 ```
@@ -233,20 +200,6 @@ It is `target/release/codemap` in the plugin directory; link it onto your
 `PATH` to use it anywhere. Outside herdr there is no focused agent, so Changes
 starts at "since `HEAD`"; turns the hook recorded in that repository are still
 one `s` away. Pinning (`p`, `T`) and sending comments need herdr.
-
-## Supported languages
-
-| Language | Files | Flow shows |
-| --- | --- | --- |
-| Python | `.py` `.pyi` | `if`/`elif`/`else`, `for`, `while`, `try`/`except`/`finally`, `with`, `match`, `return`, `raise` |
-| Rust | `.rs` | `if`/`else`, `loop`, `while`, `for`, `match`, `return`, `break`, `continue` |
-| TypeScript | `.ts` `.tsx` `.mts` `.cts` | `if`/`else`, `for`, `for…in`/`of`, `while`, `do`, `switch`, `try`/`catch`/`finally`, `return`, `throw` |
-| JavaScript | `.js` `.jsx` `.mjs` `.cjs` | as TypeScript |
-| Go | `.go` | `if`/`else`, `for`, `switch`, type switches, `select`, `return`, `goto` |
-
-Map and Flow cover all five. Files in other languages appear on the map as
-plain boxes with their size, binary files as `binary · 24 KB`, and Flow names
-the grammars it has.
 
 ## Configuration and theme
 
@@ -270,26 +223,20 @@ codeMap has no settings file of its own; it follows herdr.
 ```mermaid
 flowchart LR
     subgraph read["When the popup opens"]
-        files["Worktree files"] --> ts["tree-sitter<br/>parse"]
-        ts --> index["Symbol index<br/>definitions, calls, imports"]
-        index --> layout["Layout<br/>layered graph, flowchart"]
+        git["git<br/>status, log, worktrees"] --> diff["Diffs and commit graph"]
     end
     subgraph record["On every agent status change"]
         event["herdr event<br/>pane.agent_status_changed"] --> hook["codemap hook"]
         hook --> checkpoint["Turn checkpoint<br/>shadow git store"]
     end
-    layout --> render["Renderer<br/>ratatui popup"]
+    diff --> render["Renderer<br/>ratatui popup"]
     checkpoint -- "diff of the last turn" --> render
 ```
 
-**Reading code.** The popup paints its frame first, then worker threads list
-the worktree's files, parse them with tree-sitter and build a symbol index:
-definitions from tags-style queries, calls and imports resolved to the files
-and symbols they name. The Map lays the index out as a layered (Sugiyama)
-graph: layers, crossing reduction, then coordinates, drawn with box characters.
-Flow turns one function's syntax tree into a structured chart that runs down
-one spine, with branches in columns to the right. Above 1,500 source files,
-codeMap parses a folder when you zoom into it.
+**Reading the repository.** The popup paints its frame first, then worker
+threads ask git for the diff in scope, the commit log and the worktrees. The
+commit graph is laid out in lanes and drawn with box characters. Hunks are
+named by the function line git prints in each hunk header.
 
 **Recording turns.** herdr runs `codemap hook` on every
 `pane.agent_status_changed` event. A change to `working` starts a turn; a
@@ -302,9 +249,6 @@ per agent are kept.
 | Measured on an Apple silicon Mac, release build | Time |
 | --- | --- |
 | Process start to first paint | 0.6 ms in process, full frame 5 ms after spawn |
-| Small repository (11 files), content loaded | 66–100 ms |
-| codeMap's own source (63 files) | about 230 ms |
-| 12,000-file repository, first paint / loaded | 0.3 ms / about 110 ms |
 | History of 2,000 commits | about 20 ms |
 | Hook, per turn boundary | about 60 ms |
 
@@ -342,7 +286,7 @@ Ghostty or kitty, or bind a chord every terminal can send, such as
 key = "prefix+m"
 type = "plugin_action"
 command = "dev.codemap.open"
-description = "codeMap: map of the focused agent's code"
+description = "codeMap: what the focused agent changed"
 ```
 
 ### The first launch after a build is slow
@@ -352,7 +296,7 @@ system checks it; later launches paint in milliseconds. If you downloaded a
 release archive with a browser and macOS refuses to run it, clear the
 quarantine flag: `xattr -dr com.apple.quarantine codemap-v0.1.0-*`.
 
-### Nothing is marked M or A
+### Changes shows "since HEAD", not the last turn
 
 No turn has been recorded for this agent yet: the hook starts recording once
 the plugin is installed, at the agent's next turn. Until then the scope is
@@ -369,8 +313,8 @@ the plugin is installed, at the agent's next turn. Until then the scope is
 
 ### The install fails at `cargo build`
 
-The GitHub install builds from source and needs `cargo` 1.90+ and a C
-compiler on the `PATH` that herdr sees. Install them, or use a
+The GitHub install builds from source and needs `cargo` 1.90+ and its linker
+on the `PATH` that herdr sees. Install them, or use a
 [prebuilt binary](#prebuilt-binaries).
 
 ## Roadmap
@@ -378,17 +322,19 @@ compiler on the `PATH` that herdr sees. Install them, or use a
 Ideas under consideration, not commitments:
 
 - Step through earlier turns, not only the last one and the session.
-- More languages through tree-sitter: Java, C and C++, Ruby.
+- A Files popup: the worktree as a tree with a preview, and keys to open a
+  file in an editor or the browser.
+- A Git popup that also stages, commits and switches branches.
+- A Customisations popup: the skills, hooks and settings an agent runs with.
 - Follow the host's light or dark appearance when herdr's `auto_switch` is on.
-- Export a map or a flowchart as text or SVG.
 
 Suggestions are welcome in [issues](https://github.com/Jenish-Shobhit/codeMap/issues).
 
 ## Contributing
 
-Bug reports, fixes and new languages are welcome. [CONTRIBUTING.md](CONTRIBUTING.md)
-covers the setup, the checks CI runs, the Kani proofs, the snapshot tests and
-how to run the live tests against a throwaway herdr server. `main` changes
+Bug reports and fixes are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers
+the setup, the checks CI runs, the snapshot tests and how to run the live
+tests against a throwaway herdr server. `main` changes
 only through pull requests that pass CI. Everyone taking part follows the
 [Code of Conduct](CODE_OF_CONDUCT.md).
 
@@ -404,8 +350,7 @@ codeMap is released under the [MIT License](LICENSE). Copyright (c) 2026
 Jenish Shobhit.
 
 [NOTICE](NOTICE) lists third-party material: the colour palettes ported from
-herdr (Apache-2.0), and the tree-sitter runtime and grammars (MIT) that the
-binaries include.
+herdr (Apache-2.0) and the Rust crates the binaries include.
 
 ---
 

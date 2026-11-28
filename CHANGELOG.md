@@ -9,14 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Upgraded `tree-sitter` from 0.25 to 0.27. The grammar crates stay on
-  their latest releases (`tree-sitter-python` 0.25, `tree-sitter-rust` 0.24,
-  `tree-sitter-typescript` 0.23, `tree-sitter-javascript` 0.25,
-  `tree-sitter-go` 0.25), whose ABIs (14 and 15) tree-sitter 0.27 supports.
-  Symbols, calls, imports and flowcharts are unchanged.
+- The popup opens on Changes, and `1` and `2` switch between Changes and
+  History. `dev.codemap.open` opens Changes, where it opened the Map.
+- Hunks in Changes are named by the function line git prints in the hunk
+  header, no longer by a parsed symbol.
+- Building from source no longer compiles C: the binary has no tree-sitter
+  runtime or grammars.
 - Upgraded `toml` from 0.8 to 1.1. herdr's `[theme]` settings resolve as
   before; `config.toml` files that use TOML 1.1 syntax, such as multi-line
   inline tables, are now read instead of falling back to the default theme.
+
+### Removed
+
+- The Map and Flow views, and with them symbol search (`/`), the
+  `dev.codemap.flow` action, `--view map` and `--view flow`, and the `1` key
+  in History that opened the Map on a commit. Bind `dev.codemap.open` or
+  `dev.codemap.changes` in place of `dev.codemap.flow`.
 
 ## [0.1.0] - 2026-09-27
 

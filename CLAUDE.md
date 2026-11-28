@@ -1,7 +1,7 @@
 # codeMap
 
-A herdr plugin and standalone TUI in Rust: Map, Flow, Changes and History
-views of a repository. CONTRIBUTING.md has the full setup and test guide.
+A herdr plugin and standalone TUI in Rust: Changes and History views of a
+repository. CONTRIBUTING.md has the full setup and test guide.
 
 ## No comments in code
 
@@ -20,7 +20,7 @@ description, CONTRIBUTING.md or README.md, or a project skill in
 ## How changes land
 
 - `main` takes changes only through pull requests. Never push to `main`.
-- Title the pull request as a Conventional Commit (`fix(flow): ...`); it
+- Title the pull request as a Conventional Commit (`fix(changes): ...`); it
   becomes the squash commit on `main`.
 - A pull request merges when `CI gate` and `PR title` are green and the branch
   is up to date with `main`.
@@ -35,7 +35,3 @@ cargo test --locked
 
 - UI changes: `UPDATE_SNAPSHOTS=1 cargo test --test views`, review the diff,
   and `cargo run --example screenshots`.
-- Changes to `follow` in src/ui/mod.rs or its callers: use the
-  `selection-scroll` skill and run `python3 scripts/kani.py prove` and
-  `python3 scripts/kani.py mutations`. A failing proof is a finding: never
-  weaken it to pass.

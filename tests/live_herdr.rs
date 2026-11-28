@@ -317,7 +317,7 @@ fn live_hook_checkpoints_and_comment_delivery() {
     assert_eq!(app.drafts.len(), 1);
 
     let out = Command::new(env!("CARGO_BIN_EXE_codemap"))
-        .args(["open", "--view", "map"])
+        .args(["open", "--view", "changes"])
         .env("HERDR_ENV", "1")
         .env("HERDR_SOCKET_PATH", &sock)
         .env("HERDR_PLUGIN_CONTEXT_JSON", &ctx_json)
@@ -354,6 +354,7 @@ fn live_follow_mode_retargets_on_focus() {
         write(dir, file, "def f():\n    return 1\n");
         common::git(dir, &["add", "-A"]);
         common::git(dir, &["commit", "-q", "-m", "init"]);
+        write(dir, file, "def f():\n    return 2\n");
     }
     let ws_a = client
         .call(
@@ -389,13 +390,13 @@ fn live_follow_mode_retargets_on_focus() {
             ("HERDR_PLUGIN_STATE_DIR", &state_s),
             ("HERDR_PLUGIN_CONTEXT_JSON", &ctx_s),
             ("CODEMAP_PINNED", "1"),
-            ("CODEMAP_VIEW", "map"),
+            ("CODEMAP_VIEW", "changes"),
         ],
         140,
         40,
     );
     ui.wait_for("alpha.py", 0, Duration::from_secs(10))
-        .unwrap_or_else(|| panic!("alpha map:\n{}", ui.screen()));
+        .unwrap_or_else(|| panic!("alpha's changes:\n{}", ui.screen()));
     std::thread::sleep(Duration::from_millis(300));
     client
         .call("pane.focus", json!({"pane_id": pane_b}))
@@ -403,7 +404,7 @@ fn live_follow_mode_retargets_on_focus() {
     ui.wait_for("beta.py", 0, Duration::from_secs(10))
         .unwrap_or_else(|| {
             panic!(
-                "after focusing {pane_b}, expected beta's map:\n{}",
+                "after focusing {pane_b}, expected beta's changes:\n{}",
                 ui.screen()
             )
         });

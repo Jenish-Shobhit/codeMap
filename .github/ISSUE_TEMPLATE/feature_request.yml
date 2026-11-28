@@ -21,11 +21,8 @@ body:
     attributes:
       label: Area
       options:
-        - Map
-        - Flow
         - Changes
         - History
-        - Language support
         - herdr integration
         - Other
     validations:
