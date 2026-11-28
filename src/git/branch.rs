@@ -208,6 +208,20 @@ pub fn only_here(root: &Path, branch: &str) -> Result<usize, GitError> {
     )
 }
 
+pub fn on_origin(root: &Path, sha: &str) -> Result<bool, GitError> {
+    let holding = run(
+        root,
+        &[
+            "for-each-ref",
+            "--count=1",
+            "--format=%(refname)",
+            &format!("--contains={sha}"),
+            &format!("{REMOTE}origin/"),
+        ],
+    )?;
+    Ok(!holding.trim().is_empty())
+}
+
 fn acted_on(name: &str) -> Result<(), GitError> {
     if name.starts_with('-') {
         return Err(GitError(format!(

@@ -4,8 +4,73 @@ use ratatui::style::Color;
 
 use super::{bold, put, style, Areas, Line, Rail};
 use crate::app::App;
-use crate::git::FileStatus;
+use crate::git::{FileDiff, FileStatus};
+use crate::history::FileHistory;
+use crate::theme::Theme;
 use crate::util;
+
+pub fn file_summary(app: &App) -> Option<String> {
+    let file = app.file_history.as_ref()?;
+    let mut line = format!("history of {}", file.path);
+    if file.loaded && file.log.error.is_none() {
+        let count = util::plural(file.log.commits.len(), "commit", "commits");
+        line.push_str(&format!(" · {count}"));
+    }
+    Some(line)
+}
+
+pub(super) fn hints(app: &App) -> Vec<(&'static str, String)> {
+    let in_a_file = app.file_history.is_some();
+    let diff_shown = app.shown_history().show_diff;
+    let on_a_commit = app.selected_commit().is_some();
+    let mut hints = Vec::new();
+    if diff_shown {
+        hints.push(("⌫", "commit".to_string()));
+        hints.push(("j k", "scroll".into()));
+    } else if in_a_file {
+        hints.push(("⎋", "back".to_string()));
+    }
+    if on_a_commit && !diff_shown {
+        hints.push(("⏎", "diff".into()));
+    }
+    if on_a_commit {
+        hints.push(("B", "GitHub".into()));
+        hints.push(("y", "copy sha".into()));
+    }
+    if in_a_file && !diff_shown {
+        hints.push(("e", "editor".into()));
+    }
+    hints.push(("?", "keys".into()));
+    hints
+}
+
+fn no_commits_touch(buf: &mut Buffer, body: Rect, file: &FileHistory, t: &Theme) {
+    if let Some(e) = &file.log.error {
+        let said = format!("git: {e}");
+        put(buf, body.x, body.y, &said, style(t.del, t.body), body.width);
+        return;
+    }
+    let lines = [
+        (
+            format!("no commit has touched {} yet", file.path),
+            style(t.text, t.body),
+        ),
+        (
+            "a new or untracked file has a history once it is committed".to_string(),
+            style(t.muted, t.body),
+        ),
+    ];
+    for (y, (text, look)) in (body.y..).zip(lines) {
+        put(buf, body.x, y, &text, look, body.width);
+    }
+}
+
+fn file_line(f: &FileDiff, in_a_file: bool) -> String {
+    match &f.old_path {
+        Some(old) if in_a_file => format!("{old} → {}", f.path),
+        _ => f.path.clone(),
+    }
+}
 
 pub fn header_summary(app: &App) -> Option<String> {
     let repo = app.repo.as_ref()?;
@@ -47,7 +112,11 @@ fn lane_color(app: &App, i: usize) -> Color {
 pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
     let t = app.theme;
     app.ensure_commit_detail();
-    rail(buf, a.rail, app);
+    if app.file_history.is_some() {
+        file_rail(buf, a.rail, app);
+    } else {
+        rail(buf, a.rail, app);
+    }
     let body = a.body;
     if app.not_a_repo() {
         put(
@@ -60,7 +129,7 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
         );
         return;
     }
-    if !app.history_loaded {
+    if !app.shown_history_loaded() {
         put(
             buf,
             body.x,
@@ -71,22 +140,28 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
         );
         return;
     }
-    if app.history.commits.is_empty() {
-        put(
-            buf,
-            body.x,
-            body.y,
-            "no commits yet",
-            style(t.muted, t.body),
-            body.width,
-        );
+    if app.shown_history().commits.is_empty() {
+        match &app.file_history {
+            Some(file) => no_commits_touch(buf, body, file, &t),
+            None => {
+                put(
+                    buf,
+                    body.x,
+                    body.y,
+                    "no commits yet",
+                    style(t.muted, t.body),
+                    body.width,
+                );
+            }
+        }
         return;
     }
-    let sel = app.history.sel.min(app.history.commits.len() - 1);
-    let c = app.history.commits[sel].clone();
-    if app.history.show_diff {
-        let files = app
-            .history
+    let in_a_file = app.file_history.is_some();
+    let shown = app.shown_history_mut();
+    let sel = shown.sel.min(shown.commits.len() - 1);
+    let c = shown.commits[sel].clone();
+    if shown.show_diff {
+        let files = shown
             .detail
             .as_ref()
             .filter(|(s, _)| *s == c.sha)
@@ -104,14 +179,9 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
                     body.width,
                     body.height.saturating_sub(2),
                 );
-                let total = super::changes::render_diff_list(
-                    buf,
-                    area,
-                    &files,
-                    app.history.diff_scroll,
-                    &t,
-                );
-                app.history.diff_scroll = app.history.diff_scroll.min(total.saturating_sub(1));
+                let total =
+                    super::changes::render_diff_list(buf, area, &files, shown.diff_scroll, &t);
+                shown.diff_scroll = shown.diff_scroll.min(total.saturating_sub(1));
             }
             None => {
                 put(
@@ -157,7 +227,7 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
     }
     who.draw(buf, body.x, y, body.width);
     y += 2;
-    match app.history.detail.as_ref().filter(|(s, _)| *s == c.sha) {
+    match shown.detail.as_ref().filter(|(s, _)| *s == c.sha) {
         Some((_, files)) => {
             for f in files {
                 if y >= body.y + body.height {
@@ -172,7 +242,10 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
                 let mut line = Line::new()
                     .push(format!("{} ", f.status.letter()), style(lc, t.body))
                     .push(
-                        util::pad(&f.path, (body.width as usize).saturating_sub(16).min(44)),
+                        util::pad(
+                            &file_line(f, in_a_file),
+                            (body.width as usize).saturating_sub(16).min(44),
+                        ),
                         style(t.text, t.body),
                     );
                 if f.adds() > 0 {
@@ -215,6 +288,57 @@ fn wrap(s: &str, w: usize) -> Vec<String> {
     }
     out.truncate(3);
     out
+}
+
+fn file_rail(buf: &mut Buffer, area: Rect, app: &mut App) {
+    if area.width == 0 {
+        return;
+    }
+    let t = app.theme;
+    let Some(file) = app.file_history.as_mut() else {
+        return;
+    };
+    let rows = (area.height as usize).saturating_sub(1).max(1);
+    let log = &mut file.log;
+    if log.sel < log.scroll {
+        log.scroll = log.sel;
+    } else if log.sel >= log.scroll + rows {
+        log.scroll = log.sel + 1 - rows;
+    }
+    let file = &*file;
+    let mut r = Rail::new(buf, area, t);
+    r.section(&format!("history of {}", file.path));
+    if let Some(e) = &file.log.error {
+        r.line(Line::new().push(format!("git: {e}"), style(t.del, t.rail)));
+    }
+    for (i, c) in file
+        .log
+        .commits
+        .iter()
+        .enumerate()
+        .skip(file.log.scroll)
+        .take(rows)
+    {
+        let sel = i == file.log.sel;
+        let bg = if sel { t.active_row } else { t.rail };
+        let subject = if sel {
+            bold(style(t.text, bg))
+        } else {
+            style(t.text, bg)
+        };
+        let mut line = Line::new()
+            .bg(bg)
+            .push(format!("{} ", c.short()), style(t.muted, bg))
+            .push(c.subject.clone(), subject);
+        let labels = c.labels();
+        if !labels.is_empty() {
+            line = line.push(format!("  {}", labels.join("  ")), style(t.branch, bg));
+        }
+        if let Some(from) = file.renamed_from(i) {
+            line = line.push(format!("  renamed from {from}"), style(t.renamed, bg));
+        }
+        r.line(line);
+    }
 }
 
 fn rail(buf: &mut Buffer, area: Rect, app: &mut App) {

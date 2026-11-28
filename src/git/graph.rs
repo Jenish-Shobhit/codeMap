@@ -52,44 +52,105 @@ pub fn log(root: &Path, limit: usize) -> Result<Vec<Commit>, GitError> {
 }
 
 pub fn parse_log(out: &str) -> Vec<Commit> {
-    out.split(RECORD)
-        .filter_map(|rec| {
-            let rec = rec.trim_start_matches('\n');
-            if rec.trim().is_empty() {
-                return None;
-            }
-            let mut f = rec.split(FIELD);
-            let sha = f.next()?.trim().to_string();
-            if sha.len() < 7 {
-                return None;
-            }
-            let parents = f
-                .next()
-                .unwrap_or("")
-                .split_whitespace()
-                .map(str::to_string)
-                .collect();
-            let refs = f
-                .next()
-                .unwrap_or("")
-                .split(", ")
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .map(str::to_string)
-                .collect();
-            let author = f.next().unwrap_or("").to_string();
-            let time = f.next().unwrap_or("0").trim().parse().unwrap_or(0);
-            let subject = f.next().unwrap_or("").trim_end().to_string();
-            Some(Commit {
-                sha,
-                parents,
-                refs,
-                author,
-                time,
-                subject,
-            })
-        })
-        .collect()
+    out.split(RECORD).filter_map(parse_commit).collect()
+}
+
+fn parse_commit(rec: &str) -> Option<Commit> {
+    let rec = rec.trim_start_matches('\n');
+    if rec.trim().is_empty() {
+        return None;
+    }
+    let mut f = rec.split(FIELD);
+    let sha = f.next()?.trim().to_string();
+    if sha.len() < 7 {
+        return None;
+    }
+    let parents = f
+        .next()
+        .unwrap_or("")
+        .split_whitespace()
+        .map(str::to_string)
+        .collect();
+    let refs = f
+        .next()
+        .unwrap_or("")
+        .split(", ")
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .collect();
+    let author = f.next().unwrap_or("").to_string();
+    let time = f.next().unwrap_or("0").trim().parse().unwrap_or(0);
+    let subject = f.next().unwrap_or("").trim_end().to_string();
+    Some(Commit {
+        sha,
+        parents,
+        refs,
+        author,
+        time,
+        subject,
+    })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileCommit {
+    pub commit: Commit,
+    pub paths: Vec<String>,
+}
+
+pub fn renamed_from(paths: &[String]) -> Option<&str> {
+    match paths {
+        [from, to] if from != to => Some(from),
+        _ => None,
+    }
+}
+
+pub fn file_log(root: &Path, path: &str, limit: usize) -> Result<Vec<FileCommit>, GitError> {
+    let n = format!("-n{limit}");
+    let out = run(
+        root,
+        &[
+            "--literal-pathspecs",
+            "log",
+            "--follow",
+            "--decorate=short",
+            "--name-status",
+            "-z",
+            &n,
+            "--format=%x1e%H%x1f%P%x1f%D%x1f%an%x1f%at%x1f%s",
+            "--",
+            path,
+        ],
+    )?;
+    Ok(parse_file_log(&out, path))
+}
+
+pub fn parse_file_log(out: &str, path: &str) -> Vec<FileCommit> {
+    let mut known_as = path.to_string();
+    let mut commits = Vec::new();
+    for rec in out.split(RECORD) {
+        let (head, changes) = rec.split_once('\0').unwrap_or((rec, ""));
+        let Some(commit) = parse_commit(head) else {
+            continue;
+        };
+        let mut paths = changed_paths(changes.strip_prefix('\n').unwrap_or(changes));
+        match paths.first() {
+            Some(older_name) => known_as = older_name.clone(),
+            None => paths.push(known_as.clone()),
+        }
+        commits.push(FileCommit { commit, paths });
+    }
+    commits
+}
+
+fn changed_paths(name_status: &str) -> Vec<String> {
+    let mut fields = name_status.split('\0').filter(|f| !f.is_empty());
+    let mut paths = Vec::new();
+    while let Some(status) = fields.next() {
+        let named = if status.starts_with(['R', 'C']) { 2 } else { 1 };
+        paths.extend(fields.by_ref().take(named).map(str::to_string));
+    }
+    paths
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -329,6 +390,46 @@ mod tests {
         assert_eq!(text[3], "● │");
         assert_eq!(text[4], "├─╯");
         assert_eq!(text[5], "●");
+    }
+
+    #[test]
+    fn a_file_log_keeps_the_name_the_file_had_in_each_commit() {
+        let sha = |c: char| c.to_string().repeat(40);
+        let record = |c: char, subject: &str, changes: &str| {
+            format!(
+                "\u{1e}{}\u{1f}\u{1f}\u{1f}Test\u{1f}1789000000\u{1f}{subject}\0\n{changes}",
+                sha(c)
+            )
+        };
+        let out = [
+            record('4', "edit", "M\0new name.rs\0"),
+            record('3', "merge", ""),
+            record('2', "rename", "R100\0[a]*.rs\0new name.rs\0"),
+            record('1', "add", "A\0[a]*.rs\0"),
+        ]
+        .concat();
+        let commits = parse_file_log(&out, "new name.rs");
+        let shown: Vec<(&str, Vec<&str>, Option<&str>)> = commits
+            .iter()
+            .map(|c| {
+                (
+                    c.commit.subject.as_str(),
+                    c.paths.iter().map(String::as_str).collect(),
+                    renamed_from(&c.paths),
+                )
+            })
+            .collect();
+        assert_eq!(
+            shown,
+            [
+                ("edit", vec!["new name.rs"], None),
+                ("merge", vec!["new name.rs"], None),
+                ("rename", vec!["[a]*.rs", "new name.rs"], Some("[a]*.rs")),
+                ("add", vec!["[a]*.rs"], None),
+            ]
+        );
+        assert_eq!(commits[0].commit.sha, sha('4'));
+        assert!(parse_file_log("", "a.rs").is_empty());
     }
 
     #[test]

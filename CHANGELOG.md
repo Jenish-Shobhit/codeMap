@@ -60,8 +60,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the selected worktree, so Status, Review, History and Branches show it, and
   follows the agent herdr reports working there. `y` copies the worktree's
   path, and `e` and `E` open its folder in the editor and in VS Code.
+- **History of one file**: `L` on a file in Files, Status, Review, or on a
+  file inside the repository in Customisations, lists only the commits that
+  touched it, following renames, as a plain list without the graph. `⏎`
+  shows what the selected commit did to that file alone, under the name it
+  had then. `⎋` goes back to where `L` was pressed; in the Git popup `3`
+  still shows the full history. `e`, `E` and `b` open the file.
+- **Commits on GitHub**: `B` in History opens the selected commit on GitHub
+  when a branch on `origin` already holds it, and otherwise says why not;
+  `y` copies its full sha. Both read only the local repository.
 
 ### Changed
+
+- `?` lists the keys of the popup that is open, no longer every popup's,
+  and `j` `k` scroll the list when it is taller than the window.
+- A renamed file in a diff says the name it was renamed from.
 
 - codeMap now writes into the repository, from three keys in the Status tab
   and four in the Branches tab, and nowhere else: `space` the index, `c` a

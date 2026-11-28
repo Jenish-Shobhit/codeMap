@@ -11,8 +11,9 @@ use crate::custom::{self, CustomState, Group, Roots};
 use crate::files::{FilesState, MAX_FILES};
 use crate::gh::{Gh, PullRequests};
 use crate::git::branch::{Branches, Unique};
-use crate::git::{self, graph, Commit, FileDiff, GraphRow, LineKind, RepoInfo};
+use crate::git::{self, graph, Commit, FileCommit, FileDiff, GraphRow, LineKind, RepoInfo};
 use crate::herdr::{Client, PluginContext};
+use crate::history::FileHistory;
 use crate::status::StatusState;
 use crate::store::{Comment, PaneState, Reviews, Store};
 use crate::theme::Theme;
@@ -197,6 +198,15 @@ pub enum Msg {
         worktrees: usize,
     },
     CommitDiff(String, Result<Vec<FileDiff>, String>),
+    FileHistory {
+        ask: u64,
+        read: Result<Vec<FileCommit>, String>,
+    },
+    FileCommitDiff {
+        ask: u64,
+        sha: String,
+        read: Result<Vec<FileDiff>, String>,
+    },
     Committed(Result<(String, String), String>),
     Branches {
         asked_after: u64,
@@ -317,6 +327,8 @@ pub struct App {
     pub changes: ChangesState,
     pub history: HistoryState,
     pub history_loaded: bool,
+    pub file_history: Option<FileHistory>,
+    pub(crate) file_history_asks: u64,
     pub branches: BranchesState,
     pub worktrees: WorktreesState,
     pub gh: Gh,
@@ -325,6 +337,7 @@ pub struct App {
     pub input: Option<Input>,
     pub message: Option<String>,
     pub show_help: bool,
+    pub help_scroll: usize,
     pub outcome: Option<Outcome>,
     pub started: Instant,
     pub first_paint_ms: Option<f64>,
@@ -391,6 +404,8 @@ impl App {
             changes: ChangesState::default(),
             history: HistoryState::default(),
             history_loaded: false,
+            file_history: None,
+            file_history_asks: 0,
             branches: BranchesState::default(),
             worktrees: WorktreesState::default(),
             gh: opts.gh,
@@ -399,6 +414,7 @@ impl App {
             input: None,
             message: None,
             show_help: false,
+            help_scroll: 0,
             outcome: None,
             started: Instant::now(),
             first_paint_ms: None,
@@ -620,6 +636,8 @@ impl App {
                     Err(e) => self.message = Some(e),
                 }
             }
+            Msg::FileHistory { ask, read } => self.file_history_read(ask, read),
+            Msg::FileCommitDiff { ask, sha, read } => self.file_commit_diff_read(ask, sha, read),
             Msg::Committed(result) => self.commit_finished(result),
             Msg::Branches { asked_after, read } => {
                 if asked_after == self.branches.reads {
@@ -773,6 +791,10 @@ impl App {
     }
 
     pub fn request_commit_diff(&mut self, sha: String) {
+        if self.file_history.is_some() {
+            self.request_file_commit_diff(sha);
+            return;
+        }
         let Some(repo) = self.repo.clone() else {
             return;
         };
@@ -1068,6 +1090,9 @@ impl App {
     }
 
     pub fn location(&self) -> Option<Location> {
+        if self.file_history.is_some() {
+            return self.file_history_location();
+        }
         match self.view {
             View::Files => self.file_location(),
             View::Custom => self.custom.selected().map(|item| Location {
@@ -1093,26 +1118,28 @@ impl App {
     }
 
     pub fn history_open(&mut self) {
-        let Some(c) = self.history.commits.get(self.history.sel) else {
+        let shown = self.shown_history_mut();
+        let Some(c) = shown.commits.get(shown.sel) else {
             return;
         };
         let sha = c.sha.clone();
-        self.history.show_diff = true;
-        self.history.diff_scroll = 0;
-        if self.history.detail.as_ref().map(|(s, _)| s) != Some(&sha) {
+        shown.show_diff = true;
+        shown.diff_scroll = 0;
+        if shown.detail.as_ref().map(|(s, _)| s) != Some(&sha) {
             self.request_commit_diff(sha);
             self.drain_if_sync();
         }
     }
 
     pub fn ensure_commit_detail(&mut self) {
-        if self.history.loading_detail {
+        let shown = self.shown_history();
+        if shown.loading_detail {
             return;
         }
-        let Some(c) = self.history.commits.get(self.history.sel) else {
+        let Some(c) = shown.commits.get(shown.sel) else {
             return;
         };
-        if self.history.detail.as_ref().map(|(s, _)| s) != Some(&c.sha) {
+        if shown.detail.as_ref().map(|(s, _)| s) != Some(&c.sha) {
             let sha = c.sha.clone();
             self.request_commit_diff(sha);
             self.drain_if_sync();
@@ -1120,14 +1147,15 @@ impl App {
     }
 
     pub fn history_move(&mut self, delta: i32) {
-        if self.history.commits.is_empty() {
+        let shown = self.shown_history_mut();
+        if shown.commits.is_empty() {
             return;
         }
-        let n = self.history.commits.len() as i32;
-        self.history.sel = (self.history.sel as i32 + delta).clamp(0, n - 1) as usize;
-        self.history.show_diff = false;
-        let sha = self.history.commits[self.history.sel].sha.clone();
-        if self.history.detail.as_ref().map(|(s, _)| s) != Some(&sha) {
+        let n = shown.commits.len() as i32;
+        shown.sel = (shown.sel as i32 + delta).clamp(0, n - 1) as usize;
+        shown.show_diff = false;
+        let sha = shown.commits[shown.sel].sha.clone();
+        if shown.detail.as_ref().map(|(s, _)| s) != Some(&sha) {
             self.request_commit_diff(sha);
             self.drain_if_sync();
         }

@@ -54,6 +54,7 @@ every other job passed; it is the check `main` requires.
 | `tests/git_status.rs` | what Status reads as staged, not staged and untracked, that reading it leaves `.git` untouched, and that many reads at once each see the same index |
 | `tests/git_worktree.rs` | the worktrees of a repository with their branch, upstream, locked and missing states and uncommitted changes, the agents herdr lists placed in them, and that reading them writes into none |
 | `tests/git_write.rs` | staging, unstaging and discarding files and single hunks, commits and the ways they fail, each on a temporary repository |
+| `tests/git_history.rs` | the history of one file across a rename, names with spaces, glob characters, a leading dash and accents passed literally, the per-file diff of each commit, files with no commits, and which commits a branch on `origin` holds |
 | `tests/git_branch.rs` | listing branches against a local bare `origin`, the default branch, switching, creating, merging and deleting, and the count of commits a deletion would lose |
 | `tests/gh.rs` | reading pull requests: fixture JSON, and a fake `gh` that prints it, fails, prints something else or outlives the timeout |
 | `tests/manifest.rs` | `herdr-plugin.toml` against herdr 0.9.0's link rules |

@@ -175,10 +175,11 @@ Inside the popup:
 | `e` / `E` | Files, Customisations, Status, Review | open the file at the line in the editor, in a split beside the agent / in VS Code |
 | `b` / `B` | Files, Customisations, Status, Review | open the file in the browser / on GitHub |
 | `y` | Files, Customisations, Status, Review | copy `path:line` |
+| `L` | Files, Customisations, Status, Review | the history of the selected file, following renames; `⎋` comes back. In Customisations, only for a file inside the repository |
 | `s` / `a` | Files, Review | what counts as changed: last turn, the agent's session, since `HEAD` / next agent |
 | `tab` | Files, Status, Review | move between the list and the body |
 | `p` / `T` | inside herdr | pin codeMap as a split that follows the focused pane / open it in its own tab |
-| `?` | everywhere | show every key |
+| `?` | everywhere | show the keys of this popup; `j` `k` scroll them when they do not fit |
 | `q` or `⎋` | everywhere | close |
 | `j` `k`, `l` `h` | Files | move through the tree, open or close a folder |
 | `⏎` | Files | open a folder, or a file in the editor |
@@ -196,6 +197,8 @@ Inside the popup:
 | `v`, `c`, `x` | Review | select lines, comment on them, delete a comment |
 | `P` / `S` | Review | type the draft into the agent's prompt and close / submit it through herdr's `agent.prompt` |
 | `j` `k`, `⏎`, `⌫` | History | move between commits, show the diff, go back |
+| `B` / `y` | History | open the selected commit on GitHub, once `origin` has it / copy its full sha |
+| `⎋`, `e` / `E`, `b` | History of a file | go back to where `L` was pressed, open the file in the editor / in VS Code, in the browser |
 | `j` `k`, `g` `G` | Branches | move between the local branches |
 | `⏎` | Branches | switch to the selected branch; asks first when the agent is working in this worktree |
 | `n` | Branches | name a new branch: `⏎` creates it from `HEAD` and switches to it, `⎋` cancels |
@@ -320,7 +323,25 @@ waiting on a question, codeMap says so and keeps the draft.
 <img src="docs/assets/history.svg" width="100%" alt="The History view: a commit graph with two merged branches and a tag, a header that counts the commits, branches and worktrees, and the selected commit's files on the right.">
 
 The commit graph with branches, tags and `HEAD`. The header counts the
-commits, the branches and the worktrees. `⏎` shows a commit's diff.
+commits, the branches and the worktrees. `⏎` shows a commit's diff. `B` opens
+the selected commit on GitHub and `y` copies its full sha. Before it opens a
+page, codeMap checks in the local repository that a branch on `origin`
+already holds the commit, and says "this commit is not on origin yet" instead
+of opening a page that does not exist; it does not fetch.
+
+<img src="docs/assets/file-history.svg" width="100%" alt="The history of README.md over the Files popup: a header that says history of README.md and 2 commits, the two commits that touched it listed without a graph, and on the right the selected commit with README.md changed by one line.">
+
+`L` on a file in Files, Status or Review, or on a file inside the repository
+in Customisations, shows the history of that file alone: the commits that
+touched it, following renames, as a plain list, since a path-limited history
+leaves out the commits in between and a graph of it would draw branches that
+are not there. The header names the file. `⏎` shows what the selected commit
+did to that file only, under the name it had in that commit. `⎋` goes back to
+the tab and the selection `L` was pressed on; in the Git popup the number keys
+still switch tabs, so `3` always shows the full history. Over Files and
+Customisations, which have no History tab, the file's history is a page over
+the popup. `e`, `E` and `b` open the file. A file with no commits yet, new or
+untracked, says so.
 
 ### Branches
 
@@ -500,7 +521,8 @@ stash, no index changes and no objects.
   box and the discard question, after a walk through the Branches tab that
   opens and cancels every question and the name prompt, and after a walk
   through the Worktrees tab that jumps to every worktree and through every
-  tab there, and fails on any change in any worktree.
+  tab there, and after reading the history of a file and its diffs, and
+  fails on any change in any worktree.
 - codeMap itself opens no network connection. It talks to the local herdr
   socket, the git commands it runs stay on this machine, and it sends text to
   an agent only when you press `P` or `S`.

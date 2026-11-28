@@ -1,0 +1,50 @@
+  files                                                                                                                      history of src/main.rs · 4 commits
+
+ history of src/main.rs                                                                           f61260f
+ f61260f feat: report the count  main                                                             feat: report the count
+ 298f398 refactor: name the binary main.rs  renamed from src/app.rs                               Test · 21 Sep 2026, 9:44 PM   main
+ 577b461 feat: count on start
+ ac26901 initial                                                                                  M src/main.rs                                  +1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ j k commit                                                                                       ⎋ back  ⏎ diff  B GitHub  y copy sha  e editor  ? keys
