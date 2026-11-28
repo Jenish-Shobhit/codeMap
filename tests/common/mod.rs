@@ -36,9 +36,9 @@ impl Drop for TempDir {
     }
 }
 
-pub fn git(dir: &Path, args: &[&str]) -> String {
-    let out = Command::new("git")
-        .current_dir(dir)
+fn git_command(dir: &Path, args: &[&str]) -> Command {
+    let mut cmd = Command::new("git");
+    cmd.current_dir(dir)
         .env("GIT_AUTHOR_NAME", "Test")
         .env("GIT_AUTHOR_EMAIL", "test@example.com")
         .env("GIT_COMMITTER_NAME", "Test")
@@ -60,9 +60,16 @@ pub fn git(dir: &Path, args: &[&str]) -> String {
             "-c",
             "gc.auto=0",
         ])
-        .args(args)
-        .output()
-        .expect("git runs");
+        .args(args);
+    cmd
+}
+
+pub fn git_output(dir: &Path, args: &[&str]) -> std::process::Output {
+    git_command(dir, args).output().expect("git runs")
+}
+
+pub fn git(dir: &Path, args: &[&str]) -> String {
+    let out = git_output(dir, args);
     assert!(
         out.status.success(),
         "git {:?} failed: {}",

@@ -1,5 +1,6 @@
 mod common;
 
+use std::collections::BTreeSet;
 use std::path::Path;
 
 use codemap::git::{self, FileDiff, FileStatus, LineKind, Status};
@@ -166,12 +167,21 @@ fn a_conflicted_file_is_not_staged_and_shows_its_markers() {
     write(p, "f.py", "one\nTWO main\nthree\n");
     git(p, &["commit", "-q", "-am", "main"]);
     write(p, "a.py", "a = 2\n");
-    let merge = std::process::Command::new("git")
-        .current_dir(p)
-        .args(["-c", "merge.conflictStyle=merge", "merge", "-q", "side"])
-        .output()
-        .unwrap();
-    assert!(!merge.status.success(), "the merge stops on a conflict");
+    let merge = git_output(
+        p,
+        &["-c", "merge.conflictStyle=merge", "merge", "-q", "side"],
+    );
+    let unmerged = git(p, &["ls-files", "--unmerged"]);
+    let conflicted: BTreeSet<&str> = unmerged
+        .lines()
+        .filter_map(|entry| entry.split('\t').nth(1))
+        .collect();
+    assert_eq!(
+        (merge.status.code(), conflicted),
+        (Some(1), BTreeSet::from(["f.py"])),
+        "the merge stops on a conflict in f.py: {}",
+        String::from_utf8_lossy(&merge.stderr)
+    );
     let status = status_of(p);
     assert_eq!(shown(&status.staged), none());
     assert_eq!(shown(&status.unstaged), ["M a.py +1 -1", "M f.py +4 -0"]);
