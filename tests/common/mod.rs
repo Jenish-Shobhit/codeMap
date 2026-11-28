@@ -112,11 +112,7 @@ pub fn commits_as_test(repo: &Path) {
 }
 
 pub fn hook(repo: &Path, name: &str, script: &str) {
-    use std::os::unix::fs::PermissionsExt;
-    let path = repo.join(".git/hooks").join(name);
-    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-    std::fs::write(&path, script).unwrap();
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    executable(&repo.join(".git/hooks").join(name), script);
 }
 
 pub fn tree_bytes(repo: &Path) -> BTreeMap<String, Vec<u8>> {
@@ -304,6 +300,83 @@ pub fn dracula() -> codemap::theme::Theme {
     )
 }
 
+pub fn no_gh() -> codemap::gh::Gh {
+    codemap::gh::Gh::at("/codemap-test/no-such-gh")
+}
+
+pub fn executable(path: &Path, script: &str) {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(path, script).unwrap();
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+}
+
+pub fn fake_gh(dir: &Path, body: &str) -> codemap::gh::Gh {
+    let program = dir.join("gh");
+    executable(&program, &format!("#!/bin/sh\n{body}\n"));
+    codemap::gh::Gh::at(program)
+}
+
+pub fn gh_printing(dir: &Path, json: &str) -> codemap::gh::Gh {
+    write(dir, "pull-requests.json", json);
+    fake_gh(dir, "exec cat \"$(dirname \"$0\")/pull-requests.json\"")
+}
+
+pub fn commit_file(repo: &Path, rel: &str, content: &str, subject: &str) {
+    write(repo, rel, content);
+    git(repo, &["add", "-A"]);
+    git(repo, &["commit", "-q", "-m", subject]);
+}
+
+pub struct Remoted {
+    pub tmp: TempDir,
+    pub root: PathBuf,
+    pub origin: PathBuf,
+}
+
+pub fn repo_with_origin() -> Remoted {
+    let tmp = TempDir::new("remoted");
+    let root = tmp.path().join("work");
+    let origin = tmp.path().join("origin.git");
+    std::fs::create_dir_all(&root).unwrap();
+    git(tmp.path(), &["init", "-q", "--bare", "origin.git"]);
+    git(&root, &["init", "-q"]);
+    commits_as_test(&root);
+    commit_file(&root, "app.py", "x = 1\n", "initial");
+    git(
+        &root,
+        &["remote", "add", "origin", origin.to_str().unwrap()],
+    );
+    git(&root, &["push", "-q", "-u", "origin", "main"]);
+    git(&root, &["remote", "set-head", "origin", "main"]);
+    Remoted { tmp, root, origin }
+}
+
+pub fn branches_repo() -> Remoted {
+    let remoted = repo_with_origin();
+    let p = remoted.root.as_path();
+    git(p, &["switch", "-q", "-c", "feat/ahead"]);
+    commit_file(p, "ahead.py", "a = 1\n", "feat: start counting");
+    git(p, &["push", "-q", "-u", "origin", "feat/ahead"]);
+    commit_file(p, "ahead.py", "a = 2\n", "feat: count to two");
+    commit_file(p, "ahead.py", "a = 3\n", "feat: count to three");
+    git(p, &["switch", "-q", "-c", "feat/both", "main"]);
+    commit_file(p, "both.py", "b = 1\n", "fix: the shared start");
+    commit_file(p, "both.py", "b = 2\n", "fix: only on the remote");
+    git(p, &["push", "-q", "-u", "origin", "feat/both"]);
+    git(p, &["reset", "-q", "--hard", "HEAD~1"]);
+    commit_file(p, "both.py", "b = 3\n", "fix: the first local step");
+    commit_file(p, "both.py", "b = 4\n", "fix: the second local step");
+    git(p, &["switch", "-q", "-c", "local-only", "main"]);
+    for n in 1..=3 {
+        let note = format!("note {n}\n");
+        commit_file(p, "notes.md", &note, &format!("docs: note {n}"));
+    }
+    git(p, &["branch", "-q", "merged", "main"]);
+    git(p, &["switch", "-q", "main"]);
+    remoted
+}
+
 pub fn agent_context() -> codemap::herdr::PluginContext {
     codemap::herdr::PluginContext {
         workspace_label: Some("paneMorph".into()),
@@ -324,6 +397,7 @@ pub fn app_for(pm: &PmRepo, view: codemap::app::View, with_agent: bool) -> codem
         client: None,
         store: pm.store.clone(),
         theme: dracula(),
+        gh: no_gh(),
     });
     app.load_blocking();
     app
@@ -398,6 +472,7 @@ pub fn custom_app(roots: &codemap::custom::Roots, state: &Path) -> codemap::app:
         client: None,
         store: codemap::store::Store::new(state),
         theme: dracula(),
+        gh: no_gh(),
     });
     app.custom.roots = Some(roots.clone());
     app.load_blocking();

@@ -4,12 +4,16 @@ use std::time::Instant;
 
 use serde_json::Value;
 
+use crate::ask::Ask;
+use crate::branches::{BranchesState, Pulls};
 use crate::commit::CommitBox;
 use crate::custom::{self, CustomState, Group, Roots};
 use crate::files::{FilesState, MAX_FILES};
+use crate::gh::{Gh, PullRequests};
+use crate::git::branch::{Branches, Unique};
 use crate::git::{self, graph, Commit, FileDiff, GraphRow, LineKind, RepoInfo};
 use crate::herdr::{Client, PluginContext};
-use crate::status::{Discard, StatusState};
+use crate::status::StatusState;
 use crate::store::{Comment, PaneState, Reviews, Store};
 use crate::theme::Theme;
 use crate::util;
@@ -23,18 +27,21 @@ pub enum View {
     Status,
     Changes,
     History,
+    Branches,
 }
 
 impl View {
-    pub const ALL: [View; 5] = [
+    pub const ALL: [View; 6] = [
         View::Files,
         View::Custom,
         View::Status,
         View::Changes,
         View::History,
+        View::Branches,
     ];
 
-    const GIT_TABS: [View; 3] = [View::Status, View::Changes, View::History];
+    pub(crate) const GIT_TABS: [View; 4] =
+        [View::Status, View::Changes, View::History, View::Branches];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -43,6 +50,7 @@ impl View {
             View::Status => "status",
             View::Changes => "changes",
             View::History => "history",
+            View::Branches => "branches",
         }
     }
 
@@ -60,6 +68,7 @@ impl View {
             "status" | "git" => Some(View::Status),
             "changes" | "review" => Some(View::Changes),
             "history" | "graph" => Some(View::History),
+            "branches" | "branch" => Some(View::Branches),
             _ => None,
         }
     }
@@ -68,7 +77,7 @@ impl View {
         match self {
             View::Files => &[View::Files],
             View::Custom => &[View::Custom],
-            View::Status | View::Changes | View::History => &View::GIT_TABS,
+            View::Status | View::Changes | View::History | View::Branches => &View::GIT_TABS,
         }
     }
 }
@@ -128,6 +137,7 @@ pub struct Options {
     pub client: Option<Client>,
     pub store: Store,
     pub theme: Theme,
+    pub gh: Gh,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -184,6 +194,16 @@ pub enum Msg {
     },
     CommitDiff(String, Result<Vec<FileDiff>, String>),
     Committed(Result<(String, String), String>),
+    Branches {
+        asked_after: u64,
+        read: Result<Branches, String>,
+    },
+    Ahead {
+        read: u64,
+        branch: String,
+        found: Result<Unique, String>,
+    },
+    Pulls(Result<PullRequests, String>),
     Notice(String),
 }
 
@@ -235,6 +255,7 @@ pub enum InputKind {
         end: u32,
         hunk: String,
     },
+    BranchName,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -284,10 +305,12 @@ pub struct App {
     pub custom: CustomState,
     pub status: StatusState,
     pub commit: CommitBox,
-    pub confirm: Option<Discard>,
+    pub confirm: Option<Ask>,
     pub changes: ChangesState,
     pub history: HistoryState,
     pub history_loaded: bool,
+    pub branches: BranchesState,
+    pub gh: Gh,
     pub reviews: Reviews,
     pub drafts: Vec<Comment>,
     pub input: Option<Input>,
@@ -358,6 +381,8 @@ impl App {
             changes: ChangesState::default(),
             history: HistoryState::default(),
             history_loaded: false,
+            branches: BranchesState::default(),
+            gh: opts.gh,
             reviews: Reviews::default(),
             drafts: Vec::new(),
             input: None,
@@ -432,7 +457,7 @@ impl App {
         changed
     }
 
-    fn spawn<F: FnOnce(&Sender<Msg>) + Send + 'static>(&self, f: F) {
+    pub(crate) fn spawn<F: FnOnce(&Sender<Msg>) + Send + 'static>(&self, f: F) {
         let tx = self.tx.clone();
         if self.sync {
             f(&tx);
@@ -465,6 +490,8 @@ impl App {
                 self.request_changes();
                 self.request_status();
                 self.request_history();
+                self.request_branches();
+                self.branches_shown();
             }
             Msg::Custom { scanned, first } => {
                 self.custom.scanned = scanned;
@@ -530,6 +557,23 @@ impl App {
                 }
             }
             Msg::Committed(result) => self.commit_finished(result),
+            Msg::Branches { asked_after, read } => {
+                if asked_after == self.branches.reads {
+                    self.branches.load(read, None);
+                    self.request_ahead();
+                }
+            }
+            Msg::Ahead {
+                read,
+                branch,
+                found,
+            } => self.ahead_read(read, branch, found),
+            Msg::Pulls(read) => {
+                self.branches.pulls = match read {
+                    Ok(pulls) => Pulls::Known(pulls),
+                    Err(why) => Pulls::Unknown(why),
+                }
+            }
             Msg::Notice(s) => self.message = Some(s),
         }
     }
@@ -612,13 +656,18 @@ impl App {
         self.drain_if_sync();
     }
 
-    pub fn reload_after_commit(&mut self) {
+    pub(crate) fn reload_git(&mut self) {
         if let Ok(repo) = git::discover(&self.root) {
             self.repo = Some(repo);
         }
         self.reload_status();
         self.request_changes();
         self.request_history();
+    }
+
+    pub fn reload_after_commit(&mut self) {
+        self.reload_git();
+        self.request_branches();
     }
 
     pub fn request_commit(&mut self, subject: String, body: String) {
@@ -708,7 +757,7 @@ impl App {
         self.drain_if_sync();
     }
 
-    fn drain_if_sync(&mut self) {
+    pub(crate) fn drain_if_sync(&mut self) {
         if self.sync {
             self.drain();
         }
@@ -971,7 +1020,7 @@ impl App {
                     dir: false,
                 })
             }
-            View::History => None,
+            View::History | View::Branches => None,
         }
     }
 

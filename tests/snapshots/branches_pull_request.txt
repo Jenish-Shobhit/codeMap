@@ -1,0 +1,50 @@
+  status   review   history   branches                                                                                        ○ paneMorph · selector-fix   main
+
+ local · 5                                                feat/both
+   feat/ahead  ↑2           #14 ✓
+   feat/both   ↑2 ↓1        #12 ✗                         upstream      origin/feat/both · 2 commits ahead, 1 behind
+   local-only  no upstream  #9 …                          pull request  #12 fix: keep both sides of the selector
+ ● main                                                                 open · into main · 1 of 3 checks passed ✗
+   merged      no upstream  #8 ✓
+                                                          3 commits not on main
+ origin · 3 branches                                      2fa6af8 fix: the second local step
+                                                          80dce50 fix: the first local step
+                                                          a0d9548 fix: the shared start
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ j k branch                                               ⏎ switch  n new  m merge  D delete  B pull request  y copy name  ? keys

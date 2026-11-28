@@ -7,6 +7,7 @@ use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
 
 use codemap::app::{App, Options, View};
+use codemap::gh::Gh;
 use codemap::herdr::{Client, PluginContext};
 use codemap::keys;
 use codemap::store::{PaneState, Store, Turn};
@@ -22,6 +23,7 @@ const CUSTOM: (u16, u16) = (140, 34);
 const STATUS: (u16, u16) = (140, 36);
 const CHANGES: (u16, u16) = (150, 46);
 const HISTORY: (u16, u16) = (128, 40);
+const BRANCHES: (u16, u16) = (140, 18);
 const NOW: i64 = 1_790_027_160;
 
 fn main() {
@@ -46,7 +48,8 @@ fn main() {
     serve_mock_herdr(&socket, &repo);
 
     codemap::util::freeze_time(NOW);
-    let over_the_agent = |view: View| Options {
+    let no_gh = Gh::at(base.join("no-gh"));
+    let over_the_agent = |view: View, gh: &Gh| Options {
         path: None,
         view,
         context: Some(PluginContext {
@@ -61,8 +64,9 @@ fn main() {
         client: Some(Client::new(&socket)),
         store: store.clone(),
         theme: dracula(),
+        gh: gh.clone(),
     };
-    let mut app = App::new(over_the_agent(View::Files));
+    let mut app = App::new(over_the_agent(View::Files, &no_gh));
     app.load_blocking();
 
     let mut shots: Vec<(&str, &str, Buffer)> = Vec::new();
@@ -103,7 +107,7 @@ fn main() {
     shots.push(("history", "History", frame(&mut app, HISTORY)));
 
     demo::stage_part_of_the_turn(&repo.root);
-    let mut status = App::new(over_the_agent(View::Status));
+    let mut status = App::new(over_the_agent(View::Status, &no_gh));
     status.load_blocking();
     frame(&mut status, STATUS);
     key(&mut status, KeyCode::Char('j'));
@@ -129,6 +133,7 @@ fn main() {
         client: None,
         store: Store::new(base.join("custom-state")),
         theme: dracula(),
+        gh: no_gh.clone(),
     });
     custom.custom.roots = Some(codemap::custom::Roots {
         repo: repo.root.clone(),
@@ -145,6 +150,13 @@ fn main() {
         "Customisations",
         frame(&mut custom, CUSTOM),
     ));
+
+    let pull_requests = Gh::at(demo::add_branches(&repo, &base));
+    let mut branches = App::new(over_the_agent(View::Branches, &pull_requests));
+    branches.load_blocking();
+    frame(&mut branches, BRANCHES);
+    key(&mut branches, KeyCode::Char('j'));
+    shots.push(("branches", "Branches", frame(&mut branches, BRANCHES)));
 
     let theme = app.theme;
     for (name, view, buf) in &shots {

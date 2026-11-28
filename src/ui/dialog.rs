@@ -3,8 +3,8 @@ use ratatui::layout::Rect;
 
 use super::{bold, fill, frame, put, style, Line};
 use crate::app::App;
+use crate::ask::Ask;
 use crate::commit::Field;
-use crate::status::Discard;
 use crate::theme::Theme;
 use crate::util;
 
@@ -156,15 +156,20 @@ fn wrapped(text: &str, width: usize) -> Vec<String> {
     lines
 }
 
-pub fn discard_question(buf: &mut Buffer, area: Rect, asked: &Discard, t: &Theme) {
+pub fn question(buf: &mut Buffer, area: Rect, asked: &Ask, t: &Theme) {
     let width = WIDTH.min(area.width.saturating_sub(4)).saturating_sub(4) as usize;
-    let question = wrapped(&util::sanitize_line(&asked.question()), width.max(1));
-    let mut d = Dialog::open(buf, area, "discard", question.len() as u16 + 4, t);
+    let lines = |text: &str| wrapped(&util::sanitize_line(text), width.max(1));
+    let question = lines(&asked.question());
+    let caution = asked.caution().map(|c| lines(&c)).unwrap_or_default();
+    let rows = question.len() + caution.len() + 3;
+    let mut d = Dialog::open(buf, area, asked.title(), rows as u16, t);
     d.gap();
     for line in question {
         d.row(Line::new().push(line, bold(style(t.text, t.rail))));
     }
-    d.row(Line::new().push("this cannot be undone", style(t.del, t.rail)));
+    for line in caution {
+        d.row(Line::new().push(line, style(t.del, t.rail)));
+    }
     d.gap();
     d.row(
         Line::new()

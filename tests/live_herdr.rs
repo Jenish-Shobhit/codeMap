@@ -286,6 +286,7 @@ fn live_hook_checkpoints_and_comment_delivery() {
         client: Some(client.clone()),
         store: store.clone(),
         theme: dracula(),
+        gh: no_gh(),
     });
     app.load_blocking();
     app.drafts = vec![Comment {

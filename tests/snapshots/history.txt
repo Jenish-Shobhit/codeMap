@@ -1,4 +1,4 @@
-  status   review   history                                                                                     4 commits · 2 branches · 1 worktree · HEAD main
+  status   review   history   branches                                                                          4 commits · 2 branches · 1 worktree · HEAD main
 
  history                                                                                          058bf10
  ●   058bf10 Merge branch 'docs'  main                                                            Merge branch 'docs'

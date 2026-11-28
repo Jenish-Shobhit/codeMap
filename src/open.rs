@@ -194,6 +194,16 @@ pub fn github_url(
     ))
 }
 
+pub fn github_branch_url(remote: &str, branch: &str) -> Option<String> {
+    let base = github_base(remote)?;
+    let branch: Vec<String> = branch.split('/').map(escape_segment).collect();
+    Some(format!("{base}/tree/{}", branch.join("/")))
+}
+
+pub fn web_page(address: &str) -> Result<String, String> {
+    open_with_default(address).map(|()| format!("opened {address}"))
+}
+
 pub fn github(repo: &RepoInfo, rel: &str, dir: bool, line: Option<u32>) -> Result<String, String> {
     let remote = crate::git::run(&repo.root, &["remote", "get-url", "origin"])
         .map_err(|_| "this repository has no origin remote".to_string())?;
@@ -242,6 +252,19 @@ mod tests {
         }
         assert_eq!(github_base("git@gitlab.com:acme/widgets.git"), None);
         assert_eq!(github_base("https://github.com/acme"), None);
+    }
+
+    #[test]
+    fn a_branch_page_is_the_tree_of_that_branch() {
+        assert_eq!(
+            github_branch_url("git@github.com:acme/widgets.git", "feat/git branches#2").as_deref(),
+            Some("https://github.com/acme/widgets/tree/feat/git%20branches%232")
+        );
+        assert_eq!(
+            github_branch_url("https://github.com/acme/widgets", "main").as_deref(),
+            Some("https://github.com/acme/widgets/tree/main")
+        );
+        assert_eq!(github_branch_url("/srv/git/widgets.git", "main"), None);
     }
 
     #[test]

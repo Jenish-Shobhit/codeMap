@@ -1,0 +1,150 @@
+[
+  {
+    "baseRefName": "main",
+    "headRefName": "feat/ahead",
+    "number": 14,
+    "state": "OPEN",
+    "statusCheckRollup": [
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-09-21T21:40:00Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/acme/widgets/actions/runs/1/job/1",
+        "name": "rustfmt",
+        "startedAt": "2026-09-21T21:39:00Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-09-21T21:41:00Z",
+        "conclusion": "SKIPPED",
+        "detailsUrl": "https://github.com/acme/widgets/actions/runs/1/job/2",
+        "name": "release",
+        "startedAt": "2026-09-21T21:39:00Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "StatusContext",
+        "context": "license/cla",
+        "startedAt": "2026-09-21T21:39:00Z",
+        "state": "SUCCESS",
+        "targetUrl": "https://cla.example.com/acme/widgets/14"
+      }
+    ],
+    "title": "feat: count ahead of the remote",
+    "url": "https://github.com/acme/widgets/pull/14"
+  },
+  {
+    "baseRefName": "main",
+    "headRefName": "feat/both",
+    "number": 12,
+    "state": "OPEN",
+    "statusCheckRollup": [
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-09-21T21:40:00Z",
+        "conclusion": "SUCCESS",
+        "name": "rustfmt",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-09-21T21:42:00Z",
+        "conclusion": "FAILURE",
+        "name": "test (ubuntu-latest)",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "0001-01-01T00:00:00Z",
+        "conclusion": "",
+        "name": "test (macos-latest)",
+        "status": "IN_PROGRESS",
+        "workflowName": "CI"
+      }
+    ],
+    "title": "fix: keep both sides of the selector",
+    "url": "https://github.com/acme/widgets/pull/12"
+  },
+  {
+    "baseRefName": "main",
+    "headRefName": "feat/both",
+    "number": 13,
+    "state": "CLOSED",
+    "statusCheckRollup": [],
+    "title": "fix: a later try that was closed",
+    "url": "https://github.com/acme/widgets/pull/13"
+  },
+  {
+    "baseRefName": "release/1.x",
+    "headRefName": "local-only",
+    "number": 9,
+    "state": "OPEN",
+    "statusCheckRollup": [
+      {
+        "__typename": "CheckRun",
+        "completedAt": "0001-01-01T00:00:00Z",
+        "conclusion": "",
+        "name": "clippy",
+        "status": "QUEUED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "StatusContext",
+        "context": "deploy/preview",
+        "state": "PENDING",
+        "targetUrl": ""
+      }
+    ],
+    "title": "docs: notes for the next release",
+    "url": "https://github.com/acme/widgets/pull/9"
+  },
+  {
+    "baseRefName": "main",
+    "headRefName": "merged",
+    "number": 5,
+    "state": "CLOSED",
+    "statusCheckRollup": null,
+    "title": "feat: the first try",
+    "url": "https://github.com/acme/widgets/pull/5"
+  },
+  {
+    "baseRefName": "main",
+    "headRefName": "merged",
+    "number": 8,
+    "state": "MERGED",
+    "statusCheckRollup": [
+      {
+        "__typename": "CheckRun",
+        "conclusion": "SUCCESS",
+        "name": "CI gate",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      }
+    ],
+    "title": "feat: the try that landed",
+    "url": "https://github.com/acme/widgets/pull/8"
+  },
+  {
+    "baseRefName": "main",
+    "headRefName": "merged",
+    "number": 6,
+    "state": "MERGED",
+    "statusCheckRollup": [],
+    "title": "feat: an earlier one that also landed",
+    "url": "https://github.com/acme/widgets/pull/6"
+  },
+  {
+    "baseRefName": "main",
+    "headRefName": "gone-from-here",
+    "number": 3,
+    "state": "DRAFT_OF_THE_FUTURE",
+    "statusCheckRollup": [],
+    "title": "a state this version does not know",
+    "url": "https://github.com/acme/widgets/pull/3"
+  }
+]

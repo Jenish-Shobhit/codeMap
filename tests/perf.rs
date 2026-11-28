@@ -79,6 +79,7 @@ fn history_of_2000_commits_renders_within_150ms() {
         client: None,
         store: codemap::store::Store::new(state.path()),
         theme: dracula(),
+        gh: no_gh(),
     });
     app.load_blocking();
     let t1 = Instant::now();

@@ -1,3 +1,4 @@
+mod branches;
 mod changes;
 mod custom;
 mod dialog;
@@ -29,6 +30,8 @@ pub fn areas(area: Rect, view: View) -> Areas {
         0
     } else if view == View::History {
         ((w as u32 * 60 / 100) as u16).clamp(40, w.saturating_sub(30))
+    } else if view == View::Branches {
+        ((w as u32 * 36 / 100) as u16).clamp(34, 56)
     } else if matches!(view, View::Files | View::Custom) {
         ((w as u32 * 32 / 100) as u16).clamp(30, 48)
     } else {
@@ -96,13 +99,14 @@ pub fn render_buf(buf: &mut Buffer, area: Rect, app: &mut App) {
         View::Status => status::render(buf, &a, app),
         View::Changes => changes::render(buf, &a, app),
         View::History => history::render(buf, &a, app),
+        View::Branches => branches::render(buf, &a, app),
     }
     hints_line(buf, &a, app);
     if app.commit.open {
         dialog::commit_box(buf, area, app);
     }
     if let Some(asked) = &app.confirm {
-        dialog::discard_question(buf, area, asked, &t);
+        dialog::question(buf, area, asked, &t);
     }
     if app.show_help {
         help(buf, area, app);
@@ -322,7 +326,8 @@ fn header(buf: &mut Buffer, r: Rect, app: &App) {
                 .push("   ", style(t.muted, t.body))
                 .push(b, style(t.branch, t.body));
         }
-        if app.view != View::Status && !app.scope_info.header.is_empty() {
+        let turn_shown = !matches!(app.view, View::Status | View::Branches);
+        if turn_shown && !app.scope_info.header.is_empty() {
             ctx = ctx
                 .push("   ", style(t.muted, t.body))
                 .push(app.scope_info.header.clone(), style(t.muted, t.body));
@@ -377,6 +382,7 @@ fn view_hints(app: &App) -> Vec<(&'static str, String)> {
                 vec![("⏎", "diff".to_string()), ("?", "keys".into())]
             }
         }
+        View::Branches => branches::hints(app),
     }
 }
 
@@ -388,6 +394,7 @@ fn hints_line(buf: &mut Buffer, a: &Areas, app: &App) {
             (View::Files, Focus::Rail) => "tab preview",
             (View::Files, Focus::Body) => "tab tree",
             (View::Status, Focus::Rail) => "tab diff",
+            (View::Branches, _) => "j k branch",
             (_, Focus::Rail) => "tab body",
             (View::Status | View::Changes, _) => "tab files",
             (View::History, _) => "j k commit",
@@ -415,6 +422,10 @@ fn hints_line(buf: &mut Buffer, a: &Areas, app: &App) {
                 };
                 (format!("comment on {anchor} › "), "   ⏎ save  ⎋ cancel")
             }
+            InputKind::BranchName => (
+                format!("new branch from {} › ", app.head_label()),
+                "   ⏎ create and switch  ⎋ cancel",
+            ),
         };
         let text = input.text.clone();
         let line = Line::new()
@@ -480,7 +491,7 @@ pub const KEYS: &[(&str, &[(&str, &str)])] = &[
     (
         "status",
         &[
-            ("1 2 3", "status, review, history"),
+            ("1 2 3 4", "status, review, history, branches"),
             ("j k", "move through the staged and not staged files"),
             ("tab  ⎋", "read the diff, go back to the files"),
             ("] [", "next or previous hunk of the diff"),
@@ -504,6 +515,14 @@ pub const KEYS: &[(&str, &[(&str, &str)])] = &[
         &[
             ("j k", "move between commits"),
             ("⏎  ⌫", "show the diff, back"),
+        ],
+    ),
+    (
+        "branches",
+        &[
+            ("⏎  n", "switch to the branch, name a new one from HEAD"),
+            ("m  D", "merge into the current branch, delete: both ask"),
+            ("B  y", "open the pull request or branch page, copy name"),
         ],
     ),
 ];
@@ -567,6 +586,7 @@ impl App {
             View::Status => self.status.focus,
             View::Changes => self.changes.focus,
             View::History => Focus::Body,
+            View::Branches => Focus::Rail,
         }
     }
 }

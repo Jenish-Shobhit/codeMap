@@ -32,20 +32,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   question that only `y` confirms.
 - `E` opens the file in VS Code, `b` in the browser and `B` on GitHub, from
   Files, Customisations, Status and Review.
+- **Branches**: the fourth tab of the Git popup, on `4` or `--view branches`.
+  It lists the local branches with how far each is ahead of and behind its
+  upstream, and one line per remote. The selected branch shows its upstream,
+  the worktree it is checked out in, and the commits it has that the default
+  branch does not.
+- **Switching, creating, merging and deleting branches** from Branches. `⏎`
+  runs `git switch`, and asks first when the agent in the worktree is
+  working. `n` takes a name and runs `git switch -c`. `m` runs `git merge
+  --no-edit` after a question, and leaves a merge that stops on conflicts for
+  the Status tab. `D` runs `git branch -D` after a question that counts the
+  commits no other branch has; the current branch and one checked out in
+  another worktree are refused.
+- **Pull requests and CI** in Branches, read with your own `gh`: each
+  branch's pull request number with `✓`, `✗` or `…` for its checks, and its
+  title, state and base branch. `B` opens the pull request, or the branch on
+  GitHub. Without `gh` the tab says why and shows the rest. `CODEMAP_GH`
+  names another program.
 
 ### Changed
 
 - codeMap now writes into the repository, from three keys in the Status tab
-  and nowhere else: `space` the index, `c` a commit, `x` the working tree.
-  Opening, reading and reviewing still write nothing.
+  and four in the Branches tab, and nowhere else: `space` the index, `c` a
+  commit, `x` the working tree, `⏎` and `n` the checked-out branch, `m` a
+  merge and `D` a local branch. Opening, reading and reviewing still write
+  nothing.
+- codeMap now runs a program that uses the network: the Branches tab runs
+  `gh pr list` once, when it is first shown and `gh` is installed, and `gh`
+  contacts GitHub with your login. codeMap itself still opens no network
+  connection.
 - `e` opens the editor in a herdr split beside the agent's pane and closes
   the popup. Outside herdr it still takes over the terminal. With `$VISUAL`
   and `$EDITOR` unset the editor is `nvim` when installed, where it was `vi`.
-- Each popup shows only its own views: `1`, `2` and `3` switch between
-  Status, Review and History, and Files stands alone.
-- The Changes tab is labelled `review`, beside `status` and `history`.
-  `--view changes`, `--view review` and the `dev.codemap.changes` action open
-  it as before.
+- Each popup shows only its own views: `1` to `4` switch between Status,
+  Review, History and Branches, and Files stands alone.
+- The Changes tab is labelled `review`, beside `status`, `history` and
+  `branches`. `--view changes`, `--view review` and the `dev.codemap.changes`
+  action open it as before.
 
 - `dev.codemap.open` opens Review, where it opened the Map.
 - Hunks in Review are named by the function line git prints in the hunk

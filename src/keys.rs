@@ -13,6 +13,7 @@ pub enum Action {
     Edit(Location),
     Open(Opener, Location),
     Copy(String),
+    Browse(String),
     Pin(&'static str),
 }
 
@@ -87,7 +88,16 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
             {
                 app.history_move(0);
             }
+            app.branches_shown();
+            app.drain_if_sync();
             return Action::Redraw;
+        }
+        KeyCode::Char('B') if app.view == View::Branches => return branch_page(app),
+        KeyCode::Char('y') if !ctrl && app.view == View::Branches => {
+            return match app.branches.selected() {
+                Some(branch) => Action::Copy(branch.name.clone()),
+                None => Action::None,
+            };
         }
         KeyCode::Char('e') if !ctrl => return edit(app),
         KeyCode::Char('E') => return open(app, Opener::VsCode),
@@ -134,6 +144,7 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
         View::Status => status_key(app, key),
         View::Changes => changes_key(app, key),
         View::History => history_key(app, key),
+        View::Branches => branches_key(app, key),
     };
     if r == Action::None && had_message {
         Action::Redraw
@@ -144,11 +155,16 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
 
 pub fn paste(app: &mut App, text: &str) -> Action {
     if app.confirm.is_some() {
-        app.answer_discard(false);
+        app.answer(false);
         return Action::Redraw;
     }
     if app.commit.open && !app.commit.busy {
         app.commit.paste(text);
+        return Action::Redraw;
+    }
+    let naming_a_branch = |input: &&mut Input| input.kind == InputKind::BranchName;
+    if let Some(name) = app.input.as_mut().filter(naming_a_branch) {
+        name.text.extend(text.chars().filter(|c| !c.is_control()));
         return Action::Redraw;
     }
     Action::None
@@ -158,7 +174,7 @@ fn confirm_key(app: &mut App, key: KeyEvent) -> Action {
     let yes = key.code == KeyCode::Char('y')
         && key.modifiers.is_empty()
         && key.kind == KeyEventKind::Press;
-    app.answer_discard(yes);
+    app.answer(yes);
     Action::Redraw
 }
 
@@ -197,12 +213,22 @@ fn open(app: &App, opener: Opener) -> Action {
     }
 }
 
+fn branch_page(app: &mut App) -> Action {
+    match app.branch_link() {
+        Ok(page) => Action::Browse(page),
+        Err(why) => {
+            app.message = Some(why);
+            Action::Redraw
+        }
+    }
+}
+
 fn toggle_focus(app: &mut App) {
     let focus = match app.view {
         View::Files => &mut app.files.focus,
         View::Status => &mut app.status.focus,
         View::Changes => &mut app.changes.focus,
-        View::Custom | View::History => return,
+        View::Custom | View::History | View::Branches => return,
     };
     *focus = match *focus {
         Focus::Body => Focus::Rail,
@@ -236,6 +262,11 @@ fn input_key(app: &mut App, key: KeyEvent) -> Action {
                 let text = input.text.clone();
                 app.input = None;
                 app.add_comment(path, start, end, hunk, text);
+            }
+            InputKind::BranchName => {
+                let name = input.text.clone();
+                app.input = None;
+                app.create_branch(&name);
             }
         },
         KeyCode::Up if filtering => app.files_move(-1),
@@ -469,6 +500,35 @@ fn history_key(app: &mut App, key: KeyEvent) -> Action {
         KeyCode::Char('g') | KeyCode::Home => app.history_move(-(i32::MAX / 2)),
         KeyCode::Char('G') | KeyCode::End => app.history_move(i32::MAX / 2),
         KeyCode::Enter | KeyCode::Right => app.history_open(),
+        _ => return Action::None,
+    }
+    Action::Redraw
+}
+
+fn branches_key(app: &mut App, key: KeyEvent) -> Action {
+    let held = KeyModifiers::CONTROL | KeyModifiers::ALT;
+    match key.code {
+        _ if key.modifiers.intersects(held) => return branches_move_key(app, key),
+        KeyCode::Enter => app.switch_selected(),
+        KeyCode::Char('n') => app.start_new_branch(),
+        KeyCode::Char('m') => app.ask_merge(),
+        KeyCode::Char('D') => app.ask_delete(),
+        _ => return branches_move_key(app, key),
+    }
+    Action::Redraw
+}
+
+fn branches_move_key(app: &mut App, key: KeyEvent) -> Action {
+    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    match key.code {
+        KeyCode::Char('d') if ctrl => app.branches_move(15),
+        KeyCode::Char('u') if ctrl => app.branches_move(-15),
+        KeyCode::Up | KeyCode::Char('k') => app.branches_move(-1),
+        KeyCode::Down | KeyCode::Char('j') => app.branches_move(1),
+        KeyCode::PageDown => app.branches_move(30),
+        KeyCode::PageUp => app.branches_move(-30),
+        KeyCode::Char('g') | KeyCode::Home => app.branches_move(-(i32::MAX / 2)),
+        KeyCode::Char('G') | KeyCode::End => app.branches_move(i32::MAX / 2),
         _ => return Action::None,
     }
     Action::Redraw

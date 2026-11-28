@@ -71,7 +71,8 @@ pub fn run(opts: Options, trace: Trace) -> io::Result<i32> {
     let mut dirty = false;
     let mut pastes_as_text = false;
     loop {
-        pastes_arrive_as_text(app.view == View::Status, &mut pastes_as_text)?;
+        let writing_tab = matches!(app.view, View::Status | View::Branches);
+        pastes_arrive_as_text(writing_tab, &mut pastes_as_text)?;
         if app.poll() {
             dirty = true;
         }
@@ -124,6 +125,13 @@ pub fn run(opts: Options, trace: Trace) -> io::Result<i32> {
                 }
                 Action::Open(opener, at) => {
                     app.message = Some(match open_outside(&app, opener, &at) {
+                        Ok(done) => done,
+                        Err(e) => e,
+                    });
+                    dirty = true;
+                }
+                Action::Browse(page) => {
+                    app.message = Some(match open::web_page(&page) {
                         Ok(done) => done,
                         Err(e) => e,
                     });
@@ -233,6 +241,7 @@ fn retarget(app: &mut App, ctx: herdr::PluginContext) {
         client: app.client.clone(),
         store: app.store.clone(),
         theme: app.theme,
+        gh: app.gh.clone(),
     };
     let pinned = app.pinned;
     *app = App::new(opts);

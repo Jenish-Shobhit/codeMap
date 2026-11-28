@@ -1,0 +1,50 @@
+  status   review   history   branches                                                                                        ● paneMorph · selector-fix   main
+
+ local · 5                                                feat/ahead
+   feat/ahead  ↑2           #14 ✓
+   feat/both   ↑2 ↓1        #12 ✗                         upstream      origin/feat/ahead · 2 commits ahead
+   local-only  no upstream  #9 …                          pull request  #14 feat: count ahead of the remote
+ ● main                                                                 open · into main · 3 of 3 checks passed ✓
+   merged      no upstream  #8 ✓
+                                                          3 commits not on main
+ origin · 3 branches                                      2be5078 feat: count to three
+                                                          2dd06cc feat: count to two
+                                                          6420f9a feat: start counting
+
+
+
+
+
+
+
+
+
+                                           ╭─ switch ───────────────────────────────────────────────────────────────╮
+                                           │                                                                        │
+                                           │ switch to feat/ahead while the agent is working?                       │
+                                           │ the agent is working here: switching moves the files under it          │
+                                           │                                                                        │
+                                           │ y switches · any other key keeps                                       │
+                                           ╰────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ j k branch

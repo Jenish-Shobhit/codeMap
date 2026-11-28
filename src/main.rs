@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use codemap::app::{Options, View};
+use codemap::gh::Gh;
 use codemap::herdr::{self, Client, PaneOpen, PluginContext};
 use codemap::run::{self, Trace};
 use codemap::store::Store;
@@ -10,7 +11,8 @@ use codemap::theme::Theme;
 const HELP: &str = "codeMap: your agents' files, what they changed, and the history around it.
 
 usage:
-  codemap [PATH] [--view files|customisations|status|changes|history] [--trace-startup]
+  codemap [PATH] [--view files|customisations|status|changes|history|branches]
+          [--trace-startup]
   codemap open [--view VIEW] [--placement popup|split|tab]   (herdr action)
   codemap ui [--view VIEW]                                   (herdr pane)
   codemap edit                                               (herdr pane: the editor)
@@ -118,6 +120,7 @@ fn ui(args: Args, t0: Instant) -> i32 {
         client,
         store: Store::from_env(),
         theme: Theme::load(),
+        gh: Gh::from_env(),
     };
     let trace = Trace {
         enabled: args.trace || std::env::var_os("CODEMAP_TRACE_FILE").is_some(),

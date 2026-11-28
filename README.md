@@ -26,16 +26,16 @@
 Coding agents change more code in a turn than anyone reads line by line.
 codeMap is a [herdr](https://herdr.dev) plugin that opens over the agent you are
 watching and shows its worktree as a file tree with what the last turn touched,
-the turn itself as a reviewable diff, what is staged and what is not, and the
-repository's history as a graph, so you see what just changed and answer it
-without leaving the terminal.
+the turn itself as a reviewable diff, what is staged and what is not, the
+repository's history as a graph and its branches with their pull requests, so
+you see what just changed and answer it without leaving the terminal.
 
 ## Features
 
 - **Popups over the agent you are watching.** One key opens the file tree,
   another the Git popup with the working tree's status, the review of the
-  last turn and the history, a third the skills, hooks and settings the agent
-  runs with.
+  last turn, the history and the branches, a third the skills, hooks and
+  settings the agent runs with.
 - **Open anything where you work.** `e` opens the file in neovim in a split
   beside the agent, `E` in VS Code, `b` in the browser and `B` on GitHub.
 - **Turn-aware.** An event hook snapshots the worktree whenever an agent starts
@@ -46,9 +46,14 @@ without leaving the terminal.
 - **Stage and commit what you reviewed.** In the Status tab `space` stages or
   unstages a file or a single hunk, `c` commits what is staged, and `x`
   discards a change after asking.
+- **Branches at a glance.** The Branches tab lists the local branches with
+  how far each is from its upstream, its pull request and whether CI passed.
+  `⏎` switches to a branch, `n` creates one, `m` merges and `D` deletes, the
+  last two after asking.
 - **Looking writes nothing.** Checkpoints live in codeMap's own state
   directory, and opening, reading and reviewing leave your repository as it
-  was. It changes only when you press `space`, `c` or `x` in the Status tab.
+  was. It changes only when you press `space`, `c` or `x` in the Status tab,
+  or `⏎`, `n`, `m` or `D` in the Branches tab.
 - **Fast.** The frame paints in under a millisecond, before git is read.
 - **Follows herdr's theme**, including all 18 built-in palettes and custom
   colours.
@@ -58,7 +63,9 @@ without leaving the terminal.
 ## Requirements
 
 - [herdr](https://herdr.dev) 0.9.0 or newer, on macOS or Linux.
-- `git` on your `PATH`.
+- `git` on your `PATH`; the Branches tab needs git 2.23 or newer.
+- Optional: [`gh`](https://cli.github.com), signed in, for the pull requests
+  and CI marks in the Branches tab. Without it the tab shows everything else.
 - To install from GitHub, herdr builds codeMap with `cargo`, which needs Rust
   1.90 or newer ([rustup](https://rustup.rs)) and the linker it uses: Xcode's
   command line tools on macOS, `gcc` or `clang` on Linux. The
@@ -151,8 +158,9 @@ description = "codeMap: git status of the focused agent's worktree"
 Then run `herdr config check` and `herdr server reload-config`.
 `dev.codemap.open` and `dev.codemap.changes` open the Git popup on the review
 of the last turn, `dev.codemap.git` on the working tree's status and
-`dev.codemap.history` on the commit graph. `dev.codemap.files` opens the file
-tree, and `dev.codemap.customisations` the agent's setup.
+`dev.codemap.history` on the commit graph; `4` inside it shows the branches.
+`dev.codemap.files` opens the file tree, and `dev.codemap.customisations` the
+agent's setup.
 
 Inside the popup:
 
@@ -171,7 +179,7 @@ Inside the popup:
 | `/` | Files | find a file by name; `↑` `↓` pick, `⏎` go |
 | `1` `2` `3` `4` | Customisations | project, global, tools, other agents |
 | `j` `k`, `h` `l`, `⏎` | Customisations | move through the list, change scope, open the file in the editor |
-| `1` `2` `3` | Status, Review, History | Status, Review, History |
+| `1` `2` `3` `4` | Status, Review, History, Branches | Status, Review, History, Branches |
 | `j` `k`, `tab`, `⎋` | Status | move through the staged and not staged files, read the selected file's diff, go back to the files |
 | `]` `[` | Status | next or previous hunk of the diff |
 | `space` | Status | stage the selected file, or unstage it; in the diff, the hunk under the cursor |
@@ -182,6 +190,12 @@ Inside the popup:
 | `v`, `c`, `x` | Review | select lines, comment on them, delete a comment |
 | `P` / `S` | Review | type the draft into the agent's prompt and close / submit it through herdr's `agent.prompt` |
 | `j` `k`, `⏎`, `⌫` | History | move between commits, show the diff, go back |
+| `j` `k`, `g` `G` | Branches | move between the local branches |
+| `⏎` | Branches | switch to the selected branch; asks first when the agent is working in this worktree |
+| `n` | Branches | name a new branch: `⏎` creates it from `HEAD` and switches to it, `⎋` cancels |
+| `m` | Branches | merge the selected branch into the current one, after a question only `y` confirms |
+| `D` | Branches | delete the selected branch, after a question that says what would be lost and only `y` confirms |
+| `B` / `y` | Branches | open the branch's pull request, or else its page on GitHub / copy the branch name |
 
 The editor is `$VISUAL`, then `$EDITOR`, then `nvim` when it is installed.
 Inside herdr it opens in a split beside the agent's pane and the popup closes;
@@ -246,8 +260,8 @@ The first tab of the Git popup: what `git status` reports, as two lists.
 **staged** is the index against `HEAD`, and **not staged** is the working tree
 against the index, with untracked files marked `?`. A file that is partly
 staged is in both lists, each time with its own diff. `j` and `k` move through
-both lists, `tab` steps into the selected file's diff and `⎋` comes back. `2`
-and `3` switch to Review and History.
+both lists, `tab` steps into the selected file's diff and `⎋` comes back. `2`,
+`3` and `4` switch to Review, History and Branches.
 
 `space` stages the selected file, or unstages it when it is in the staged
 list. In the diff, `]` and `[` move between hunks, a bar marks the hunk under
@@ -299,6 +313,58 @@ The commit graph with branches, tags and `HEAD`, and the repository's worktrees
 with the herdr agents working in each (`●` working, `○` idle). `⏎` shows a
 commit's diff.
 
+### Branches
+
+<img src="docs/assets/branches.svg" width="100%" alt="The Branches tab: four local branches, the current one marked with a dot, one of them two commits ahead of and one behind its upstream, each with its pull request number and a mark for passed, failed or running checks, and a line for the remote with its three branches. On the right the selected branch's upstream, its open pull request with three of four checks passed, and the three commits it has that main does not.">
+
+The fourth tab of the Git popup (`4`, or `--view branches`): the local
+branches, with a `●` on the current one. Beside each name is how far the
+branch is from its upstream (`↑2 ↓1`, nothing when they are in step, `no
+upstream` when it has none), then its pull request and a mark for its checks:
+`✓` passed, `✗` failed, `…` still running. A line under the list counts each
+remote's branches. The right side tells the selected branch in words: whether
+it is the current branch or checked out in another worktree, its upstream, its
+pull request with its state, base branch and how many checks passed, and the
+commits it has that the default branch does not, newest first. The default
+branch is where `origin/HEAD` points, else `main`, else `master`.
+
+`⏎` switches to the selected branch with `git switch`. When the agent in this
+worktree is working, codeMap asks first, because switching moves the files
+under it. If git refuses, because local changes would be overwritten or
+another worktree has the branch, codeMap shows what git said and nothing
+changes.
+
+`n` asks for a name on the bottom line, then creates the branch from the
+current `HEAD` and switches to it. A name git would not accept, or one that is
+taken, creates nothing and says why.
+
+`m` merges the selected branch into the current one with `git merge
+--no-edit`, after a question that names both and says so when the agent is
+working. If the merge stops on conflicts, or a hook refuses the merge commit,
+codeMap leaves it exactly as git left it and says so; the Status tab lists the
+conflicted or staged files. It never aborts, rebases or squashes.
+
+`D` deletes the selected branch with `git branch -D`, after a question. When
+the branch's last commit is also on another local branch or on a
+remote-tracking branch, as it is for a merged or squashed pull request whose
+remote-tracking branch is still there, the question is plain. When it is not,
+the question counts the commits that are on no other local or remote-tracking
+branch and says they would become unreachable. The current branch, and a
+branch checked out in another worktree, are never deleted.
+
+Every question goes ahead only on a plain `y`. Any other key, and any pasted
+text, keeps things as they are.
+
+Pull requests come from your own [`gh`](https://cli.github.com): the first
+time the tab is shown codeMap runs `gh pr list` in the repository, in the
+background, and gives it five seconds. Without `gh`, without a login, offline
+or outside GitHub the tab works the same, and one line says why there is no
+pull request information. `B` opens the selected branch's pull request, or
+else the branch's page on GitHub; `y` copies the branch name.
+
+Branches never pushes, pulls or fetches, never creates, changes or deletes
+anything on a remote, and never stashes, rebases or resets.
+
 ## Standalone
 
 The binary runs without herdr:
@@ -331,6 +397,8 @@ codeMap has no settings file of its own; it follows herdr.
   Turn checkpoints go to the plugin state directory herdr assigns
   (`~/.local/state/herdr/plugins/dev.codemap/` by default);
   `CODEMAP_STATE_DIR` overrides it.
+- **Pull requests:** the Branches tab runs `gh` from your `PATH`.
+  `CODEMAP_GH` names another program to run in its place.
 
 ## How it works
 
@@ -349,7 +417,8 @@ flowchart LR
 
 **Reading the repository.** The popup paints its frame first, then worker
 threads ask git for the files it tracks or does not ignore, the diff in scope,
-what is staged and what is not, the commit log and the worktrees. The commit
+what is staged and what is not, the commit log, the worktrees and the
+branches. The commit
 graph is laid out in lanes and drawn with box characters. A file's preview
 reads at most its first 512 KB. Hunks are named by the function line git
 prints in each hunk header.
@@ -383,26 +452,43 @@ stash, no index changes and no objects.
 - The "since `HEAD`" diff and the Status tab read a private copy of your
   index.
 - The test suite fingerprints every file under `.git` before and after each
-  read, and after a walk through the Status tab that opens and cancels the
-  commit box and the discard question, and fails on any change.
-- codeMap makes no network requests. It talks only to the local herdr socket,
-  and sends text to an agent only when you press `P` or `S`.
+  read, after a walk through the Status tab that opens and cancels the commit
+  box and the discard question, and after a walk through the Branches tab
+  that opens and cancels every question and the name prompt, and fails on any
+  change.
+- codeMap itself opens no network connection. It talks to the local herdr
+  socket, the git commands it runs stay on this machine, and it sends text to
+  an agent only when you press `P` or `S`.
+- One program it runs does use the network: your own `gh`. The first time the
+  Branches tab is shown, and only if `gh` is installed, codeMap runs `gh pr
+  list` once to read this repository's pull requests, and `gh` contacts GitHub
+  with your `gh` login. That command only reads; nothing is created or changed
+  on GitHub. To avoid it, do not open the Branches tab, or have no `gh` on
+  your `PATH`; `CODEMAP_GH` names another program to run in its place, and
+  one that does not exist turns the lookup off.
 
-**codeMap changes your repository only when you press one of three keys in
-the Status tab**, and then only for the file or hunk that is selected:
+**codeMap changes your repository only when you press one of seven keys**:
+three in the Status tab, which act on the selected file or hunk, and four in
+the Branches tab, which act on the selected branch.
 
-| Key | What it writes |
-| --- | --- |
-| `space` | the index, and the objects git stores for what is staged: it stages or unstages the selected file or hunk |
-| `c` | a commit of what is staged, on the current branch or a detached `HEAD`, with the message you typed. git runs your hooks and signing program as for any commit |
-| `x` | the working tree, after a question that only `y` confirms: it restores the selected file or hunk from the index, or deletes the selected untracked file. What is staged stays as it is, though git rewrites its index file when it restores a whole file. This cannot be undone |
+| Key | Tab | What it writes |
+| --- | --- | --- |
+| `space` | Status | the index, and the objects git stores for what is staged: it stages or unstages the selected file or hunk |
+| `c` | Status | a commit of what is staged, on the current branch or a detached `HEAD`, with the message you typed. git runs your hooks and signing program as for any commit |
+| `x` | Status | the working tree, after a question that only `y` confirms: it restores the selected file or hunk from the index, or deletes the selected untracked file. What is staged stays as it is, though git rewrites its index file when it restores a whole file. This cannot be undone |
+| `⏎` | Branches | `HEAD`, the index and the working tree: `git switch` checks out the selected branch. When the agent in this worktree is working, a question that only `y` confirms comes first. When git refuses, nothing changes |
+| `n` | Branches | a new local branch at the current `HEAD`, and `HEAD`, which moves to it: `git switch -c` with the name you typed, once `git check-ref-format` accepts the name and no branch has it |
+| `m` | Branches | after a question that only `y` confirms, the current branch, the index and the working tree: `git merge --no-edit` of the selected branch, as a fast-forward or a merge commit, with your hooks and signing program. A merge that stops part-way, on conflicts or on a hook that refuses the merge commit, stays as git left it, for you to finish or abort. A merge git refuses before it starts moves no branch and changes no file, though git may still record where `HEAD` was in its own `ORIG_HEAD` |
+| `D` | Branches | after a question that only `y` confirms, the selected local branch, with its reflog and upstream setting: `git branch -D`. The question counts the commits that are on no other local or remote-tracking branch and says they would become unreachable. The current branch and a branch checked out in another worktree are refused |
 
-No other key writes, and nothing pushes, pulls, fetches, stashes, amends or
-rebases. Each key runs the git command you would type yourself (`git add`,
-`git restore`, `git apply`, `git commit`), so hooks you have set for those
-commands run as well. While the Status tab is open codeMap asks the terminal
-to mark pasted text; marked text goes into the commit box or nowhere, and is
-never read as key presses.
+No other key writes, and nothing pushes, pulls, fetches, stashes, amends,
+rebases or resets, or creates, changes or deletes anything on a remote. Each
+key runs the git command you would type yourself (`git add`, `git restore`,
+`git apply`, `git commit`, `git switch`, `git merge`, `git branch -D`), so
+hooks you have set for those commands run as well. While the Status or the
+Branches tab is open codeMap asks the terminal to mark pasted text; marked
+text goes into the commit box or the branch name being typed, or nowhere, and
+is never read as key presses.
 
 Reviewed marks and unsent comments are stored next to the checkpoints. Delete
 the state directory to forget them.
@@ -457,7 +543,7 @@ on the `PATH` that herdr sees. Install them, or use a
 Ideas under consideration, not commitments:
 
 - Step through earlier turns, not only the last one and the session.
-- Switching branches, pushing and pulling from the Git popup.
+- Pushing and pulling from the Git popup.
 - Follow the host's light or dark appearance when herdr's `auto_switch` is on.
 
 Suggestions are welcome in [issues](https://github.com/Jenish-Shobhit/codeMap/issues).
