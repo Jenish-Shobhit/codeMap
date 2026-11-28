@@ -2,7 +2,7 @@
 
 # codeMap
 
-**Review what your agents changed, and the history around it.**
+**Your agents' files, what they changed, and the history around it.**
 
 [![CI](https://github.com/Jenish-Shobhit/codeMap/actions/workflows/ci.yml/badge.svg)](https://github.com/Jenish-Shobhit/codeMap/actions/workflows/ci.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Jenish-Shobhit/codeMap/badge)](https://scorecard.dev/viewer/?uri=github.com/Jenish-Shobhit/codeMap)
@@ -25,17 +25,19 @@
 
 Coding agents change more code in a turn than anyone reads line by line.
 codeMap is a [herdr](https://herdr.dev) plugin that opens over the agent you are
-watching and shows its last turn as a reviewable diff and the repository's
-history as a graph, so you see what just changed and answer it without leaving
-the terminal.
+watching and shows its worktree as a file tree with what the last turn touched,
+the turn itself as a reviewable diff, and the repository's history as a graph,
+so you see what just changed and answer it without leaving the terminal.
 
 ## Features
 
-- **Two views, one key.** ⌃⌥M opens a popup over the focused agent's pane with
-  Changes and History, switched with `1` and `2`.
+- **Popups over the agent you are watching.** One key opens the file tree,
+  another the review of the last turn with the history beside it.
+- **Open anything where you work.** `e` opens the file in neovim in a split
+  beside the agent, `E` in VS Code, `b` in the browser and `B` on GitHub.
 - **Turn-aware.** An event hook snapshots the worktree whenever an agent starts
-  or finishes a turn, so Changes shows what the last turn did, not only what
-  differs from `HEAD`.
+  or finishes a turn, so the tree marks and the diff show what the last turn
+  did, not only what differs from `HEAD`.
 - **Review without leaving the terminal.** Mark hunks reviewed, comment on
   lines, and send the comments to the agent's prompt as one message.
 - **Read-only.** Checkpoints live in codeMap's own state directory. Your
@@ -72,7 +74,7 @@ skip the prompt. Then [bind a key](#keybindings) and check the plugin:
 
 ```sh
 herdr plugin list                               # dev.codemap, enabled
-herdr plugin action list --plugin dev.codemap   # open, changes, history
+herdr plugin action list --plugin dev.codemap   # open, files, changes, history
 ```
 
 To update, run the install command again; herdr replaces its checkout. To
@@ -110,7 +112,7 @@ herdr plugin link "$PWD/codemap-$v-$t"
 
 ## Keybindings
 
-codeMap declares three herdr actions. Bind the one that opens the popup in
+codeMap declares four herdr actions. Bind the ones you want in
 `~/.config/herdr/config.toml`:
 
 ```toml
@@ -119,28 +121,46 @@ key = "ctrl+alt+m"
 type = "plugin_action"
 command = "dev.codemap.open"
 description = "codeMap: what the focused agent changed"
+
+[[keys.command]]
+key = "ctrl+alt+f"
+type = "plugin_action"
+command = "dev.codemap.files"
+description = "codeMap: the focused agent's files"
 ```
 
-Then run `herdr config check` and `herdr server reload-config`. To open
-straight into a view, bind `dev.codemap.changes` or `dev.codemap.history` the
-same way.
+Then run `herdr config check` and `herdr server reload-config`.
+`dev.codemap.open` and `dev.codemap.changes` open the review of the last turn,
+`dev.codemap.history` the commit graph beside it, and `dev.codemap.files` the
+file tree.
 
 Inside the popup:
 
 | Keys | Where | Action |
 | --- | --- | --- |
-| `1` `2` | everywhere | Changes, History |
-| `tab` | Changes | move between the rail and the body |
-| `e` / `y` | Changes | open `$EDITOR` at the line / copy `path:line` |
+| `e` / `E` | Files, Changes | open the file at the line in the editor, in a split beside the agent / in VS Code |
+| `b` / `B` | Files, Changes | open the file in the browser / on GitHub |
+| `y` | Files, Changes | copy `path:line` |
+| `s` / `a` | Files, Changes | what counts as changed: last turn, the agent's session, since `HEAD` / next agent |
+| `tab` | Files, Changes | move between the list and the body |
 | `p` / `T` | inside herdr | pin codeMap as a split that follows the focused pane / open it in its own tab |
 | `?` | everywhere | show every key |
 | `q` or `⎋` | everywhere | close |
+| `j` `k`, `l` `h` | Files | move through the tree, open or close a folder |
+| `⏎` | Files | open a folder, or a file in the editor |
+| `/` | Files | find a file by name; `↑` `↓` pick, `⏎` go |
+| `1` `2` | Changes, History | Changes, History |
 | `j` `k`, `]` `[`, `}` `{` | Changes | next or previous line, hunk, file |
 | `space` | Changes | mark the hunk reviewed (kept until the hunk changes) |
 | `v`, `c`, `x` | Changes | select lines, comment on them, delete a comment |
 | `P` / `S` | Changes | type the draft into the agent's prompt and close / submit it through herdr's `agent.prompt` |
-| `s` / `a` | Changes | scope: last turn, the agent's session, since `HEAD` / next agent |
 | `j` `k`, `⏎`, `⌫` | History | move between commits, show the diff, go back |
+
+The editor is `$VISUAL`, then `$EDITOR`, then `nvim` when it is installed.
+Inside herdr it opens in a split beside the agent's pane and the popup closes;
+outside herdr it takes over the terminal until you quit it. The browser is
+Chrome, then Safari, on macOS, and your default browser on Linux;
+`CODEMAP_BROWSER` names another.
 
 The popup takes every key while it is open: nothing reaches herdr or the agent
 until it closes.
@@ -157,6 +177,16 @@ code with one recorded agent turn. They are rendered from the real UI by
 `cargo run --example screenshots`, and CI checks that they are current. The
 image at the top is a capture of a real herdr client in a throwaway session
 (`-- --herdr`).
+
+### Files
+
+<img src="docs/assets/files.svg" width="100%" alt="The Files popup: the worktree as a tree with open_selector.py selected and marked M, two folders marked with a dot, and the file's contents on the right with a plus beside every line the turn added.">
+
+The worktree as a tree, with the selected file's contents beside it. Files the
+last turn touched carry `M`, `A` or `R`, their folders a `●`, and the preview
+puts a `+` beside each line the turn added. The popup opens on the first
+changed file. `/` finds a file by name, and a folder shows what changed inside
+it. Ignored files stay out of the tree.
 
 ### Changes
 
@@ -191,7 +221,7 @@ The binary runs without herdr:
 
 ```sh
 codemap                          # the current directory
-codemap path/to/repo --view history
+codemap path/to/repo --view files
 codemap doctor                   # where codeMap looks for herdr, its theme and state
 codemap --help
 ```
@@ -223,7 +253,7 @@ codeMap has no settings file of its own; it follows herdr.
 ```mermaid
 flowchart LR
     subgraph read["When the popup opens"]
-        git["git<br/>status, log, worktrees"] --> diff["Diffs and commit graph"]
+        git["git<br/>files, status, log, worktrees"] --> diff["Tree, diffs and commit graph"]
     end
     subgraph record["On every agent status change"]
         event["herdr event<br/>pane.agent_status_changed"] --> hook["codemap hook"]
@@ -234,8 +264,9 @@ flowchart LR
 ```
 
 **Reading the repository.** The popup paints its frame first, then worker
-threads ask git for the diff in scope, the commit log and the worktrees. The
-commit graph is laid out in lanes and drawn with box characters. Hunks are
+threads ask git for the files it tracks or does not ignore, the diff in scope,
+the commit log and the worktrees. The commit graph is laid out in lanes and
+drawn with box characters. A file's preview reads at most its first 512 KB. Hunks are
 named by the function line git prints in each hunk header.
 
 **Recording turns.** herdr runs `codemap hook` on every
@@ -322,8 +353,6 @@ on the `PATH` that herdr sees. Install them, or use a
 Ideas under consideration, not commitments:
 
 - Step through earlier turns, not only the last one and the session.
-- A Files popup: the worktree as a tree with a preview, and keys to open a
-  file in an editor or the browser.
 - A Git popup that also stages, commits and switches branches.
 - A Customisations popup: the skills, hooks and settings an agent runs with.
 - Follow the host's light or dark appearance when herdr's `auto_switch` is on.

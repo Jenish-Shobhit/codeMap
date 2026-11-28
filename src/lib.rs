@@ -1,8 +1,10 @@
 pub mod app;
+pub mod files;
 pub mod git;
 pub mod herdr;
 pub mod hook;
 pub mod keys;
+pub mod open;
 pub mod run;
 pub mod store;
 pub mod theme;

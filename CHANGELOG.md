@@ -7,10 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Files**: a popup with the worktree as a tree and the selected file's
+  contents beside it, opened with `dev.codemap.files` or `--view files`.
+  Files the turn touched are marked, and added lines carry a `+`. `/` finds
+  a file by name.
+- `E` opens the file in VS Code, `b` in the browser and `B` on GitHub, from
+  Files and Changes.
+
 ### Changed
 
-- The popup opens on Changes, and `1` and `2` switch between Changes and
-  History. `dev.codemap.open` opens Changes, where it opened the Map.
+- `e` opens the editor in a herdr split beside the agent's pane and closes
+  the popup. Outside herdr it still takes over the terminal. With `$VISUAL`
+  and `$EDITOR` unset the editor is `nvim` when installed, where it was `vi`.
+- Each popup shows only its own views: `1` and `2` switch between Changes
+  and History, and Files stands alone.
+
+- `dev.codemap.open` opens Changes, where it opened the Map.
 - Hunks in Changes are named by the function line git prints in the hunk
   header, no longer by a parsed symbol.
 - Building from source no longer compiles C: the binary has no tree-sitter

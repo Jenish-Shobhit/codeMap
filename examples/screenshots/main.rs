@@ -17,6 +17,7 @@ use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier};
 use serde_json::{json, Value};
 
+const FILES: (u16, u16) = (140, 40);
 const CHANGES: (u16, u16) = (150, 46);
 const HISTORY: (u16, u16) = (128, 40);
 const NOW: i64 = 1_790_027_160;
@@ -45,7 +46,7 @@ fn main() {
     codemap::util::freeze_time(NOW);
     let mut app = App::new(Options {
         path: None,
-        view: View::Changes,
+        view: View::Files,
         context: Some(PluginContext {
             workspace_label: Some("paneMorph".into()),
             tab_label: Some("selector-fix".into()),
@@ -63,6 +64,11 @@ fn main() {
 
     let mut shots: Vec<(&str, &str, Buffer)> = Vec::new();
 
+    frame(&mut app, FILES);
+    app.select_path("panemorph/actions/open_selector.py");
+    shots.push(("files", "Files", frame(&mut app, FILES)));
+
+    app.view = View::Changes;
     frame(&mut app, CHANGES);
     key(&mut app, KeyCode::Char('}'));
     key(&mut app, KeyCode::Char(' '));

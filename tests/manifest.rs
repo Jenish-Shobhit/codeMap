@@ -120,7 +120,7 @@ fn manifest_passes_herdr_validation() {
         assert!(resolves_to_our_binary(&a.command), "{:?}", a.command);
         assert_eq!(a.command[1], "open");
     }
-    for want in ["open", "changes", "history"] {
+    for want in ["open", "files", "changes", "history"] {
         assert!(
             m.actions.iter().any(|a| a.id == want),
             "missing action {want}"
@@ -131,7 +131,15 @@ fn manifest_passes_herdr_validation() {
     assert_eq!(m.events[0].on, "pane.agent_status_changed");
     assert_eq!(m.events[0].command, vec!["target/release/codemap", "hook"]);
 
-    assert_eq!(m.panes.len(), 1);
+    assert_eq!(m.panes.len(), 2);
+    let edit = &m.panes[1];
+    assert!(local_id_ok(&edit.id));
+    assert_eq!(edit.id, "edit");
+    assert_eq!(edit.placement.as_deref(), Some("split"));
+    assert!(edit.width.is_none() && edit.height.is_none());
+    assert!(!edit.title.trim().is_empty());
+    assert!(resolves_to_our_binary(&edit.command));
+    assert_eq!(edit.command[1], "edit");
     let p = &m.panes[0];
     assert!(local_id_ok(&p.id));
     assert_eq!(p.id, "ui");
@@ -170,4 +178,27 @@ fn binary_answers_version_and_help() {
         .unwrap();
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("HERDR_SOCKET_PATH"));
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_codemap"))
+        .arg("edit")
+        .env_remove("CODEMAP_EDIT_PATH")
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("CODEMAP_EDIT_PATH"));
+}
+
+#[test]
+fn edit_replaces_itself_with_the_editor_at_the_line() {
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_codemap"))
+        .arg("edit")
+        .env("VISUAL", "echo")
+        .env("CODEMAP_EDIT_PATH", "/tmp/some file.rs")
+        .env("CODEMAP_EDIT_LINE", "42")
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout),
+        "+42 /tmp/some file.rs\n"
+    );
 }

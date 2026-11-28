@@ -1,7 +1,8 @@
 mod common;
 
-use codemap::app::{App, Focus, InputKind, Options, Scope, View};
+use codemap::app::{App, Focus, InputKind, Location, Options, Scope, View};
 use codemap::keys::{self, Action};
+use codemap::open::Opener;
 use codemap::ui;
 use common::*;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -194,6 +195,11 @@ fn not_a_git_repo_state() {
     assert!(changes.contains("not a git repository"), "{changes}");
     app.view = View::History;
     assert!(text(&mut app).contains("not a git repository"));
+    app.view = View::Files;
+    let files = text(&mut app);
+    assert!(files.contains("files · 1"), "{files}");
+    assert!(files.contains("tool.py   24 B · 2 lines"), "{files}");
+    assert!(files.contains("   1  def run():"), "{files}");
 }
 
 #[test]
@@ -239,6 +245,8 @@ fn loading_state_paints_the_frame_first() {
     assert!(t.contains("reading git status…"), "{t}");
     app.view = View::History;
     assert!(text(&mut app).contains("reading history…"));
+    app.view = View::Files;
+    assert!(text(&mut app).contains("reading files…"));
 }
 
 #[test]
@@ -296,9 +304,7 @@ fn view_names_parse_and_the_removed_views_do_not() {
     for v in View::ALL {
         assert_eq!(View::parse(v.name()), Some(v));
     }
-    assert_eq!(View::parse("1"), Some(View::Changes));
-    assert_eq!(View::parse("2"), Some(View::History));
-    for gone in ["map", "flow", "open", "3", "4"] {
+    for gone in ["map", "flow", "open", "1", "2"] {
         assert_eq!(View::parse(gone), None, "{gone}");
     }
 }
@@ -312,4 +318,181 @@ fn narrow_and_small_terminals_do_not_panic() {
             let _ = draw(&mut app, w, h);
         }
     }
+}
+
+#[test]
+fn files_view_opens_on_the_first_changed_file() {
+    let pm = panemorph_repo();
+    let mut app = app_for(&pm, View::Files, true);
+    let t = text(&mut app);
+    let header = t.lines().next().unwrap();
+    assert!(header.contains(" files "), "{header}");
+    assert!(
+        !header.contains("changes") && !header.contains("history"),
+        "{header}"
+    );
+    for needle in [
+        "files · 11",
+        "▾ panemorph/",
+        "▾ actions/",
+        "open_selector.py",
+        "panemorph/__init__.py   79 B · 3 lines   M +1 −2",
+        "3+ __version__ = \"0.1.2\"",
+        "marks  last turn · done 9:44 PM",
+        "⏎ open  e editor  E VS Code  b browser  B GitHub  / find",
+    ] {
+        assert!(t.contains(needle), "missing {needle:?}\n{t}");
+    }
+    snapshot("files_tree", &normalize(&t, pm.tmp.path()));
+    assert_eq!(
+        key(&mut app, KeyCode::Enter),
+        Action::Edit(Location {
+            path: "panemorph/__init__.py".into(),
+            line: Some(3),
+            dir: false,
+        })
+    );
+    assert_eq!(
+        key(&mut app, KeyCode::Char('E')),
+        Action::Open(
+            Opener::VsCode,
+            Location {
+                path: "panemorph/__init__.py".into(),
+                line: Some(3),
+                dir: false,
+            }
+        )
+    );
+    assert!(matches!(
+        key(&mut app, KeyCode::Char('b')),
+        Action::Open(Opener::Browser, _)
+    ));
+    assert!(matches!(
+        key(&mut app, KeyCode::Char('B')),
+        Action::Open(Opener::GitHub, _)
+    ));
+    assert_eq!(
+        key(&mut app, KeyCode::Char('y')),
+        Action::Copy("panemorph/__init__.py:3".into())
+    );
+}
+
+#[test]
+fn files_tree_folds_and_summarises_folders() {
+    let pm = panemorph_repo();
+    let mut app = app_for(&pm, View::Files, true);
+    text(&mut app);
+    let open_rows = app.file_rows().len();
+    key(&mut app, KeyCode::Char('h'));
+    assert_eq!(app.selected_file_row().unwrap().path, "panemorph");
+    let t = text(&mut app);
+    for needle in [
+        "panemorph/   10 files",
+        "changed in this turn",
+        "M __init__.py +1 −2",
+        "M actions/open_selector.py +50 −13",
+    ] {
+        assert!(t.contains(needle), "missing {needle:?}\n{t}");
+    }
+    assert_eq!(
+        key(&mut app, KeyCode::Char('y')),
+        Action::Copy("panemorph".into())
+    );
+    assert_eq!(key(&mut app, KeyCode::Enter), Action::Redraw);
+    assert_eq!(app.file_rows().len(), 2, "the folder is closed");
+    assert!(text(&mut app).contains("▸ panemorph/"));
+    key(&mut app, KeyCode::Char('l'));
+    assert_eq!(app.file_rows().len(), open_rows);
+    key(&mut app, KeyCode::Char('l'));
+    assert_eq!(app.selected_file_row().unwrap().path, "panemorph/actions");
+    key(&mut app, KeyCode::Char('G'));
+    assert_eq!(app.selected_file_row().unwrap().path, "README.md");
+    let t = text(&mut app);
+    assert!(t.contains("README.md   "), "{t}");
+    assert!(
+        !t.contains("README.md   M"),
+        "README.md is unchanged this turn\n{t}"
+    );
+}
+
+#[test]
+fn files_preview_scrolls_and_escape_returns_to_the_tree() {
+    let pm = panemorph_repo();
+    let mut app = app_for(&pm, View::Files, true);
+    text(&mut app);
+    key(&mut app, KeyCode::Char('k'));
+    assert_eq!(
+        app.selected_file_row().unwrap().path,
+        "panemorph/actions/selector.py"
+    );
+    text(&mut app);
+    key(&mut app, KeyCode::Tab);
+    assert_eq!(app.files.focus, Focus::Body);
+    for _ in 0..9 {
+        key(&mut app, KeyCode::Char('j'));
+    }
+    let t = text(&mut app);
+    assert!(t.contains("  10  from panemorph.api import"), "{t}");
+    assert!(!t.contains("   9\n") && !t.contains("import curses"), "{t}");
+    assert_eq!(
+        key(&mut app, KeyCode::Char('e')),
+        Action::Edit(Location {
+            path: "panemorph/actions/selector.py".into(),
+            line: Some(10),
+            dir: false,
+        })
+    );
+    key(&mut app, KeyCode::Char('G'));
+    assert_eq!(app.files.preview_scroll, 101);
+    assert_eq!(key(&mut app, KeyCode::Esc), Action::Redraw);
+    assert_eq!(app.files.focus, Focus::Rail);
+    assert_eq!(key(&mut app, KeyCode::Esc), Action::Quit);
+}
+
+#[test]
+fn files_filter_finds_a_file_and_reveals_it() {
+    let pm = panemorph_repo();
+    let mut app = app_for(&pm, View::Files, true);
+    text(&mut app);
+    key(&mut app, KeyCode::Char('/'));
+    assert!(matches!(
+        app.input.as_ref().unwrap().kind,
+        InputKind::Filter
+    ));
+    chars(&mut app, "topo");
+    let t = text(&mut app);
+    assert!(t.contains("matches · "), "{t}");
+    assert_eq!(app.file_rows()[0].path, "panemorph/topology.py");
+    assert!(t.contains("panemorph/topology.py   2 KB · 89 lines"), "{t}");
+    assert!(t.contains("/ topo█"), "{t}");
+    key(&mut app, KeyCode::Enter);
+    assert!(app.input.is_none() && app.files.filter.is_none());
+    assert_eq!(
+        app.selected_file_row().unwrap().path,
+        "panemorph/topology.py"
+    );
+    let t = text(&mut app);
+    assert!(t.contains("files · 11"), "{t}");
+    assert!(t.contains("panemorph/topology.py   "), "{t}");
+
+    key(&mut app, KeyCode::Char('/'));
+    chars(&mut app, "zzz");
+    assert!(text(&mut app).contains("no file matches"));
+    key(&mut app, KeyCode::Esc);
+    assert!(app.input.is_none() && app.files.filter.is_none());
+    assert_eq!(
+        app.selected_file_row().unwrap().path,
+        "panemorph/topology.py",
+        "escape puts the selection back"
+    );
+}
+
+#[test]
+fn number_keys_stay_inside_a_popup() {
+    let pm = panemorph_repo();
+    let mut app = app_for(&pm, View::Files, true);
+    assert_eq!(key(&mut app, KeyCode::Char('2')), Action::None);
+    assert_eq!(app.view, View::Files);
+    assert_eq!(View::Files.tabs(), [View::Files]);
+    assert_eq!(View::History.tabs(), [View::Changes, View::History]);
 }

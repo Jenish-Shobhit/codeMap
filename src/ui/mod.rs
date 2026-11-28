@@ -1,4 +1,5 @@
 mod changes;
+mod files;
 mod history;
 
 use ratatui::buffer::Buffer;
@@ -25,6 +26,8 @@ pub fn areas(area: Rect, view: View) -> Areas {
         0
     } else if view == View::History {
         ((w as u32 * 60 / 100) as u16).clamp(40, w.saturating_sub(30))
+    } else if view == View::Files {
+        ((w as u32 * 32 / 100) as u16).clamp(30, 48)
     } else {
         ((w as u32 * 30 / 100) as u16).clamp(28, 40)
     };
@@ -85,6 +88,7 @@ pub fn render_buf(buf: &mut Buffer, area: Rect, app: &mut App) {
     }
     header(buf, a.header, app);
     match app.view {
+        View::Files => files::render(buf, &a, app),
         View::Changes => changes::render(buf, &a, app),
         View::History => history::render(buf, &a, app),
     }
@@ -238,7 +242,7 @@ impl<'a> Rail<'a> {
 fn header(buf: &mut Buffer, r: Rect, app: &App) {
     let t = app.theme;
     let mut x = r.x + 1;
-    for v in View::ALL {
+    for &v in app.view.tabs() {
         let name = v.name();
         let st = if v == app.view {
             bold(style(t.on_accent, t.accent))
@@ -306,6 +310,15 @@ fn header(buf: &mut Buffer, r: Rect, app: &App) {
 
 fn view_hints(app: &App) -> Vec<(&'static str, String)> {
     match app.view {
+        View::Files => vec![
+            ("⏎", "open".to_string()),
+            ("e", "editor".into()),
+            ("E", "VS Code".into()),
+            ("b", "browser".into()),
+            ("B", "GitHub".into()),
+            ("/", "find".into()),
+            ("?", "keys".into()),
+        ],
         View::Changes => vec![
             ("] [", "hunk".to_string()),
             ("space", "reviewed".into()),
@@ -333,6 +346,8 @@ fn hints_line(buf: &mut Buffer, a: &Areas, app: &App) {
     let t = app.theme;
     if a.rail_hints.width > 0 {
         let rail_hint = match (app.view, app.focus()) {
+            (View::Files, Focus::Rail) => "tab preview",
+            (View::Files, Focus::Body) => "tab tree",
             (_, Focus::Rail) => "tab body",
             (View::Changes, _) => "tab files",
             (View::History, _) => "j k commit",
@@ -348,17 +363,20 @@ fn hints_line(buf: &mut Buffer, a: &Areas, app: &App) {
     }
     let r = a.hints;
     if let Some(input) = &app.input {
-        let InputKind::Comment {
-            path, start, end, ..
-        } = &input.kind;
-        let anchor = if end > start {
-            format!("{path}:{start}-{end}")
-        } else {
-            format!("{path}:{start}")
+        let (prompt, keys) = match &input.kind {
+            InputKind::Filter => ("/ ".to_string(), "   ↑↓ pick  ⏎ go  ⎋ cancel"),
+            InputKind::Comment {
+                path, start, end, ..
+            } => {
+                let anchor = if end > start {
+                    format!("{path}:{start}-{end}")
+                } else {
+                    format!("{path}:{start}")
+                };
+                (format!("comment on {anchor} › "), "   ⏎ save  ⎋ cancel")
+            }
         };
-        let prompt = format!("comment on {anchor} › ");
         let text = input.text.clone();
-        let keys = "   ⏎ save  ⎋ cancel";
         let line = Line::new()
             .push(prompt, style(t.text2, t.body))
             .push(text, style(t.text, t.body))
@@ -385,11 +403,13 @@ fn hints_line(buf: &mut Buffer, a: &Areas, app: &App) {
 
 pub const KEYS: &[(&str, &[(&str, &str)])] = &[
     (
-        "views",
+        "every popup",
         &[
-            ("1 2", "changes, history"),
-            ("tab", "move between rail and body"),
-            ("e  y", "edit in $EDITOR at the line, copy path:line"),
+            ("tab", "move between the list and the body"),
+            ("e  E", "open in the editor beside the agent, in VS Code"),
+            ("b  B", "open the file in the browser, on GitHub"),
+            ("y", "copy path:line"),
+            ("s", "what counts as changed: turn, session, HEAD"),
             (
                 "p  T",
                 "pin as a split that follows the agent, open in a tab",
@@ -398,14 +418,24 @@ pub const KEYS: &[(&str, &[(&str, &str)])] = &[
         ],
     ),
     (
+        "files",
+        &[
+            ("j k", "move through the tree"),
+            ("l h", "open or close a folder, step into the preview"),
+            ("⏎", "open a folder, or a file in the editor"),
+            ("/", "find a file by name"),
+        ],
+    ),
+    (
         "changes",
         &[
+            ("1 2", "changes, history"),
             ("j k", "move by line"),
             ("] [  } {", "next or previous hunk, file"),
             ("space", "mark the hunk reviewed"),
             ("v  c  x", "select lines, comment, delete a comment"),
             ("P  S", "paste the draft into the agent's prompt, submit it"),
-            ("s  a", "scope (turn, session, HEAD), next agent"),
+            ("a", "next agent"),
         ],
     ),
     (
@@ -471,6 +501,7 @@ fn help(buf: &mut Buffer, area: Rect, app: &App) {
 impl App {
     pub fn focus(&self) -> Focus {
         match self.view {
+            View::Files => self.files.focus,
             View::Changes => self.changes.focus,
             View::History => Focus::Body,
         }

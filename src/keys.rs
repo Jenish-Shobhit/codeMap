@@ -1,13 +1,15 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
-use crate::app::{App, Focus, InputKind, Outcome, View};
+use crate::app::{App, Focus, Input, InputKind, Location, Outcome, View};
+use crate::open::Opener;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
     None,
     Redraw,
     Quit,
-    Edit(std::path::PathBuf, u32),
+    Edit(Location),
+    Open(Opener, Location),
     Copy(String),
     Pin(&'static str),
 }
@@ -45,42 +47,59 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
                 app.changes.anchor = None;
                 return Action::Redraw;
             }
+            if app.view == View::Files && app.files.focus == Focus::Body {
+                app.files.focus = Focus::Rail;
+                return Action::Redraw;
+            }
             return quit(app);
         }
         KeyCode::Char('?') => {
             app.show_help = true;
             return Action::Redraw;
         }
-        KeyCode::Char('1') => {
-            app.view = View::Changes;
-            return Action::Redraw;
-        }
-        KeyCode::Char('2') => {
-            app.view = View::History;
-            if app.history.detail.is_none() && !app.history.commits.is_empty() {
+        KeyCode::Char(c @ '1'..='9') => {
+            let Some(&view) = app.view.tabs().get(c as usize - '1' as usize) else {
+                return Action::None;
+            };
+            app.view = view;
+            if view == View::History
+                && app.history.detail.is_none()
+                && !app.history.commits.is_empty()
+            {
                 app.history_move(0);
             }
             return Action::Redraw;
         }
-        KeyCode::Char('e') if !ctrl => {
+        KeyCode::Char('e') if !ctrl => return edit(app),
+        KeyCode::Char('E') => return open(app, Opener::VsCode),
+        KeyCode::Char('b') if !ctrl => return open(app, Opener::Browser),
+        KeyCode::Char('B') => return open(app, Opener::GitHub),
+        KeyCode::Char('y') if !ctrl => {
             return match app.location() {
-                Some((path, line)) => Action::Edit(app.root.join(path), line),
+                Some(Location {
+                    path,
+                    line: Some(line),
+                    ..
+                }) => Action::Copy(format!("{path}:{line}")),
+                Some(Location { path, .. }) => Action::Copy(path),
                 None => Action::None,
             };
         }
-        KeyCode::Char('y') if !ctrl => {
-            return match app.location() {
-                Some((path, line)) => Action::Copy(format!("{path}:{line}")),
-                None => Action::None,
-            };
+        KeyCode::Char('/') if app.view == View::Files => {
+            app.start_filter();
+            app.input = Some(Input {
+                kind: InputKind::Filter,
+                text: String::new(),
+            });
+            return Action::Redraw;
         }
         KeyCode::Char('p') if !ctrl => return Action::Pin("split"),
         KeyCode::Char('T') => return Action::Pin("tab"),
-        KeyCode::Char('s') if !ctrl && app.view == View::Changes => {
+        KeyCode::Char('s') if !ctrl && app.view != View::History => {
             app.cycle_scope();
             return Action::Redraw;
         }
-        KeyCode::Char('a') if !ctrl && app.view == View::Changes => {
+        KeyCode::Char('a') if !ctrl && app.view != View::History => {
             app.next_agent();
             return Action::Redraw;
         }
@@ -91,6 +110,7 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
         _ => {}
     }
     let r = match app.view {
+        View::Files => files_key(app, key),
         View::Changes => changes_key(app, key),
         View::History => history_key(app, key),
     };
@@ -106,11 +126,24 @@ fn quit(app: &mut App) -> Action {
     Action::Quit
 }
 
-fn toggle_focus(app: &mut App) {
-    if app.view != View::Changes {
-        return;
+fn edit(app: &App) -> Action {
+    app.location().map(Action::Edit).unwrap_or(Action::None)
+}
+
+fn open(app: &App, opener: Opener) -> Action {
+    match app.location() {
+        Some(location) => Action::Open(opener, location),
+        None => Action::None,
     }
-    app.changes.focus = match app.changes.focus {
+}
+
+fn toggle_focus(app: &mut App) {
+    let focus = match app.view {
+        View::Files => &mut app.files.focus,
+        View::Changes => &mut app.changes.focus,
+        View::History => return,
+    };
+    *focus = match *focus {
         Focus::Body => Focus::Rail,
         Focus::Rail => Focus::Body,
     };
@@ -120,21 +153,38 @@ fn input_key(app: &mut App, key: KeyEvent) -> Action {
     let Some(input) = app.input.as_mut() else {
         return Action::None;
     };
+    let filtering = input.kind == InputKind::Filter;
     match key.code {
-        KeyCode::Esc => app.input = None,
-        KeyCode::Enter => {
-            let InputKind::Comment {
+        KeyCode::Esc => {
+            app.input = None;
+            if filtering {
+                app.finish_filter(false);
+            }
+        }
+        KeyCode::Enter => match input.kind.clone() {
+            InputKind::Filter => {
+                app.input = None;
+                app.finish_filter(true);
+            }
+            InputKind::Comment {
                 path,
                 start,
                 end,
                 hunk,
-            } = input.kind.clone();
-            let text = input.text.clone();
-            app.input = None;
-            app.add_comment(path, start, end, hunk, text);
-        }
+            } => {
+                let text = input.text.clone();
+                app.input = None;
+                app.add_comment(path, start, end, hunk, text);
+            }
+        },
+        KeyCode::Up if filtering => app.files_move(-1),
+        KeyCode::Down if filtering => app.files_move(1),
         KeyCode::Backspace => {
             input.text.pop();
+            let text = input.text.clone();
+            if filtering {
+                app.update_filter(&text);
+            }
         }
         KeyCode::Char(c) => {
             if key.modifiers.contains(KeyModifiers::CONTROL) {
@@ -144,6 +194,52 @@ fn input_key(app: &mut App, key: KeyEvent) -> Action {
             } else {
                 input.text.push(c);
             }
+            let text = input.text.clone();
+            if filtering {
+                app.update_filter(&text);
+            }
+        }
+        _ => return Action::None,
+    }
+    Action::Redraw
+}
+
+fn files_key(app: &mut App, key: KeyEvent) -> Action {
+    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    if app.files.focus == Focus::Body {
+        match key.code {
+            KeyCode::Char('d') if ctrl => app.preview_scroll_by(15),
+            KeyCode::Char('u') if ctrl => app.preview_scroll_by(-15),
+            KeyCode::Up | KeyCode::Char('k') => app.preview_scroll_by(-1),
+            KeyCode::Down | KeyCode::Char('j') => app.preview_scroll_by(1),
+            KeyCode::PageDown | KeyCode::Char(' ') => app.preview_scroll_by(30),
+            KeyCode::PageUp => app.preview_scroll_by(-30),
+            KeyCode::Char('g') | KeyCode::Home => app.files.preview_scroll = 0,
+            KeyCode::Char('G') | KeyCode::End => app.preview_scroll_by(i32::MAX / 2),
+            KeyCode::Left | KeyCode::Char('h') | KeyCode::Backspace => {
+                app.files.focus = Focus::Rail
+            }
+            KeyCode::Enter => return edit(app),
+            _ => return Action::None,
+        }
+        return Action::Redraw;
+    }
+    match key.code {
+        KeyCode::Char('d') if ctrl => app.files_move(15),
+        KeyCode::Char('u') if ctrl => app.files_move(-15),
+        KeyCode::Up | KeyCode::Char('k') => app.files_move(-1),
+        KeyCode::Down | KeyCode::Char('j') => app.files_move(1),
+        KeyCode::PageDown => app.files_move(30),
+        KeyCode::PageUp => app.files_move(-30),
+        KeyCode::Char('g') | KeyCode::Home => app.files_move(-(i32::MAX / 2)),
+        KeyCode::Char('G') | KeyCode::End => app.files_move(i32::MAX / 2),
+        KeyCode::Right | KeyCode::Char('l') => app.files_right(),
+        KeyCode::Left | KeyCode::Char('h') => app.files_left(),
+        KeyCode::Enter => {
+            if app.selected_file_row().is_some_and(|r| !r.dir) {
+                return edit(app);
+            }
+            app.files_toggle();
         }
         _ => return Action::None,
     }
