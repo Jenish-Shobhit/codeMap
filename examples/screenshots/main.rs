@@ -17,6 +17,8 @@ use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier};
 use serde_json::{json, Value};
 
+const FILES: (u16, u16) = (140, 40);
+const CUSTOM: (u16, u16) = (140, 34);
 const CHANGES: (u16, u16) = (150, 46);
 const HISTORY: (u16, u16) = (128, 40);
 const NOW: i64 = 1_790_027_160;
@@ -45,7 +47,7 @@ fn main() {
     codemap::util::freeze_time(NOW);
     let mut app = App::new(Options {
         path: None,
-        view: View::Changes,
+        view: View::Files,
         context: Some(PluginContext {
             workspace_label: Some("paneMorph".into()),
             tab_label: Some("selector-fix".into()),
@@ -63,6 +65,11 @@ fn main() {
 
     let mut shots: Vec<(&str, &str, Buffer)> = Vec::new();
 
+    frame(&mut app, FILES);
+    app.select_path("panemorph/actions/open_selector.py");
+    shots.push(("files", "Files", frame(&mut app, FILES)));
+
+    app.view = View::Changes;
     frame(&mut app, CHANGES);
     key(&mut app, KeyCode::Char('}'));
     key(&mut app, KeyCode::Char(' '));
@@ -91,6 +98,31 @@ fn main() {
     key(&mut app, KeyCode::Char('j'));
     key(&mut app, KeyCode::Char('j'));
     shots.push(("history", "History", frame(&mut app, HISTORY)));
+
+    demo::add_customisations(&repo.root, &home);
+    let mut custom = App::new(Options {
+        path: Some(repo.root.clone()),
+        view: View::Custom,
+        context: None,
+        client: None,
+        store: Store::new(base.join("custom-state")),
+        theme: dracula(),
+    });
+    custom.custom.roots = Some(codemap::custom::Roots {
+        repo: repo.root.clone(),
+        home: home.clone(),
+        config: home.join(".config"),
+    });
+    custom.load_blocking();
+    frame(&mut custom, CUSTOM);
+    for _ in 0..3 {
+        key(&mut custom, KeyCode::Char('j'));
+    }
+    shots.push((
+        "customisations",
+        "Customisations",
+        frame(&mut custom, CUSTOM),
+    ));
 
     let theme = app.theme;
     for (name, view, buf) in &shots {

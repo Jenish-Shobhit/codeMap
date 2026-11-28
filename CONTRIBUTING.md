@@ -49,7 +49,7 @@ every other job passed; it is the check `main` requires.
 
 | File | What it covers |
 | --- | --- |
-| `tests/views.rs` | golden frames of both views and their states, colours and keys |
+| `tests/views.rs` | golden frames of every view and their states, colours and keys |
 | `tests/git_store.rs`, `tests/hook.rs` | turn diffs from checkpoints, the side store writing nothing into the repository, the graph, worktrees, the hook |
 | `tests/manifest.rs` | `herdr-plugin.toml` against herdr 0.9.0's link rules |
 | `tests/pty.rs` | the real binary on a pseudo-terminal: keys, Esc, first-paint time |

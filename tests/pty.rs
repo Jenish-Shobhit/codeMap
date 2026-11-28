@@ -89,6 +89,30 @@ fn keys_first_paint_and_escape() {
 }
 
 #[test]
+fn files_popup_finds_a_file_and_previews_it() {
+    let pm = panemorph_repo();
+    let state = pm.state.path().display().to_string();
+    let root = pm.root.display().to_string();
+    let mut p = spawn(
+        &[&root, "--view", "files"],
+        &[("CODEMAP_STATE_DIR", &state)],
+        150,
+        44,
+    );
+    p.wait_for("files · 11", 0, Duration::from_secs(5))
+        .expect("the tree");
+    press(&mut p, b"/", "pick");
+    press(&mut p, b"topology", "matches");
+    press(&mut p, b"\r", "files · 11");
+    press(&mut p, b"h", "10 files");
+    p.send(b"q");
+    assert!(p
+        .wait_exit(Duration::from_secs(5))
+        .expect("q quits")
+        .success());
+}
+
+#[test]
 fn q_quits_and_ctrl_c_quits() {
     let t = TempDir::new("pty-small");
     write(t.path(), "a.py", "def f():\n    return 1\n");

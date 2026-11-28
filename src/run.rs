@@ -7,9 +7,10 @@ use crossterm::{cursor, execute};
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 
-use crate::app::{App, Options};
+use crate::app::{App, Location, Options};
 use crate::herdr::{self, PaneOpen};
 use crate::keys::{self, Action};
+use crate::open::{self, Opener};
 
 pub struct Trace {
     pub enabled: bool,
@@ -75,11 +76,31 @@ pub fn run(opts: Options, trace: Trace) -> io::Result<i32> {
                 Action::None => {}
                 Action::Redraw => dirty = true,
                 Action::Quit => break,
-                Action::Edit(path, line) => {
-                    restore();
-                    open_editor(&path, line);
-                    enter()?;
-                    terminal.clear()?;
+                Action::Edit(at) => {
+                    let path = app.root.join(&at.path);
+                    match editor_pane(&app) {
+                        Some((client, pane)) => {
+                            match open::edit_in_split(&client, &pane, &app.root, &path, at.line) {
+                                Ok(()) => break,
+                                Err(e) => app.message = Some(e),
+                            }
+                        }
+                        None => {
+                            restore();
+                            if let Some(mut cmd) = open::editor_command(&path, at.line) {
+                                let _ = cmd.status();
+                            }
+                            enter()?;
+                            terminal.clear()?;
+                        }
+                    }
+                    dirty = true;
+                }
+                Action::Open(opener, at) => {
+                    app.message = Some(match open_outside(&app, opener, &at) {
+                        Ok(done) => done,
+                        Err(e) => e,
+                    });
                     dirty = true;
                 }
                 Action::Copy(text) => {
@@ -220,34 +241,26 @@ fn pin(app: &App, placement: &'static str) -> Result<(), String> {
         .map_err(|e| format!("could not open a {placement}: {e}"))
 }
 
-fn open_editor(path: &std::path::Path, line: u32) {
-    let editor = std::env::var("VISUAL")
-        .or_else(|_| std::env::var("EDITOR"))
-        .unwrap_or_else(|_| "vi".to_string());
-    let mut parts = editor.split_whitespace();
-    let Some(prog) = parts.next() else { return };
-    let mut cmd = std::process::Command::new(prog);
-    cmd.args(parts);
-    let name = std::path::Path::new(prog)
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    let p = path.display().to_string();
-    match name.as_str() {
-        "code" | "cursor" | "zed" | "subl" => {
-            if name == "code" || name == "cursor" {
-                cmd.arg("-g");
-            }
-            cmd.arg(format!("{p}:{line}"));
-        }
-        "hx" | "helix" => {
-            cmd.arg(format!("{p}:{line}"));
-        }
-        _ => {
-            cmd.arg(format!("+{line}")).arg(&p);
+fn editor_pane(app: &App) -> Option<(herdr::Client, String)> {
+    if app.pinned {
+        return None;
+    }
+    Some((app.client.clone()?, app.target_pane()?))
+}
+
+fn open_outside(app: &App, opener: Opener, at: &Location) -> Result<String, String> {
+    let path = app.root.join(&at.path);
+    match opener {
+        Opener::VsCode => open::vscode(&path, at.line),
+        Opener::Browser => open::browser(&path),
+        Opener::GitHub => {
+            let repo = app.repo.as_ref().ok_or("not a git repository")?;
+            let inside = path
+                .strip_prefix(&app.root)
+                .map_err(|_| "this file is not in the repository")?;
+            open::github(repo, &inside.to_string_lossy(), at.dir, at.line)
         }
     }
-    let _ = cmd.status();
 }
 
 fn copy(text: &str) -> bool {
