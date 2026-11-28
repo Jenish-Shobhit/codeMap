@@ -6,20 +6,24 @@ use crate::open;
 #[derive(Debug)]
 pub struct FileHistory {
     pub path: String,
+    pub renamed_in_the_tree: Option<String>,
     pub back: View,
     pub log: HistoryState,
     pub paths: Vec<Vec<String>>,
+    pub copied: Vec<bool>,
     pub loaded: bool,
     pub ask: u64,
 }
 
 impl FileHistory {
-    fn new(path: String, back: View, ask: u64) -> Self {
+    fn new(file: HistoryFile, back: View, ask: u64) -> Self {
         FileHistory {
-            path,
+            path: file.path,
+            renamed_in_the_tree: file.was,
             back,
             log: HistoryState::default(),
             paths: Vec::new(),
+            copied: Vec::new(),
             loaded: false,
             ask,
         }
@@ -27,6 +31,10 @@ impl FileHistory {
 
     pub fn renamed_from(&self, commit: usize) -> Option<&str> {
         graph::renamed_from(self.paths.get(commit)?)
+    }
+
+    pub fn copied_from(&self, commit: usize) -> bool {
+        self.copied.get(commit).copied().unwrap_or(false)
     }
 
     fn paths_at(&self, sha: &str) -> Vec<String> {
@@ -39,11 +47,41 @@ impl FileHistory {
     }
 }
 
+pub struct HistoryFile {
+    pub path: String,
+    pub was: Option<String>,
+}
+
+impl HistoryFile {
+    fn named(path: String) -> Self {
+        HistoryFile { path, was: None }
+    }
+
+    fn of(file: &FileDiff) -> Self {
+        HistoryFile {
+            path: file.path.clone(),
+            was: file.old_path.clone(),
+        }
+    }
+}
+
 fn not_a_file(dir: bool) -> Result<(), String> {
     if dir {
         Err("L shows the history of a file · this is a folder".into())
     } else {
         Ok(())
+    }
+}
+
+fn read_file_log(
+    root: &std::path::Path,
+    path: &str,
+    was: Option<&str>,
+) -> Result<Vec<FileCommit>, String> {
+    let log = graph::file_log(root, path, HISTORY_LIMIT).map_err(|e| e.0)?;
+    match was {
+        Some(old) if log.is_empty() => graph::file_log(root, old, HISTORY_LIMIT).map_err(|e| e.0),
+        _ => Ok(log),
     }
 }
 
@@ -82,7 +120,7 @@ impl App {
         shown.commits.get(shown.sel)
     }
 
-    pub fn file_for_history(&self) -> Result<String, String> {
+    pub fn file_for_history(&self) -> Result<HistoryFile, String> {
         let repo = self
             .repo
             .as_ref()
@@ -92,17 +130,21 @@ impl App {
             View::Files => {
                 let row = self.selected_file_row().ok_or_else(nothing)?;
                 not_a_file(row.dir)?;
-                Ok(row.path)
+                let was = self.file_diff(&row.path).and_then(|d| d.old_path.clone());
+                Ok(HistoryFile {
+                    path: row.path,
+                    was,
+                })
             }
             View::Status => self
                 .status
                 .selected()
-                .map(|file| file.path.clone())
+                .map(HistoryFile::of)
                 .ok_or_else(nothing),
             View::Changes => self
                 .diffs
                 .get(self.changes.file)
-                .map(|file| file.path.clone())
+                .map(HistoryFile::of)
                 .ok_or_else(nothing),
             View::Custom => {
                 let item = self.custom.selected().ok_or_else(nothing)?;
@@ -111,15 +153,15 @@ impl App {
                     .path
                     .strip_prefix(&repo.root)
                     .map_err(|_| "this file is not in the repository · no history to show")?;
-                Ok(inside.to_string_lossy().into_owned())
+                Ok(HistoryFile::named(inside.to_string_lossy().into_owned()))
             }
             View::History | View::Branches | View::Worktrees => Err(nothing()),
         }
     }
 
     pub fn open_file_history(&mut self) {
-        let path = match self.file_for_history() {
-            Ok(path) => path,
+        let file = match self.file_for_history() {
+            Ok(file) => file,
             Err(why) => {
                 self.message = Some(why);
                 return;
@@ -130,7 +172,7 @@ impl App {
         if View::GIT_TABS.contains(&back) {
             self.view = View::History;
         }
-        self.file_history = Some(FileHistory::new(path, back, self.file_history_asks));
+        self.file_history = Some(FileHistory::new(file, back, self.file_history_asks));
         self.request_file_history();
         self.drain_if_sync();
     }
@@ -153,12 +195,16 @@ impl App {
         let (Some(repo), Some(file)) = (self.repo.clone(), self.file_history.as_ref()) else {
             return;
         };
-        let (ask, path) = (file.ask, file.path.clone());
+        let (ask, path, was) = (
+            file.ask,
+            file.path.clone(),
+            file.renamed_in_the_tree.clone(),
+        );
         self.spawn(move |tx| {
             let read = if repo.head.is_none() {
                 Ok(Vec::new())
             } else {
-                graph::file_log(&repo.root, &path, HISTORY_LIMIT).map_err(|e| e.0)
+                read_file_log(&repo.root, &path, was.as_deref())
             };
             let _ = tx.send(Msg::FileHistory { ask, read });
         });
@@ -171,6 +217,7 @@ impl App {
         file.loaded = true;
         match read {
             Ok(touched) => {
+                file.copied = touched.iter().map(|t| t.copied).collect();
                 let (commits, paths) = touched.into_iter().map(|t| (t.commit, t.paths)).unzip();
                 file.log.commits = commits;
                 file.paths = paths;

@@ -161,3 +161,71 @@ fn a_commit_is_on_origin_only_when_a_remote_tracking_branch_holds_it() {
     let head = git(lone.path(), &["rev-parse", "HEAD"]).trim().to_string();
     assert_eq!(branch::on_origin(lone.path(), &head), Ok(false));
 }
+
+fn repo_with_option_in_a_subject() -> (common::TempDir, std::path::PathBuf) {
+    let repo = repo_with(&[("a.txt", "1\n")]);
+    let p = repo.path();
+    let target = p.join("written-by-git.txt");
+    commit_file(
+        p,
+        "a.txt",
+        "2\n",
+        &format!("s\u{1e}--output={}", target.display()),
+    );
+    commit_file(p, "a.txt", "3\n", "plain");
+    (repo, target)
+}
+
+#[test]
+fn a_record_separator_in_a_subject_never_makes_a_commit_that_git_reads_as_an_option() {
+    let (repo, target) = repo_with_option_in_a_subject();
+    let p = repo.path();
+
+    let full = graph::log(p, 100).unwrap();
+    let file = history_of(p, "a.txt");
+    let listed: Vec<&str> = full.iter().map(|c| c.sha.as_str()).collect();
+    assert_eq!(full.len(), 3, "{listed:?}");
+    assert_eq!(file.len(), 3);
+    for sha in full
+        .iter()
+        .map(|c| &c.sha)
+        .chain(file.iter().map(|c| &c.commit.sha))
+    {
+        assert!(
+            sha.len() == 40 && sha.bytes().all(|b| b.is_ascii_hexdigit()),
+            "{sha}"
+        );
+    }
+    let subjects_of_full: Vec<&str> = full.iter().map(|c| c.subject.as_str()).collect();
+    assert_eq!(subjects_of_full, ["plain", "s", "initial"]);
+
+    for c in &full {
+        git::show_commit(p, &c.sha).unwrap();
+    }
+    for c in &file {
+        diff_of(p, c);
+    }
+    assert!(!target.exists(), "git wrote {}", target.display());
+}
+
+#[test]
+fn a_sha_that_looks_like_an_option_is_a_revision_not_an_option() {
+    let repo = repo_with(&[("a.txt", "1\n")]);
+    let p = repo.path();
+    let target = p.join("written-by-git.txt");
+    let option = format!("--output={}", target.display());
+    assert!(git::show_commit(p, &option).is_err());
+    assert!(git::show_commit_paths(p, &option, &["a.txt".to_string()]).is_err());
+    assert!(!target.exists());
+}
+
+#[test]
+fn a_copied_file_is_marked_as_copied() {
+    let repo = repo_with(&[("src.rs", "one\ntwo\nthree\n")]);
+    let p = repo.path();
+    commit_file(p, "copy.rs", "one\ntwo\nthree\n", "feat: copy it");
+    let copied = history_of(p, "copy.rs");
+    assert_eq!(copied[0].paths, ["src.rs", "copy.rs"]);
+    assert!(copied[0].copied);
+    assert!(!history_of(p, "src.rs")[0].copied);
+}

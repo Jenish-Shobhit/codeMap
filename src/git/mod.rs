@@ -403,6 +403,7 @@ pub fn show_commit(root: &Path, sha: &str) -> Result<Vec<FileDiff>, GitError> {
             "--src-prefix=a/",
             "--dst-prefix=b/",
             "--first-parent",
+            "--end-of-options",
             sha,
         ],
     )?;
@@ -416,7 +417,7 @@ pub fn show_commit_paths(
 ) -> Result<Vec<FileDiff>, GitError> {
     let mut args = vec!["--literal-pathspecs", "show", "--format="];
     args.extend(DIFF_FORMAT);
-    args.extend(["--first-parent", sha, "--"]);
+    args.extend(["--first-parent", "--end-of-options", sha, "--"]);
     args.extend(paths.iter().map(String::as_str));
     Ok(diff::parse(&run(root, &args)?))
 }

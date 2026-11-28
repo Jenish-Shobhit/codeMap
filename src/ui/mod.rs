@@ -363,27 +363,36 @@ fn view_hints(app: &App) -> Vec<(&'static str, String)> {
             hints.push(("?", "keys".into()));
             hints
         }
-        View::Files => vec![
-            ("⏎", "open".to_string()),
-            ("e", "editor".into()),
-            ("E", "VS Code".into()),
-            ("b", "browser".into()),
-            ("B", "GitHub".into()),
-            ("L", "history".into()),
-            ("/", "find".into()),
-            ("?", "keys".into()),
-        ],
+        View::Files => {
+            let mut hints = vec![
+                ("⏎", "open".to_string()),
+                ("e", "editor".into()),
+                ("E", "VS Code".into()),
+                ("b", "browser".into()),
+                ("B", "GitHub".into()),
+            ];
+            if app.file_for_history().is_ok() {
+                hints.push(("L", "history".into()));
+            }
+            hints.extend([("/", "find".to_string()), ("?", "keys".into())]);
+            hints
+        }
         View::Status => status::hints(&app.status),
-        View::Changes => vec![
-            ("] [", "hunk".to_string()),
-            ("space", "reviewed".into()),
-            ("v", "select".into()),
-            ("c", "comment".into()),
-            ("P", "send".into()),
-            ("s", "scope".into()),
-            ("L", "history".into()),
-            ("?", "keys".into()),
-        ],
+        View::Changes => {
+            let mut hints = vec![
+                ("] [", "hunk".to_string()),
+                ("space", "reviewed".into()),
+                ("v", "select".into()),
+                ("c", "comment".into()),
+                ("P", "send".into()),
+                ("s", "scope".into()),
+            ];
+            if app.file_for_history().is_ok() {
+                hints.push(("L", "history".into()));
+            }
+            hints.push(("?", "keys".into()));
+            hints
+        }
         View::History => history::hints(app),
         View::Branches => branches::hints(app),
         View::Worktrees => worktrees::hints(app),
@@ -468,7 +477,7 @@ pub const KEYS: &[(&str, &[(&str, &str)])] = &[
             ("e  E", "open in the editor beside the agent, in VS Code"),
             ("b  B", "open the file in the browser, on GitHub"),
             ("y", "copy path:line"),
-            ("L", "history of the selected file, ⎋ back"),
+            ("L", "history of a file in Files, Status, Review"),
             ("s", "what counts as changed: turn, session, HEAD"),
             (
                 "p  T",
@@ -492,6 +501,7 @@ pub const KEYS: &[(&str, &[(&str, &str)])] = &[
             ("1 2 3 4", "project, global, tools, other agents"),
             ("j k  h l", "move through the list, change scope"),
             ("⏎", "open the file in the editor"),
+            ("L", "history of a file inside the repository"),
         ],
     ),
     (

@@ -3,7 +3,7 @@ use ratatui::layout::Rect;
 use ratatui::style::Color;
 
 use super::{bold, put, style, Areas, Line, Rail};
-use crate::app::App;
+use crate::app::{App, HISTORY_LIMIT};
 use crate::git::{FileDiff, FileStatus};
 use crate::history::FileHistory;
 use crate::theme::Theme;
@@ -13,7 +13,12 @@ pub fn file_summary(app: &App) -> Option<String> {
     let file = app.file_history.as_ref()?;
     let mut line = format!("history of {}", file.path);
     if file.loaded && file.log.error.is_none() {
-        let count = util::plural(file.log.commits.len(), "commit", "commits");
+        let shown = file.log.commits.len();
+        let count = if shown >= HISTORY_LIMIT {
+            format!("{shown}+ commits")
+        } else {
+            util::plural(shown, "commit", "commits")
+        };
         line.push_str(&format!(" · {count}"));
     }
     Some(line)
@@ -335,7 +340,12 @@ fn file_rail(buf: &mut Buffer, area: Rect, app: &mut App) {
             line = line.push(format!("  {}", labels.join("  ")), style(t.branch, bg));
         }
         if let Some(from) = file.renamed_from(i) {
-            line = line.push(format!("  renamed from {from}"), style(t.renamed, bg));
+            let how = if file.copied_from(i) {
+                "copied"
+            } else {
+                "renamed"
+            };
+            line = line.push(format!("  {how} from {from}"), style(t.renamed, bg));
         }
         r.line(line);
     }

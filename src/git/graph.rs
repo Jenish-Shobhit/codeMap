@@ -55,6 +55,10 @@ pub fn parse_log(out: &str) -> Vec<Commit> {
     out.split(RECORD).filter_map(parse_commit).collect()
 }
 
+fn is_object_id(sha: &str) -> bool {
+    matches!(sha.len(), 40 | 64) && sha.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
 fn parse_commit(rec: &str) -> Option<Commit> {
     let rec = rec.trim_start_matches('\n');
     if rec.trim().is_empty() {
@@ -62,7 +66,7 @@ fn parse_commit(rec: &str) -> Option<Commit> {
     }
     let mut f = rec.split(FIELD);
     let sha = f.next()?.trim().to_string();
-    if sha.len() < 7 {
+    if !is_object_id(&sha) {
         return None;
     }
     let parents = f
@@ -96,6 +100,7 @@ fn parse_commit(rec: &str) -> Option<Commit> {
 pub struct FileCommit {
     pub commit: Commit,
     pub paths: Vec<String>,
+    pub copied: bool,
 }
 
 pub fn renamed_from(paths: &[String]) -> Option<&str> {
@@ -133,24 +138,30 @@ pub fn parse_file_log(out: &str, path: &str) -> Vec<FileCommit> {
         let Some(commit) = parse_commit(head) else {
             continue;
         };
-        let mut paths = changed_paths(changes.strip_prefix('\n').unwrap_or(changes));
+        let (mut paths, copied) = changed_paths(changes.strip_prefix('\n').unwrap_or(changes));
         match paths.first() {
             Some(older_name) => known_as = older_name.clone(),
             None => paths.push(known_as.clone()),
         }
-        commits.push(FileCommit { commit, paths });
+        commits.push(FileCommit {
+            commit,
+            paths,
+            copied,
+        });
     }
     commits
 }
 
-fn changed_paths(name_status: &str) -> Vec<String> {
+fn changed_paths(name_status: &str) -> (Vec<String>, bool) {
     let mut fields = name_status.split('\0').filter(|f| !f.is_empty());
     let mut paths = Vec::new();
+    let mut copied = false;
     while let Some(status) = fields.next() {
+        copied |= status.starts_with('C');
         let named = if status.starts_with(['R', 'C']) { 2 } else { 1 };
         paths.extend(fields.by_ref().take(named).map(str::to_string));
     }
-    paths
+    (paths, copied)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

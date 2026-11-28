@@ -4922,7 +4922,7 @@ fn the_keys_list_only_this_popup_and_scroll_when_they_do_not_fit() {
     let t = text(&mut files);
     for needle in [
         "every popup",
-        "L             history of the selected file, ⎋ back",
+        "L             history of a file in Files, Status, Review",
         "/             find a file by name",
     ] {
         assert!(t.contains(needle), "missing {needle:?}\n{t}");
@@ -4970,4 +4970,140 @@ fn the_keys_list_only_this_popup_and_scroll_when_they_do_not_fit() {
     assert_eq!(key(&mut git_popup, KeyCode::Esc), Action::Redraw);
     assert!(!git_popup.show_help && git_popup.help_scroll == 0);
     assert_eq!(git_popup.view, View::Status);
+}
+
+#[test]
+fn a_file_commit_diff_for_an_earlier_l_is_dropped() {
+    let (repo, state) = file_history_repo();
+    let mut app = app_at(repo.path(), &state, View::Status);
+    select(&mut app, "src/main.rs", false);
+    key(&mut app, KeyCode::Char('L'));
+    let ask = app.file_history.as_ref().unwrap().ask;
+    let before = app.shown_history().detail.clone();
+    app.file_history.as_mut().unwrap().log.loading_detail = true;
+    app.apply(codemap::app::Msg::FileCommitDiff {
+        ask: ask - 1,
+        sha: "f".repeat(40),
+        read: Ok(Vec::new()),
+    });
+    assert_eq!(app.shown_history().detail, before);
+    assert!(app.shown_history().loading_detail);
+    app.apply(codemap::app::Msg::FileCommitDiff {
+        ask,
+        sha: "f".repeat(40),
+        read: Ok(Vec::new()),
+    });
+    assert_eq!(
+        app.shown_history().detail,
+        Some(("f".repeat(40), Vec::new()))
+    );
+    assert!(!app.shown_history().loading_detail);
+}
+
+#[test]
+fn file_history_and_its_help_survive_small_terminals() {
+    let (repo, state) = file_history_repo();
+    for view in [View::Status, View::Files, View::Changes] {
+        for (diff, help) in [(false, false), (true, false), (false, true), (true, true)] {
+            let mut app = app_at(repo.path(), &state, view);
+            match view {
+                View::Status => select(&mut app, "src/main.rs", false),
+                View::Files => app.select_path("src/main.rs"),
+                _ => {
+                    key(&mut app, KeyCode::Char('}'));
+                }
+            }
+            key(&mut app, KeyCode::Char('L'));
+            key(&mut app, KeyCode::Char('j'));
+            if diff {
+                key(&mut app, KeyCode::Enter);
+            }
+            if help {
+                key(&mut app, KeyCode::Char('?'));
+                for _ in 0..5 {
+                    key(&mut app, KeyCode::Char('j'));
+                }
+            }
+            for w in 0..=45u16 {
+                for h in 0..=14u16 {
+                    let _ = draw(&mut app, w, h);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn the_history_of_an_uncommitted_rename_is_found_under_the_old_name() {
+    let repo = repo_with(&[("old.rs", "one\ntwo\nthree\n")]);
+    let p = repo.path();
+    commit_file(p, "old.rs", "one\ntwo\nthree\nfour\n", "feat: four");
+    git(p, &["mv", "old.rs", "new.rs"]);
+    let state = TempDir::new("uncommitted-rename");
+    let mut app = app_at(p, &state, View::Status);
+    select(&mut app, "new.rs", true);
+    key(&mut app, KeyCode::Char('L'));
+    let t = text(&mut app);
+    assert!(t.contains("history of new.rs · 2 commits"), "{t}");
+    assert!(t.contains("feat: four"), "{t}");
+    assert!(!t.contains("no commit has touched"), "{t}");
+    assert_eq!(
+        key(&mut app, KeyCode::Char('e')),
+        Action::Edit(at("new.rs", None))
+    );
+}
+
+#[test]
+fn the_header_does_not_claim_an_exact_count_at_the_cap() {
+    let (repo, state) = file_history_repo();
+    let mut app = app_at(repo.path(), &state, View::Status);
+    select(&mut app, "src/main.rs", false);
+    key(&mut app, KeyCode::Char('L'));
+    let ask = app.file_history.as_ref().unwrap().ask;
+    let touched = |n: usize| {
+        (0..n)
+            .map(|i| codemap::git::FileCommit {
+                commit: codemap::git::Commit {
+                    sha: format!("{i:040x}"),
+                    parents: Vec::new(),
+                    refs: Vec::new(),
+                    author: "Test".into(),
+                    time: 0,
+                    subject: format!("commit {i}"),
+                },
+                paths: vec!["src/main.rs".to_string()],
+                copied: false,
+            })
+            .collect::<Vec<_>>()
+    };
+    app.apply(codemap::app::Msg::FileHistory {
+        ask,
+        read: Ok(touched(codemap::app::HISTORY_LIMIT)),
+    });
+    assert!(text(&mut app).contains("history of src/main.rs · 2000+ commits"));
+    app.apply(codemap::app::Msg::FileHistory {
+        ask,
+        read: Ok(touched(1999)),
+    });
+    assert!(text(&mut app).contains("history of src/main.rs · 1999 commits"));
+}
+
+#[test]
+fn the_history_hint_shows_only_where_l_works() {
+    let (repo, state) = file_history_repo();
+    let mut files = app_at(repo.path(), &state, View::Files);
+    files.select_path("src/main.rs");
+    assert!(text(&mut files).contains("B GitHub  L history  / find"));
+    key(&mut files, KeyCode::Char('g'));
+    assert!(files.selected_file_row().unwrap().dir);
+    let t = text(&mut files);
+    assert!(
+        t.contains("B GitHub  / find") && !t.contains("L history"),
+        "{t}"
+    );
+
+    let clean = repo_with(&[("a.txt", "a\n")]);
+    let mut review = app_at(clean.path(), &state, View::Changes);
+    assert!(review.diffs.is_empty());
+    assert!(!text(&mut review).contains("L history"));
 }
