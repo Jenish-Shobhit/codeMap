@@ -278,7 +278,12 @@ fn header(buf: &mut Buffer, r: Rect, app: &App) {
             ctx = ctx.push(line, style(t.muted, t.body));
         }
     } else if app.view == View::Custom {
-        ctx = ctx.push(util::tilde(&app.root), style(t.text, t.body));
+        let folder = app
+            .root
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| util::tilde(&app.root));
+        ctx = ctx.push(folder, style(t.text, t.body));
     } else {
         if let Some(agent) = &app.agent {
             if agent.pane_id.is_some() {

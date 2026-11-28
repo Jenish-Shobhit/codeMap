@@ -1,4 +1,4 @@
-  project   global   tools   other agents          <tmp>/demo
+  project   global   tools   other agents                                                                                                                  demo
 
  herdr                                        1   config.toml                                                                                       tool config
    config.toml            theme gruvbox           <tmp>/home/.config/herdr/config.toml

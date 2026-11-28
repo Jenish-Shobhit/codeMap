@@ -1,4 +1,4 @@
-  project   global   tools   other agents          <tmp>/demo
+  project   global   tools   other agents                                                                                                                  demo
 
  Instructions                                 1   CLAUDE.md                                                                              instructions · project
    CLAUDE.md              instructions            <tmp>/demo/CLAUDE.md

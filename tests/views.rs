@@ -509,6 +509,7 @@ fn customisations_view_lists_what_the_agent_runs_with() {
     for tab in [" project ", " global ", " tools ", " other agents "] {
         assert!(header.contains(tab), "{header}");
     }
+    assert!(header.trim_end().ends_with(" demo"), "{header}");
     for needle in [
         "Instructions",
         "CLAUDE.md",
