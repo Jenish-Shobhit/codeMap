@@ -1,0 +1,50 @@
+  files                                                                                                         ○ paneMorph · selector-fix   main   turn 3 · 2m
+
+ files · 11                                       panemorph/__init__.py   79 B · 3 lines   M +1 −2
+ ▾ panemorph/                                 ●      1  """paneMorph: live pane and tab workflows for Herdr."""
+   ▾ actions/                                 ●      2
+       __init__.py                                   3+ __version__ = "0.1.2"
+       extract.py
+       open_selector.py                       M
+       selector.py                            M
+     __init__.py                              M
+     api.py
+     doctor.py
+     model.py
+     service.py
+     topology.py
+   README.md
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ marks  last turn · done 9:44 PM
+ tab preview                                      ⏎ open  e editor  E VS Code  b browser  B GitHub  / find  ? keys

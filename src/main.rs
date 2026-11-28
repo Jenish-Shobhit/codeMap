@@ -7,16 +7,17 @@ use codemap::run::{self, Trace};
 use codemap::store::Store;
 use codemap::theme::Theme;
 
-const HELP: &str = "codeMap: review what your agents changed, and the history around it.
+const HELP: &str = "codeMap: your agents' files, what they changed, and the history around it.
 
 usage:
-  codemap [PATH] [--view changes|history] [--trace-startup]
+  codemap [PATH] [--view files|changes|history] [--trace-startup]
   codemap open [--view VIEW] [--placement popup|split|tab]   (herdr action)
   codemap ui [--view VIEW]                                   (herdr pane)
+  codemap edit                                               (herdr pane: the editor)
   codemap hook                                               (herdr event hook)
   codemap doctor
 
-keys: 1 changes · 2 history · ? all keys · q or esc closes
+keys: ? all keys · q or esc closes
 ";
 
 struct Args {
@@ -49,7 +50,9 @@ fn parse_args() -> Result<Args, String> {
             }
             "--placement" => args.placement = it.next().ok_or("--placement needs a value")?,
             "--trace-startup" => args.trace = true,
-            "open" | "ui" | "hook" | "doctor" if args.cmd.is_none() && args.path.is_none() => {
+            "open" | "ui" | "edit" | "hook" | "doctor"
+                if args.cmd.is_none() && args.path.is_none() =>
+            {
                 args.cmd = Some(a)
             }
             s if s.starts_with('-') => return Err(format!("unknown option {s}")),
@@ -79,6 +82,7 @@ fn main() {
     let code = match args.cmd.as_deref() {
         Some("hook") => codemap::hook::run(),
         Some("open") => open(&args),
+        Some("edit") => edit(),
         Some("doctor") => doctor(),
         _ => ui(args, t0),
     };
@@ -171,6 +175,28 @@ fn open(args: &Args) -> i32 {
     }
 }
 
+fn edit() -> i32 {
+    use std::os::unix::process::CommandExt;
+
+    let Ok(path) = std::env::var(codemap::open::EDIT_PATH_ENV) else {
+        eprintln!(
+            "codemap edit: {} is not set (herdr runs this from the popup)",
+            codemap::open::EDIT_PATH_ENV
+        );
+        return 2;
+    };
+    let line = std::env::var(codemap::open::EDIT_LINE_ENV)
+        .ok()
+        .and_then(|l| l.parse().ok());
+    let Some(mut cmd) = codemap::open::editor_command(std::path::Path::new(&path), line) else {
+        eprintln!("codemap edit: no editor to run");
+        return 1;
+    };
+    let failure = cmd.exec();
+    eprintln!("codemap edit: {failure}");
+    1
+}
+
 fn doctor() -> i32 {
     let store = Store::from_env();
     println!("codemap {}", env!("CARGO_PKG_VERSION"));
@@ -195,6 +221,7 @@ fn doctor() -> i32 {
     );
     let t = Theme::load();
     println!("theme:          {}", t.name);
+    println!("editor:         {}", codemap::open::editor());
     println!("state dir:      {}", store.root.display());
     let cwd = std::env::current_dir().unwrap_or_default();
     match codemap::git::discover(&cwd) {

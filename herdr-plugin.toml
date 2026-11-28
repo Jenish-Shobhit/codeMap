@@ -20,6 +20,12 @@ contexts = ["global", "workspace", "tab", "pane"]
 command = ["target/release/codemap", "open"]
 
 [[actions]]
+id = "files"
+title = "codeMap: files of the focused agent's worktree"
+contexts = ["global", "workspace", "tab", "pane"]
+command = ["target/release/codemap", "open", "--view", "files"]
+
+[[actions]]
 id = "changes"
 title = "codeMap: review the focused agent's last turn"
 contexts = ["global", "workspace", "tab", "pane"]
@@ -45,3 +51,11 @@ placement = "popup"
 width = "94%"
 height = "92%"
 command = ["target/release/codemap", "ui"]
+
+# The editor a popup opens beside the agent's pane. `codemap edit` replaces
+# itself with $VISUAL, $EDITOR or neovim on the file the popup names.
+[[panes]]
+id = "edit"
+title = "codeMap editor"
+placement = "split"
+command = ["target/release/codemap", "edit"]

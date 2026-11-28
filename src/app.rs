@@ -4,6 +4,7 @@ use std::time::Instant;
 
 use serde_json::Value;
 
+use crate::files::{FilesState, MAX_FILES};
 use crate::git::{self, graph, Commit, FileDiff, GraphRow, LineKind, RepoInfo};
 use crate::herdr::{Client, PluginContext};
 use crate::store::{Comment, PaneState, Reviews, Store};
@@ -14,15 +15,17 @@ pub const HISTORY_LIMIT: usize = 2_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum View {
+    Files,
     Changes,
     History,
 }
 
 impl View {
-    pub const ALL: [View; 2] = [View::Changes, View::History];
+    pub const ALL: [View; 3] = [View::Files, View::Changes, View::History];
 
     pub fn name(self) -> &'static str {
         match self {
+            View::Files => "files",
             View::Changes => "changes",
             View::History => "history",
         }
@@ -30,9 +33,17 @@ impl View {
 
     pub fn parse(s: &str) -> Option<View> {
         match s.to_ascii_lowercase().as_str() {
-            "changes" | "review" | "1" => Some(View::Changes),
-            "history" | "graph" | "2" => Some(View::History),
+            "files" => Some(View::Files),
+            "changes" | "review" => Some(View::Changes),
+            "history" | "graph" => Some(View::History),
             _ => None,
+        }
+    }
+
+    pub fn tabs(self) -> &'static [View] {
+        match self {
+            View::Files => &[View::Files],
+            View::Changes | View::History => &[View::Changes, View::History],
         }
     }
 }
@@ -131,6 +142,10 @@ pub struct RepoLoad {
 
 pub enum Msg {
     Repo(Box<RepoLoad>),
+    Files {
+        files: Vec<String>,
+        truncated: bool,
+    },
     Changes(Box<ChangeSet>),
     History {
         commits: Result<Vec<Commit>, String>,
@@ -182,6 +197,7 @@ pub struct HistoryState {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InputKind {
+    Filter,
     Comment {
         path: String,
         start: u32,
@@ -199,7 +215,13 @@ pub struct Input {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Outcome {
     Quit,
-    Edit { path: PathBuf, line: u32 },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Location {
+    pub path: String,
+    pub line: Option<u32>,
+    pub dir: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -227,6 +249,7 @@ pub struct App {
     pub diffs_loaded: bool,
     pub diff_error: Option<String>,
     pub agents: Vec<AgentRow>,
+    pub files: FilesState,
     pub changes: ChangesState,
     pub history: HistoryState,
     pub history_loaded: bool,
@@ -285,6 +308,10 @@ impl App {
             diffs_loaded: false,
             diff_error: None,
             agents: Vec::new(),
+            files: FilesState {
+                focus: Focus::Rail,
+                ..Default::default()
+            },
             changes: ChangesState::default(),
             history: HistoryState::default(),
             history_loaded: false,
@@ -389,8 +416,15 @@ impl App {
                 }
                 self.reviews = self.store.load_reviews(&self.repo_key());
                 self.drafts = self.store.load_drafts(&self.repo_key());
+                self.request_files();
                 self.request_changes();
                 self.request_history();
+            }
+            Msg::Files { files, truncated } => {
+                self.files.tree = crate::files::Tree::new(files);
+                self.files.truncated = truncated;
+                self.files.loaded = true;
+                self.place_files();
             }
             Msg::Changes(set) => {
                 let set = *set;
@@ -417,8 +451,8 @@ impl App {
                         ..Default::default()
                     };
                 }
+                self.place_files();
             }
-
             Msg::History {
                 commits,
                 total,
@@ -445,6 +479,21 @@ impl App {
             }
             Msg::Notice(s) => self.message = Some(s),
         }
+    }
+
+    pub fn request_files(&mut self) {
+        let root = self.root.clone();
+        let tracked = self.repo.is_some();
+        self.spawn(move |tx| {
+            let mut files = if tracked {
+                git::list_files(&root).unwrap_or_default()
+            } else {
+                git::walk_files(&root, MAX_FILES + 1)
+            };
+            let truncated = files.len() > MAX_FILES;
+            files.truncate(MAX_FILES);
+            let _ = tx.send(Msg::Files { files, truncated });
+        });
     }
 
     pub fn request_changes(&mut self) {
@@ -782,14 +831,19 @@ impl App {
         }
     }
 
-    pub fn location(&self) -> Option<(String, u32)> {
+    pub fn location(&self) -> Option<Location> {
         match self.view {
+            View::Files => self.file_location(),
             View::Changes => {
                 let f = self.diffs.get(self.changes.file)?;
                 let (start, _, _) = self
                     .line_range(self.changes.row, self.changes.row)
                     .unwrap_or((1, 1, String::new()));
-                Some((f.path.clone(), start))
+                Some(Location {
+                    path: f.path.clone(),
+                    line: Some(start),
+                    dir: false,
+                })
             }
             View::History => None,
         }
