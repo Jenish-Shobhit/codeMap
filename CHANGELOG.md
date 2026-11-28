@@ -23,12 +23,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   or `--view status`. It lists the staged and the not staged files, untracked
   ones with a `?`, and shows the selected file's diff: the index against
   `HEAD` for a staged file, the working tree against the index for the
-  others. It is read-only: nothing is staged or committed from it yet.
+  others.
+- **Staging, committing and discarding** from Status. `space` stages or
+  unstages the selected file, or in the diff the hunk under the cursor, which
+  `]` and `[` move and a bar marks. `c` opens a commit box with a subject and
+  a body; a commit git refuses keeps the box and the text. `x` restores a
+  file or a hunk from the index, or deletes an untracked file, after a
+  question that only `y` confirms.
 - `E` opens the file in VS Code, `b` in the browser and `B` on GitHub, from
   Files, Customisations, Status and Review.
 
 ### Changed
 
+- codeMap now writes into the repository, from three keys in the Status tab
+  and nowhere else: `space` the index, `c` a commit, `x` the working tree.
+  Opening, reading and reviewing still write nothing.
 - `e` opens the editor in a herdr split beside the agent's pane and closes
   the popup. Outside herdr it still takes over the terminal. With `$VISUAL`
   and `$EDITOR` unset the editor is `nvim` when installed, where it was `vi`.

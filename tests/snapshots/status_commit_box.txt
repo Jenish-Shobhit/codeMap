@@ -1,0 +1,50 @@
+  status   review   history                                                                                                   ○ paneMorph · selector-fix   main
+
+ staged · 1                               b.py   +1 −1    not staged
+ ./                                       @@ top level · 1–1
+ M a.py                 +1 −1                 1− y = 1
+                                              1+ y = 2
+ not staged · 4
+ ./
+ M b.py                 +1 −1
+ M f.txt                +3 −3
+ D gone.py              −1
+ ? notes.md             +3
+
+
+
+
+
+
+
+                                           ╭─ commit to main ───────────────────────────────────────────────────────╮
+                                           │                                                                        │
+                                           │ subject  fix: count from two                                           │
+                                           │                                                                        │
+                                           │ body     One was never right.                                          │
+                                           │                                                                        │
+                                           │          Counting starts at two.█                                      │
+                                           │                                                                        │
+                                           │ 1 file staged                                                          │
+                                           │                                                                        │
+                                           │ ⏎ new line   tab subject   ⌃u clear   ⎋ close, keeps the draft         │
+                                           ╰────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ tab diff

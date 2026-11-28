@@ -1,0 +1,50 @@
+  status   review   history                                                                                                   ○ paneMorph · selector-fix   main
+
+ staged · 0                               f.txt   +3 −3    not staged    hunk 2 of 3
+                                         │@@ line 11 · 12–18
+ not staged · 5                          │   12  line 12
+ ./                                      │   13  line 13
+ M a.py                 +1 −1            │   14  line 14
+ M b.py                 +1 −1            │   15− line 15
+ M f.txt                +3 −3            │   15+ line 15 changed
+ D gone.py              −1               │   16  line 16
+ ? notes.md             +3               │   17  line 17
+                                         │   18  line 18
+                                          @@ line 26 · 27–30
+                                             27  line 27
+                                             28  line 28
+                                             29  line 29
+                                             30− line 30
+                                             30+ line 30 changed
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ tab files                                j k scroll  ] [ hunk  space stage hunk  x discard  c commit  e editor  ? keys

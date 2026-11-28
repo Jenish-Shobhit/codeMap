@@ -52,8 +52,9 @@ every other job passed; it is the check `main` requires.
 | `tests/views.rs` | golden frames of every view and their states, colours and keys |
 | `tests/git_store.rs`, `tests/hook.rs` | turn diffs from checkpoints, the side store writing nothing into the repository, the graph, worktrees, the hook |
 | `tests/git_status.rs` | what Status reads as staged, not staged and untracked, and that reading it leaves `.git` untouched |
+| `tests/git_write.rs` | staging, unstaging and discarding files and single hunks, commits and the ways they fail, each on a temporary repository |
 | `tests/manifest.rs` | `herdr-plugin.toml` against herdr 0.9.0's link rules |
-| `tests/pty.rs` | the real binary on a pseudo-terminal: keys, Esc, first-paint time |
+| `tests/pty.rs` | the real binary on a pseudo-terminal: keys, Esc, first-paint time, staging and committing a file |
 | `tests/no_comments.rs` | no comments anywhere in our Rust or Python code |
 
 ### Snapshot tests

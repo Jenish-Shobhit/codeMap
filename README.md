@@ -43,8 +43,12 @@ without leaving the terminal.
   did, not only what differs from `HEAD`.
 - **Review without leaving the terminal.** Mark hunks reviewed, comment on
   lines, and send the comments to the agent's prompt as one message.
-- **Read-only.** Checkpoints live in codeMap's own state directory. Your
-  repository gets no refs, no stash and no index changes.
+- **Stage and commit what you reviewed.** In the Status tab `space` stages or
+  unstages a file or a single hunk, `c` commits what is staged, and `x`
+  discards a change after asking.
+- **Looking writes nothing.** Checkpoints live in codeMap's own state
+  directory, and opening, reading and reviewing leave your repository as it
+  was. It changes only when you press `space`, `c` or `x` in the Status tab.
 - **Fast.** The frame paints in under a millisecond, before git is read.
 - **Follows herdr's theme**, including all 18 built-in palettes and custom
   colours.
@@ -169,6 +173,10 @@ Inside the popup:
 | `j` `k`, `h` `l`, `⏎` | Customisations | move through the list, change scope, open the file in the editor |
 | `1` `2` `3` | Status, Review, History | Status, Review, History |
 | `j` `k`, `tab`, `⎋` | Status | move through the staged and not staged files, read the selected file's diff, go back to the files |
+| `]` `[` | Status | next or previous hunk of the diff |
+| `space` | Status | stage the selected file, or unstage it; in the diff, the hunk under the cursor |
+| `c` | Status | commit what is staged: type a subject, `tab` to the body, `⏎` commits, `⎋` keeps the draft |
+| `x` | Status | discard the selected file's changes or the hunk under the cursor, or delete an untracked file, after a question only `y` confirms |
 | `j` `k`, `]` `[`, `}` `{` | Review | next or previous line, hunk, file |
 | `space` | Review | mark the hunk reviewed (kept until the hunk changes) |
 | `v`, `c`, `x` | Review | select lines, comment on them, delete a comment |
@@ -241,8 +249,27 @@ staged is in both lists, each time with its own diff. `j` and `k` move through
 both lists, `tab` steps into the selected file's diff and `⎋` comes back. `2`
 and `3` switch to Review and History.
 
-Status is read-only for now: it shows what is staged and what is not, and
-does not stage, unstage, discard or commit anything.
+`space` stages the selected file, or unstages it when it is in the staged
+list. In the diff, `]` and `[` move between hunks, a bar marks the hunk under
+the cursor, and `space` stages or unstages that hunk alone. Where one hunk
+means nothing on its own (an untracked, added, deleted, renamed or binary
+file), `space` takes the whole file.
+
+<img src="docs/assets/commit.svg" width="100%" alt="The commit box over the Status tab: its title says commit to main, with a one-line subject, a two-line body, a line saying two files are staged, and the keys that commit, change field, clear and close.">
+
+`c` opens the commit box for what is staged. Type the subject, press `tab` for
+the body and `⏎` in the subject to commit; your hooks and signing settings
+apply as with any commit. If git refuses, the box shows what git said and
+keeps your text. `⎋` closes the box and keeps the draft until a commit
+succeeds.
+
+`x` discards. It restores the selected file from the index, in the diff it
+takes back the hunk under the cursor, and on an untracked file it deletes the
+file. It always asks first, names what will be lost, and goes ahead only on
+`y`. It leaves staged changes alone: unstage them first.
+
+Status never pushes, pulls, fetches, stashes or amends, and never touches a
+branch other than by the commit you make.
 
 ### Review
 
@@ -343,8 +370,9 @@ per agent are kept.
 
 ## Privacy and safety
 
-**codeMap never writes into your repository.** No refs, no stash, no index
-changes, no objects.
+**Looking never writes into your repository.** Opening a popup, moving
+through it, reading diffs, reviewing and recording turns add no refs, no
+stash, no index changes and no objects.
 
 - Snapshots go to a shadow git directory in the plugin's state directory
   (`…/dev.codemap/repos/<repo>/shadow.git`), with its own objects, index and
@@ -355,9 +383,26 @@ changes, no objects.
 - The "since `HEAD`" diff and the Status tab read a private copy of your
   index.
 - The test suite fingerprints every file under `.git` before and after each
-  operation, and fails on any change.
+  read, and after a walk through the Status tab that opens and cancels the
+  commit box and the discard question, and fails on any change.
 - codeMap makes no network requests. It talks only to the local herdr socket,
   and sends text to an agent only when you press `P` or `S`.
+
+**codeMap changes your repository only when you press one of three keys in
+the Status tab**, and then only for the file or hunk that is selected:
+
+| Key | What it writes |
+| --- | --- |
+| `space` | the index, and the objects git stores for what is staged: it stages or unstages the selected file or hunk |
+| `c` | a commit of what is staged, on the current branch or a detached `HEAD`, with the message you typed. git runs your hooks and signing program as for any commit |
+| `x` | the working tree, after a question that only `y` confirms: it restores the selected file or hunk from the index, or deletes the selected untracked file. What is staged stays as it is, though git rewrites its index file when it restores a whole file. This cannot be undone |
+
+No other key writes, and nothing pushes, pulls, fetches, stashes, amends or
+rebases. Each key runs the git command you would type yourself (`git add`,
+`git restore`, `git apply`, `git commit`), so hooks you have set for those
+commands run as well. While the Status tab is open codeMap asks the terminal
+to mark pasted text; marked text goes into the commit box or nowhere, and is
+never read as key presses.
 
 Reviewed marks and unsent comments are stored next to the checkpoints. Delete
 the state directory to forget them.
@@ -412,7 +457,7 @@ on the `PATH` that herdr sees. Install them, or use a
 Ideas under consideration, not commitments:
 
 - Step through earlier turns, not only the last one and the session.
-- Staging, committing and switching branches from the Git popup.
+- Switching branches, pushing and pulling from the Git popup.
 - Follow the host's light or dark appearance when herdr's `auto_switch` is on.
 
 Suggestions are welcome in [issues](https://github.com/Jenish-Shobhit/codeMap/issues).

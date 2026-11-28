@@ -7,7 +7,7 @@ use super::files::{counts, status_color};
 use super::{bold, put, style, Areas, Line, Rail};
 use crate::app::{App, Focus};
 use crate::git::{FileDiff, FileStatus, Hunk};
-use crate::status::{diff_rows, DiffRow, StatusState};
+use crate::status::{diff_rows, DiffRow, StatusState, Target};
 use crate::theme::Theme;
 use crate::util::{self, parent_dir};
 
@@ -30,7 +30,18 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
         );
         return;
     };
-    heading(file, app.status.selected_is_staged(), &t).draw(buf, body.x, body.y, body.width);
+    let under_cursor = match app.status.target() {
+        Some(Target::Hunk(h)) => Some(h),
+        _ => None,
+    };
+    let mut head = heading(file, app.status.selected_is_staged(), &t);
+    if let Some(h) = under_cursor {
+        head = head.push(
+            format!("    hunk {} of {}", h + 1, file.hunks.len()),
+            style(t.accent, t.body),
+        );
+    }
+    head.draw(buf, body.x, body.y, body.width);
     if file.hunks.is_empty() {
         let color = if file.binary { t.modified } else { t.muted };
         put(
@@ -50,6 +61,10 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
     for (i, row) in rows.iter().enumerate().skip(top).take(room) {
         let at = Rect::new(body.x, body.y + 1 + (i - top) as u16, body.width, 1);
         let cursor = focused && i == top;
+        let (DiffRow::Hunk(h) | DiffRow::Line(h, _)) = *row;
+        if under_cursor == Some(h) && at.x > 0 {
+            put(buf, at.x - 1, at.y, "│", bold(style(t.accent, t.body)), 1);
+        }
         match *row {
             DiffRow::Hunk(h) => hunk_heading(buf, at, &file.hunks[h], &t, cursor),
             DiffRow::Line(h, l) => diff_line(
@@ -64,6 +79,32 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
             ),
         }
     }
+}
+
+pub(super) fn hints(status: &StatusState) -> Vec<(&'static str, String)> {
+    let staged = status.selected_is_staged();
+    let on = match status.target() {
+        Some(Target::Hunk(_)) => " hunk",
+        Some(Target::File) if status.focus == Focus::Body => " file",
+        _ => "",
+    };
+    let stage = if staged { "unstage" } else { "stage" };
+    let mut hints = match status.focus {
+        Focus::Rail => vec![("j k", "file".to_string())],
+        Focus::Body => vec![("j k", "scroll".to_string()), ("] [", "hunk".into())],
+    };
+    if !status.is_empty() {
+        hints.push(("space", format!("{stage}{on}")));
+    }
+    if !status.is_empty() && !staged {
+        hints.push(("x", "discard".into()));
+    }
+    hints.extend([
+        ("c", "commit".to_string()),
+        ("e", "editor".into()),
+        ("?", "keys".into()),
+    ]);
+    hints
 }
 
 fn notice(app: &App) -> Option<(String, Color)> {

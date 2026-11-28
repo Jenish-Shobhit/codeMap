@@ -89,9 +89,10 @@ fn main() {
     key(&mut app, KeyCode::Char('j'));
     key(&mut app, KeyCode::Char('j'));
     key(&mut app, KeyCode::Char('c'));
-    for c in "this loop has no timeout; stop after a few seconds".chars() {
-        key(&mut app, KeyCode::Char(c));
-    }
+    type_text(
+        &mut app,
+        "this loop has no timeout; stop after a few seconds",
+    );
     key(&mut app, KeyCode::Enter);
     shots.push(("changes", "Review", frame(&mut app, CHANGES)));
 
@@ -107,6 +108,18 @@ fn main() {
     frame(&mut status, STATUS);
     key(&mut status, KeyCode::Char('j'));
     shots.push(("status", "Status", frame(&mut status, STATUS)));
+
+    key(&mut status, KeyCode::Char('c'));
+    type_text(&mut status, "fix: let the selector only choose");
+    key(&mut status, KeyCode::Tab);
+    type_text(
+        &mut status,
+        "The selector writes its choice to a result file.",
+    );
+    key(&mut status, KeyCode::Enter);
+    type_text(&mut status, "The action runner moves the pane afterwards.");
+    key(&mut status, KeyCode::Tab);
+    shots.push(("commit", "Status", frame(&mut status, STATUS)));
 
     demo::add_customisations(&repo.root, &home);
     let mut custom = App::new(Options {
@@ -178,6 +191,12 @@ fn frame(app: &mut App, (w, h): (u16, u16)) -> Buffer {
 fn key(app: &mut App, code: KeyCode) {
     keys::handle(app, KeyEvent::new(code, KeyModifiers::NONE));
     app.drain();
+}
+
+fn type_text(app: &mut App, text: &str) {
+    for c in text.chars() {
+        key(app, KeyCode::Char(c));
+    }
 }
 
 fn record_turn(fixtures: &Path, repo: &demo::Repo, base: &Path) -> Store {

@@ -1,0 +1,50 @@
+  status   review   history                                                                                                   ○ paneMorph · selector-fix   main
+
+ staged · 0                               a.py   +1 −1    not staged
+                                          @@ top level · 1–1
+ not staged · 5                               1− x = 1
+ ./                                           1+ x = 2
+ M a.py                 +1 −1
+ M b.py                 +1 −1
+ M f.txt                +3 −3
+ D gone.py              −1
+ ? notes.md             +3
+
+
+
+
+
+
+
+
+
+
+                                           ╭─ discard ──────────────────────────────────────────────────────────────╮
+                                           │                                                                        │
+                                           │ discard 2 changed lines in a.py?                                       │
+                                           │ this cannot be undone                                                  │
+                                           │                                                                        │
+                                           │ y discards · any other key keeps                                       │
+                                           ╰────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ tab diff

@@ -47,4 +47,4 @@
 
 
 
- tab diff                                 j k file  e editor  E VS Code  b browser  B GitHub  y copy  ? keys
+ tab diff                                 j k file  space unstage  c commit  e editor  ? keys

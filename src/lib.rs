@@ -1,4 +1,5 @@
 pub mod app;
+pub mod commit;
 pub mod custom;
 pub mod files;
 pub mod git;

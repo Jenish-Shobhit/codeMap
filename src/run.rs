@@ -1,13 +1,14 @@
 use std::io::{self, Write};
 use std::time::{Duration, Instant};
 
-use crossterm::event::{self, Event};
+use crossterm::event::{self, DisableBracketedPaste, EnableBracketedPaste, Event};
 use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::{cursor, execute};
 use ratatui::backend::CrosstermBackend;
+use ratatui::layout::Rect;
 use ratatui::Terminal;
 
-use crate::app::{App, Location, Options};
+use crate::app::{App, Location, Options, View};
 use crate::herdr::{self, PaneOpen};
 use crate::keys::{self, Action};
 use crate::open::{self, Opener};
@@ -19,7 +20,24 @@ pub struct Trace {
 
 fn restore() {
     let _ = terminal::disable_raw_mode();
-    let _ = execute!(io::stdout(), LeaveAlternateScreen, cursor::Show);
+    let _ = execute!(
+        io::stdout(),
+        DisableBracketedPaste,
+        LeaveAlternateScreen,
+        cursor::Show
+    );
+}
+
+fn pastes_arrive_as_text(wanted: bool, now: &mut bool) -> io::Result<()> {
+    if wanted == *now {
+        return Ok(());
+    }
+    *now = wanted;
+    if wanted {
+        execute!(io::stdout(), EnableBracketedPaste)
+    } else {
+        execute!(io::stdout(), DisableBracketedPaste)
+    }
 }
 
 fn enter() -> io::Result<()> {
@@ -51,8 +69,15 @@ pub fn run(opts: Options, trace: Trace) -> io::Result<i32> {
     let follow_rx = if app.pinned { follow_events() } else { None };
 
     let mut dirty = false;
+    let mut pastes_as_text = false;
     loop {
+        pastes_arrive_as_text(app.view == View::Status, &mut pastes_as_text)?;
         if app.poll() {
+            dirty = true;
+        }
+        if std::mem::take(&mut app.repaint) {
+            let size = terminal.size()?;
+            terminal.resize(Rect::new(0, 0, size.width, size.height))?;
             dirty = true;
         }
         if content_ms.is_none() && !app.is_loading() {
@@ -91,6 +116,7 @@ pub fn run(opts: Options, trace: Trace) -> io::Result<i32> {
                                 let _ = cmd.status();
                             }
                             enter()?;
+                            pastes_as_text = false;
                             terminal.clear()?;
                         }
                     }
@@ -118,6 +144,7 @@ pub fn run(opts: Options, trace: Trace) -> io::Result<i32> {
                     dirty = true;
                 }
             },
+            Event::Paste(text) => dirty |= keys::paste(&mut app, &text) == Action::Redraw,
             Event::Resize(_, _) => dirty = true,
             _ => {}
         }

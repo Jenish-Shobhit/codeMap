@@ -98,6 +98,47 @@ pub fn repo_with(files: &[(&str, &str)]) -> TempDir {
     t
 }
 
+pub fn commits_as_test(repo: &Path) {
+    let hooks = repo.join(".git/hooks");
+    std::fs::create_dir_all(&hooks).unwrap();
+    for (key, value) in [
+        ("user.name", "Test"),
+        ("user.email", "test@example.com"),
+        ("commit.gpgsign", "false"),
+        ("core.hooksPath", hooks.to_str().unwrap()),
+    ] {
+        git(repo, &["config", key, value]);
+    }
+}
+
+pub fn hook(repo: &Path, name: &str, script: &str) {
+    use std::os::unix::fs::PermissionsExt;
+    let path = repo.join(".git/hooks").join(name);
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(&path, script).unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+}
+
+pub fn tree_bytes(repo: &Path) -> BTreeMap<String, Vec<u8>> {
+    let mut files = BTreeMap::new();
+    let mut stack = vec![repo.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir).unwrap().flatten() {
+            let path = entry.path();
+            let meta = std::fs::symlink_metadata(&path).unwrap();
+            if meta.is_dir() {
+                if path != repo.join(".git") {
+                    stack.push(path);
+                }
+            } else {
+                let name = path.strip_prefix(repo).unwrap().display().to_string();
+                files.insert(name, std::fs::read(&path).unwrap_or_default());
+            }
+        }
+    }
+    files
+}
+
 pub fn fingerprint(repo: &Path) -> (BTreeMap<String, (u64, u128, u64)>, String) {
     let mut map = BTreeMap::new();
     let git_dir = repo.join(".git");

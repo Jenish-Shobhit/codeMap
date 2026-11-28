@@ -32,16 +32,22 @@ codeMap runs as your user, with the permissions of the herdr plugin that
 launches it. What it touches:
 
 - It reads the files and git metadata of the repository you open.
-- It runs `git` with a private `GIT_DIR` and index in its plugin state
-  directory (by default `~/.local/state/herdr/plugins/dev.codemap/`). It
-  never writes objects, refs or index entries into your repository.
+- To read, and to record turns, it runs `git` with a private `GIT_DIR` and
+  index in its plugin state directory (by default
+  `~/.local/state/herdr/plugins/dev.codemap/`). Reading and recording never
+  write objects, refs or index entries into your repository.
+- It writes into your repository only from three keys in the Status tab:
+  `space` changes the index, `c` runs `git commit` and with it your hooks and
+  signing program, and `x`, after you confirm with `y`, restores or deletes
+  files in the working tree.
 - It connects to the herdr socket named by `HERDR_SOCKET_PATH` and reads
   herdr's `config.toml` for the theme.
 - It sends text to an agent's pane only when you press `P` or `S` in the
   Changes view.
 
-Problems in those areas are in scope: writes into a repository, command or
-argument injection through file names, branch names or diffs, reading
+Problems in those areas are in scope: a write into a repository without one
+of those keys or beyond the selected file or hunk, command or argument
+injection through file names, branch names, diffs or commit messages, reading
 outside the opened repository, or text reaching an agent without a keypress.
 
 Vulnerabilities in herdr itself belong to

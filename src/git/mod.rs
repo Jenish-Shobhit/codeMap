@@ -1,8 +1,9 @@
 pub mod diff;
 pub mod graph;
+pub mod write;
 
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Command, Output, Stdio};
 
 pub use diff::{DiffLine, FileDiff, FileStatus, Hunk, LineKind};
 pub use graph::{Commit, GraphRow};
@@ -39,6 +40,10 @@ pub fn run_cmd(mut cmd: Command) -> Result<Vec<u8>, GitError> {
         .stderr(Stdio::piped())
         .output()
         .map_err(|e| GitError(format!("git: {e}")))?;
+    stdout_of(output)
+}
+
+fn stdout_of(output: Output) -> Result<Vec<u8>, GitError> {
     if !output.status.success() {
         let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
         return Err(GitError(if err.is_empty() {
@@ -240,6 +245,9 @@ const DIFF_FORMAT: [&str; 7] = [
     "--dst-prefix=b/",
 ];
 
+const STAGED_DIFF: &[&str] = &["--cached"];
+const UNSTAGED_DIFF: &[&str] = &["--ours"];
+
 struct IndexCopy<'a> {
     info: &'a RepoInfo,
     path: PathBuf,
@@ -321,8 +329,8 @@ pub struct Status {
 
 pub fn status(info: &RepoInfo, scratch: &Path) -> Result<Status, GitError> {
     let index = IndexCopy::new(info, scratch, "index.status")?;
-    let mut staged = index.diff(&["--cached"])?;
-    let mut unstaged = index.diff(&["--ours"])?;
+    let mut staged = index.diff(STAGED_DIFF)?;
+    let mut unstaged = index.diff(UNSTAGED_DIFF)?;
     for rel in index.untracked()? {
         unstaged.push(FileDiff {
             status: FileStatus::Untracked,
