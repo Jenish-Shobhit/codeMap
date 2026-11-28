@@ -141,6 +141,7 @@ pub fn spawn(args: &[&str], envs: &[(&str, &str)], cols: u16, rows: u16) -> Pty 
     let mut cmd = Command::new(binary());
     cmd.args(args)
         .env("TERM", "xterm-256color")
+        .env(codemap::gh::PROGRAM_ENV, super::no_gh().program)
         .env_remove("HERDR_ENV")
         .env_remove("HERDR_SOCKET_PATH")
         .env_remove("HERDR_PLUGIN_CONTEXT_JSON")

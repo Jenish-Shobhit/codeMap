@@ -1,0 +1,50 @@
+  status   review   history   branches                                                                                        ○ paneMorph · selector-fix   main
+
+ local · 5                                                main    current branch
+   feat/ahead  ↑2           #14 ✓
+   feat/both   ↑2 ↓1        #12 ✗                         upstream      origin/main · in step
+   local-only  no upstream  #9 …                          pull request  none
+ ● main
+   merged      no upstream  #8 ✓                          main is the default branch
+
+ origin · 3 branches
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ j k branch                                               n new  B GitHub  y copy name  ? keys

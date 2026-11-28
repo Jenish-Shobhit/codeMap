@@ -1,0 +1,50 @@
+  status   review   history   branches                                                                                        ○ paneMorph · selector-fix   main
+
+ local · 1                                                main    current branch
+ ● main  no upstream
+                                                          upstream      none
+                                                          no pull request information · this repository has no remote
+
+                                                          main is the default branch
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ j k branch                                               n new  B GitHub  y copy name  ? keys

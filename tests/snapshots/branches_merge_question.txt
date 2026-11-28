@@ -1,0 +1,50 @@
+  status   review   history   branches                                                                                        ○ paneMorph · selector-fix   main
+
+ local · 5                                                local-only
+   feat/ahead  ↑2           #14 ✓
+   feat/both   ↑2 ↓1        #12 ✗                         upstream      none
+   local-only  no upstream  #9 …                          pull request  #9 docs: notes for the next release
+ ● main                                                                 open · into release/1.x · 0 of 2 checks passed …
+   merged      no upstream  #8 ✓
+                                                          3 commits not on main
+ origin · 3 branches                                      91a63b2 docs: note 3
+                                                          f4dfdbc docs: note 2
+                                                          8988148 docs: note 1
+
+
+
+
+
+
+
+
+
+
+                                           ╭─ merge ────────────────────────────────────────────────────────────────╮
+                                           │                                                                        │
+                                           │ merge local-only into main?                                            │
+                                           │                                                                        │
+                                           │ y merges · any other key keeps                                         │
+                                           ╰────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ j k branch

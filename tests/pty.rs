@@ -258,6 +258,95 @@ fn status_tab_stages_a_file_and_commits_it() {
 }
 
 #[test]
+fn branches_tab_creates_a_branch_switches_back_and_deletes_it() {
+    let remoted = repo_with_origin();
+    let root = remoted.root.as_path();
+    let state = TempDir::new("pty-branches-state");
+    let bin = TempDir::new("pty-branches-gh");
+    let gh = gh_printing(bin.path(), "[]");
+    let state_s = state.path().display().to_string();
+    let root_s = root.display().to_string();
+    let gh_s = gh.program.display().to_string();
+    let branches = || git(root, &["branch", "--format=%(refname:short)"]);
+    let current = || git(root, &["branch", "--show-current"]);
+    let mut p = spawn(
+        &[&root_s, "--view", "branches"],
+        &[("CODEMAP_STATE_DIR", &state_s), ("CODEMAP_GH", &gh_s)],
+        120,
+        30,
+    );
+    p.wait_for("pull request  none", 0, Duration::from_secs(5))
+        .expect("the branches and what the fake gh printed");
+    let screen = p.screen();
+    for needle in [
+        " status   review   history   branches ",
+        " local · 1",
+        " ● main",
+        " origin · 1 branch",
+        "main    current branch",
+        "upstream      origin/main · in step",
+    ] {
+        assert!(screen.contains(needle), "missing {needle:?}\n{screen}");
+    }
+    assert!(
+        p.text().contains("\x1b[?2004h"),
+        "the branches tab asks the terminal to mark pasted text"
+    );
+
+    press(&mut p, b"n", "new branch from main ›");
+    press(&mut p, b"feat/typed", "› feat/typed");
+    assert_eq!(branches(), "main\n", "typing creates nothing");
+    press(
+        &mut p,
+        b"\r",
+        "created feat/typed from main and switched to it",
+    );
+    assert_eq!(branches(), "feat/typed\nmain\n");
+    assert_eq!(current(), "feat/typed\n");
+    let screen = p.screen();
+    assert!(screen.contains(" local · 2"), "{screen}");
+    assert!(screen.contains(" ● feat/typed"), "{screen}");
+
+    press(&mut p, b"j", "upstream      origin/main · in step");
+    press(&mut p, b"\r", "switched to main");
+    assert_eq!(current(), "main\n");
+
+    press(&mut p, b"k", "upstream      none");
+    press(&mut p, b"D", "delete the branch feat/typed?");
+    press(&mut p, b"\x1b[200~y\x1b[201~", "nothing deleted");
+    assert_eq!(
+        branches(),
+        "feat/typed\nmain\n",
+        "a pasted y deletes nothing"
+    );
+    press(&mut p, b"D", "delete the branch feat/typed?");
+    press(&mut p, b"\r", "nothing deleted");
+    press(&mut p, b"D", "y deletes");
+    press(&mut p, b"y", "deleted feat/typed");
+    assert_eq!(branches(), "main\n");
+    assert_eq!(current(), "main\n");
+    let screen = p.screen();
+    assert!(screen.contains(" local · 1"), "{screen}");
+    assert!(!screen.contains("delete the branch"), "{screen}");
+
+    press(&mut p, b"1", "nothing to commit, working tree clean");
+    p.send(b"q");
+    assert!(p
+        .wait_exit(Duration::from_secs(5))
+        .expect("q quits")
+        .success());
+    assert!(
+        p.text().contains("\x1b[?2004l"),
+        "paste marking is off again"
+    );
+    assert_eq!(
+        git(&remoted.origin, &["branch", "--format=%(refname:short)"]),
+        "main\n",
+        "the remote was never written to"
+    );
+}
+
+#[test]
 fn q_quits_and_ctrl_c_quits() {
     let t = TempDir::new("pty-small");
     write(t.path(), "a.py", "def f():\n    return 1\n");

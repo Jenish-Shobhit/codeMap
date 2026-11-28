@@ -1,7 +1,10 @@
 pub mod app;
+pub mod ask;
+pub mod branches;
 pub mod commit;
 pub mod custom;
 pub mod files;
+pub mod gh;
 pub mod git;
 pub mod herdr;
 pub mod hook;

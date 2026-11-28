@@ -1,6 +1,6 @@
 use std::io::Write;
 use std::path::{Component, Path};
-use std::process::{Command, Stdio};
+use std::process::{Command, Output, Stdio};
 
 use super::{
     diff, git_cmd, run, run_cmd, stdout_of, FileDiff, FileStatus, GitError, Hunk, DIFF_FORMAT,
@@ -224,7 +224,7 @@ pub fn delete_untracked(root: &Path, rel: &str) -> Result<(), GitError> {
     std::fs::remove_file(&path).map_err(told)
 }
 
-pub fn commit(root: &Path, subject: &str, body: &str) -> Result<String, GitError> {
+pub(super) fn as_typed(root: &Path) -> Command {
     let mut cmd = Command::new("git");
     cmd.current_dir(root)
         .env("GIT_TERMINAL_PROMPT", "0")
@@ -233,21 +233,31 @@ pub fn commit(root: &Path, subject: &str, body: &str) -> Result<String, GitError
         .env_remove("GIT_INDEX_FILE")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .args(["commit", "-m", subject]);
+        .stderr(Stdio::piped());
+    cmd
+}
+
+pub(super) fn said(subcommand: &str, output: &Output) -> Result<(), GitError> {
+    if output.status.success() {
+        return Ok(());
+    }
+    let words = [&output.stderr, &output.stdout]
+        .into_iter()
+        .map(|bytes| String::from_utf8_lossy(bytes).trim().to_string())
+        .find(|text| !text.is_empty());
+    Err(GitError(words.unwrap_or_else(|| {
+        format!("git {subcommand} exited with {}", output.status)
+    })))
+}
+
+pub fn commit(root: &Path, subject: &str, body: &str) -> Result<String, GitError> {
+    let mut cmd = as_typed(root);
+    cmd.args(["commit", "-m", subject]);
     if !body.trim().is_empty() {
         cmd.args(["-m", body.trim_end()]);
     }
     let output = cmd.output().map_err(|e| GitError(format!("git: {e}")))?;
-    if !output.status.success() {
-        let said = [&output.stderr, &output.stdout]
-            .into_iter()
-            .map(|bytes| String::from_utf8_lossy(bytes).trim().to_string())
-            .find(|text| !text.is_empty());
-        return Err(GitError(said.unwrap_or_else(|| {
-            format!("git commit exited with {}", output.status)
-        })));
-    }
+    said("commit", &output)?;
     run(root, &["rev-parse", "--short", "HEAD"]).map(|sha| sha.trim().to_string())
 }
 

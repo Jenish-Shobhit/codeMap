@@ -1,4 +1,5 @@
 use crate::app::{App, Focus, Location};
+use crate::ask::Ask;
 use crate::commit::EMPTY_SUBJECT;
 use crate::git::write::{self, restores_from_index, takes_hunks};
 use crate::git::{self, FileDiff, FileStatus, GitError, Hunk, LineKind};
@@ -329,29 +330,23 @@ impl App {
                 Some("x discards only what is not staged · space unstages this first".into());
             return;
         }
-        self.confirm = match target {
-            Target::Hunk(h) => Some(Discard::Hunk(file, h)),
+        let asked = match target {
+            Target::Hunk(h) => Discard::Hunk(file, h),
             Target::File if file.status == FileStatus::Untracked || restores_from_index(&file) => {
-                Some(Discard::File(file))
+                Discard::File(file)
             }
             Target::File => {
                 self.message = Some(format!(
                     "{} is new to the index · there is nothing to restore it from",
                     file.path
                 ));
-                None
+                return;
             }
         };
+        self.confirm = Some(Ask::Discard(asked));
     }
 
-    pub fn answer_discard(&mut self, yes: bool) {
-        let Some(asked) = self.confirm.take() else {
-            return;
-        };
-        if !yes {
-            self.message = Some("nothing discarded".into());
-            return;
-        }
+    pub(crate) fn discard(&mut self, asked: &Discard) {
         let result = asked.run(&self.root);
         let place = self.status.place();
         self.after_write(&place, result.map(|()| asked.done()));

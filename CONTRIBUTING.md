@@ -53,9 +53,18 @@ every other job passed; it is the check `main` requires.
 | `tests/git_store.rs`, `tests/hook.rs` | turn diffs from checkpoints, the side store writing nothing into the repository, the graph, worktrees, the hook |
 | `tests/git_status.rs` | what Status reads as staged, not staged and untracked, and that reading it leaves `.git` untouched |
 | `tests/git_write.rs` | staging, unstaging and discarding files and single hunks, commits and the ways they fail, each on a temporary repository |
+| `tests/git_branch.rs` | listing branches against a local bare `origin`, the default branch, switching, creating, merging and deleting, and the count of commits a deletion would lose |
+| `tests/gh.rs` | reading pull requests: fixture JSON, and a fake `gh` that prints it, fails, prints something else or outlives the timeout |
 | `tests/manifest.rs` | `herdr-plugin.toml` against herdr 0.9.0's link rules |
-| `tests/pty.rs` | the real binary on a pseudo-terminal: keys, Esc, first-paint time, staging and committing a file |
+| `tests/pty.rs` | the real binary on a pseudo-terminal: keys, Esc, first-paint time, staging and committing a file, creating and deleting a branch |
 | `tests/no_comments.rs` | no comments anywhere in our Rust or Python code |
+
+No test runs the real `gh` or touches the network. The Branches tab takes the
+program to run from `Options::gh`, which only `main` fills from `CODEMAP_GH`.
+Tests pass a path that does not exist (`no_gh()`), or a shell script they
+write into a temporary directory (`fake_gh`, `gh_printing` in
+`tests/common/mod.rs`); the pseudo-terminal helper sets `CODEMAP_GH` the same
+way for the binary it starts.
 
 ### Snapshot tests
 

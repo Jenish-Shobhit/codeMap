@@ -287,6 +287,7 @@ fn herdr(d: &Dirs) -> Command {
         .env("XDG_DATA_HOME", d.base.join("data"))
         .env("XDG_CACHE_HOME", d.base.join("cache"))
         .env("HERDR_DISABLE_SOUND", "1")
+        .env(codemap::gh::PROGRAM_ENV, d.base.join("no-gh"))
         .args(["--session", SESSION]);
     c
 }

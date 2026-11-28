@@ -237,3 +237,120 @@ pub fn stage_part_of_the_turn(root: &Path) {
         "from panemorph.actions.open_selector import selector_command\n\n\ndef test_the_command_names_the_result_file():\n    command = selector_command(\"herdr\", \"dev.panemorph\", \"w1:p2\", \"send\", \"/tmp/result.json\")\n    assert \"PANEMORPH_RESULT_PATH=/tmp/result.json\" in command\n",
     );
 }
+
+const PULL_REQUESTS: &str = r#"[
+  {
+    "number": 12,
+    "title": "fix: stop waiting for the selector after five seconds",
+    "state": "OPEN",
+    "headRefName": "selector-timeout",
+    "baseRefName": "main",
+    "url": "https://github.com/example/paneMorph/pull/12",
+    "statusCheckRollup": [
+      {"__typename": "CheckRun", "name": "lint", "status": "COMPLETED", "conclusion": "SUCCESS"},
+      {"__typename": "CheckRun", "name": "types", "status": "COMPLETED", "conclusion": "SUCCESS"},
+      {"__typename": "CheckRun", "name": "test (3.12)", "status": "COMPLETED", "conclusion": "SUCCESS"},
+      {"__typename": "CheckRun", "name": "test (3.13)", "status": "COMPLETED", "conclusion": "FAILURE"}
+    ]
+  },
+  {
+    "number": 11,
+    "title": "docs: add usage examples",
+    "state": "OPEN",
+    "headRefName": "docs-examples",
+    "baseRefName": "main",
+    "url": "https://github.com/example/paneMorph/pull/11",
+    "statusCheckRollup": [
+      {"__typename": "CheckRun", "name": "lint", "status": "COMPLETED", "conclusion": "SUCCESS"},
+      {"__typename": "CheckRun", "name": "test (3.13)", "status": "IN_PROGRESS", "conclusion": ""}
+    ]
+  },
+  {
+    "number": 4,
+    "title": "feat: pane and tab workflows",
+    "state": "MERGED",
+    "headRefName": "workflows",
+    "baseRefName": "main",
+    "url": "https://github.com/example/paneMorph/pull/4",
+    "statusCheckRollup": [
+      {"__typename": "CheckRun", "name": "lint", "status": "COMPLETED", "conclusion": "SUCCESS"},
+      {"__typename": "CheckRun", "name": "test (3.13)", "status": "COMPLETED", "conclusion": "SUCCESS"}
+    ]
+  }
+]
+"#;
+
+pub fn add_branches(repo: &Repo, base: &Path) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+
+    let r = repo.root.as_path();
+    let at = |h: u32| format!("2026-09-21T{h:02}:30:00Z");
+    let origin = base.join("origin.git");
+    let origin_path = origin.to_str().unwrap();
+    git(base, &at(9), &["init", "-q", "--bare", origin_path]);
+    git(r, &at(9), &["remote", "add", "origin", origin_path]);
+    git(r, &at(9), &["push", "-q", "origin", "main", "workflows"]);
+    git(r, &at(9), &["remote", "set-head", "origin", "main"]);
+    for branch in ["main", "workflows"] {
+        let upstream = format!("--set-upstream-to=origin/{branch}");
+        git(r, &at(9), &["branch", "-q", &upstream, branch]);
+    }
+
+    let scratch = base.join("selector-timeout");
+    let scratch_path = scratch.to_str().unwrap();
+    git(
+        r,
+        &at(10),
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "-b",
+            "selector-timeout",
+            scratch_path,
+            "main",
+        ],
+    );
+    let step = |hour: u32, text: &str, subject: &str| {
+        write_new(&scratch, "panemorph/actions/timeout.py", text);
+        git(&scratch, &at(hour), &["add", "-A"]);
+        git(&scratch, &at(hour), &["commit", "-q", "-m", subject]);
+    };
+    step(
+        10,
+        "SELECTOR_TIMEOUT = 5.0\n",
+        "fix: stop waiting for the selector after five seconds",
+    );
+    step(
+        11,
+        "SELECTOR_TIMEOUT = 5.0\nPOLL_EVERY = 0.1\n",
+        "fix: poll the result file ten times a second",
+    );
+    git(
+        &scratch,
+        &at(11),
+        &["push", "-q", "-u", "origin", "selector-timeout"],
+    );
+    git(&scratch, &at(11), &["reset", "-q", "--hard", "HEAD~1"]);
+    step(
+        12,
+        "SELECTOR_TIMEOUT = 5.0\n\n\nclass SelectorTimeout(Exception):\n    pass\n",
+        "fix: raise SelectorTimeout when nothing was chosen",
+    );
+    step(
+        13,
+        "SELECTOR_TIMEOUT = 5.0\n\n\nclass SelectorTimeout(Exception):\n    \"\"\"No pane was chosen in time.\"\"\"\n",
+        "docs: say what the timeout means",
+    );
+    git(r, &at(13), &["worktree", "remove", "--force", scratch_path]);
+
+    let gh = base.join("bin/gh");
+    write_new(base, "bin/pull-requests.json", PULL_REQUESTS);
+    write_new(
+        base,
+        "bin/gh",
+        "#!/bin/sh\nexec cat \"$(dirname \"$0\")/pull-requests.json\"\n",
+    );
+    std::fs::set_permissions(&gh, std::fs::Permissions::from_mode(0o755)).unwrap();
+    gh
+}
