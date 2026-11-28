@@ -234,19 +234,7 @@ fn retarget(app: &mut App, ctx: herdr::PluginContext) {
     if same_root && same_agent {
         return;
     }
-    let opts = Options {
-        path: Some(new_root),
-        view: app.view,
-        context: Some(ctx),
-        client: app.client.clone(),
-        store: app.store.clone(),
-        theme: app.theme,
-        gh: app.gh.clone(),
-    };
-    let pinned = app.pinned;
-    *app = App::new(opts);
-    app.pinned = pinned;
-    app.start();
+    app.follow_pane(new_root, ctx);
 }
 
 fn pin(app: &App, placement: &'static str) -> Result<(), String> {

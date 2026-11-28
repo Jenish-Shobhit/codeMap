@@ -346,6 +346,100 @@ fn branches_tab_creates_a_branch_switches_back_and_deletes_it() {
     );
 }
 
+fn marked_worktree(screen: &str) -> String {
+    let marked: Vec<&str> = screen
+        .lines()
+        .filter_map(|line| line.strip_prefix(" ● "))
+        .filter_map(|line| line.split_whitespace().next())
+        .collect();
+    assert_eq!(marked.len(), 1, "one worktree is marked\n{screen}");
+    marked[0].rsplit('/').next().unwrap().to_string()
+}
+
+#[test]
+fn worktrees_tab_jumps_to_another_worktree_and_shows_its_status() {
+    let repo = worktrees_repo();
+    let before = untouched(&repo);
+    let state = TempDir::new("pty-worktrees-state");
+    let state_s = state.path().display().to_string();
+    let root_s = repo.main.display().to_string();
+    let mut p = spawn(
+        &[&root_s, "--view", "worktrees"],
+        &[("CODEMAP_STATE_DIR", &state_s)],
+        140,
+        30,
+    );
+    p.wait_for("y copy path  ? keys", 0, Duration::from_secs(5))
+        .expect("the list of worktrees");
+    let screen = p.screen();
+    for needle in [
+        " status   review   history   branches   worktrees ",
+        " worktrees · 4",
+        "     main  2 files +5 −2",
+        "     docs  2 files +4",
+        "     gone  folder missing",
+        "every tab shows this worktree",
+        "? notes.md +3",
+    ] {
+        assert!(screen.contains(needle), "missing {needle:?}\n{screen}");
+    }
+    assert_eq!(marked_worktree(&screen), "work");
+    assert!(
+        !p.text().contains("\x1b[?2004h"),
+        "a tab that writes nothing does not ask for marked pastes"
+    );
+
+    press(&mut p, b"j", "⏎ shows this worktree in every tab");
+    assert!(p.screen().contains("A examples/first.md +2"));
+    press(&mut p, b"\r", "every tab now shows ");
+    p.wait_for("every tab shows this worktree", 0, Duration::from_secs(5))
+        .expect("the list again, marked on the other worktree");
+    let screen = p.screen();
+    assert!(screen.contains("branch        docs"), "{screen}");
+    assert_eq!(marked_worktree(&screen), "docs");
+
+    press(&mut p, b"1", "space unstage");
+    let screen = p.screen();
+    for needle in [
+        " staged · 1",
+        "A first.md",
+        " not staged · 1",
+        "M guide.md",
+        "examples/first.md   +2    staged",
+    ] {
+        assert!(screen.contains(needle), "missing {needle:?}\n{screen}");
+    }
+    assert!(
+        !screen.contains("notes.md") && !screen.contains("app.py"),
+        "the files of the worktree it came from\n{screen}"
+    );
+
+    press(&mut p, b"5", "worktrees · 4");
+    press(&mut p, b"\r", "already showing ");
+    press(&mut p, b"g", "⏎ shows this worktree in every tab");
+    press(&mut p, b"\r", "every tab now shows ");
+    p.wait_for("every tab shows this worktree", 0, Duration::from_secs(5))
+        .expect("back on the first worktree");
+    assert_eq!(marked_worktree(&p.screen()), "work");
+    press(&mut p, b"1", "space unstage");
+    let screen = p.screen();
+    assert!(
+        screen.contains("app.py   +1 −1    staged") && screen.contains("? notes.md"),
+        "{screen}"
+    );
+    assert!(!screen.contains("guide.md"), "{screen}");
+    p.send(b"q");
+    assert!(p
+        .wait_exit(Duration::from_secs(5))
+        .expect("q quits")
+        .success());
+    assert_eq!(
+        before,
+        untouched(&repo),
+        "a worktree changed while the popup was open"
+    );
+}
+
 #[test]
 fn q_quits_and_ctrl_c_quits() {
     let t = TempDir::new("pty-small");

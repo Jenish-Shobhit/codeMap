@@ -89,6 +89,7 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
                 app.history_move(0);
             }
             app.branches_shown();
+            app.worktrees_shown();
             app.drain_if_sync();
             return Action::Redraw;
         }
@@ -99,10 +100,18 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
                 None => Action::None,
             };
         }
+        KeyCode::Char('y') if !ctrl && app.view == View::Worktrees => {
+            return match app.worktrees.selected() {
+                Some(entry) => Action::Copy(entry.checkout.path.display().to_string()),
+                None => Action::None,
+            };
+        }
         KeyCode::Char('e') if !ctrl => return edit(app),
         KeyCode::Char('E') => return open(app, Opener::VsCode),
-        KeyCode::Char('b') if !ctrl => return open(app, Opener::Browser),
-        KeyCode::Char('B') => return open(app, Opener::GitHub),
+        KeyCode::Char('b') if !ctrl && app.view != View::Worktrees => {
+            return open(app, Opener::Browser)
+        }
+        KeyCode::Char('B') if app.view != View::Worktrees => return open(app, Opener::GitHub),
         KeyCode::Char('y') if !ctrl => {
             return match app.location() {
                 Some(Location {
@@ -145,6 +154,7 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
         View::Changes => changes_key(app, key),
         View::History => history_key(app, key),
         View::Branches => branches_key(app, key),
+        View::Worktrees => worktrees_key(app, key),
     };
     if r == Action::None && had_message {
         Action::Redraw
@@ -228,7 +238,7 @@ fn toggle_focus(app: &mut App) {
         View::Files => &mut app.files.focus,
         View::Status => &mut app.status.focus,
         View::Changes => &mut app.changes.focus,
-        View::Custom | View::History | View::Branches => return,
+        View::Custom | View::History | View::Branches | View::Worktrees => return,
     };
     *focus = match *focus {
         Focus::Body => Focus::Rail,
@@ -529,6 +539,32 @@ fn branches_move_key(app: &mut App, key: KeyEvent) -> Action {
         KeyCode::PageUp => app.branches_move(-30),
         KeyCode::Char('g') | KeyCode::Home => app.branches_move(-(i32::MAX / 2)),
         KeyCode::Char('G') | KeyCode::End => app.branches_move(i32::MAX / 2),
+        _ => return Action::None,
+    }
+    Action::Redraw
+}
+
+fn worktrees_key(app: &mut App, key: KeyEvent) -> Action {
+    let held = KeyModifiers::CONTROL | KeyModifiers::ALT;
+    match key.code {
+        _ if key.modifiers.intersects(held) => return worktrees_move_key(app, key),
+        KeyCode::Enter => app.show_selected_worktree(),
+        _ => return worktrees_move_key(app, key),
+    }
+    Action::Redraw
+}
+
+fn worktrees_move_key(app: &mut App, key: KeyEvent) -> Action {
+    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    match key.code {
+        KeyCode::Char('d') if ctrl => app.worktrees_move(15),
+        KeyCode::Char('u') if ctrl => app.worktrees_move(-15),
+        KeyCode::Up | KeyCode::Char('k') => app.worktrees_move(-1),
+        KeyCode::Down | KeyCode::Char('j') => app.worktrees_move(1),
+        KeyCode::PageDown => app.worktrees_move(30),
+        KeyCode::PageUp => app.worktrees_move(-30),
+        KeyCode::Char('g') | KeyCode::Home => app.worktrees_move(-(i32::MAX / 2)),
+        KeyCode::Char('G') | KeyCode::End => app.worktrees_move(i32::MAX / 2),
         _ => return Action::None,
     }
     Action::Redraw

@@ -354,3 +354,37 @@ pub fn add_branches(repo: &Repo, base: &Path) -> PathBuf {
     std::fs::set_permissions(&gh, std::fs::Permissions::from_mode(0o755)).unwrap();
     gh
 }
+
+pub fn work_in_the_second_worktree(repo: &Repo) {
+    let w = repo.worktree.as_path();
+    let at = "2026-09-21T21:55:00Z";
+    git(w, at, &["push", "-q", "-u", "origin", "docs-examples"]);
+    write_new(
+        w,
+        "docs/examples.md",
+        "# Examples\n\n## Send a pane to another tab\n\nFocus the pane, open the selector and pick the tab.\n",
+    );
+    git(w, at, &["add", "docs/examples.md"]);
+    git(
+        w,
+        at,
+        &["commit", "-q", "-m", "docs: show how to send a pane"],
+    );
+    write_new(
+        w,
+        "docs/examples.md",
+        "# Examples\n\n## Send a pane to another tab\n\nFocus the pane, open the selector and pick the tab.\n\n## Bring a pane here\n\nOpen the selector in the tab that should receive it.\n",
+    );
+    write_new(
+        w,
+        "docs/faq.md",
+        "# Questions\n\n## Does a moved pane restart?\n\nNo. The process keeps running.\n",
+    );
+    git(w, at, &["add", "docs/faq.md"]);
+    let readme = std::fs::read_to_string(w.join("README.md")).unwrap();
+    write(
+        w,
+        "README.md",
+        &format!("{readme}\nSee [docs/examples.md](docs/examples.md).\n"),
+    );
+}

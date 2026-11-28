@@ -51,12 +51,13 @@ every other job passed; it is the check `main` requires.
 | --- | --- |
 | `tests/views.rs` | golden frames of every view and their states, colours and keys |
 | `tests/git_store.rs`, `tests/hook.rs` | turn diffs from checkpoints, the side store writing nothing into the repository, the graph, worktrees, the hook |
-| `tests/git_status.rs` | what Status reads as staged, not staged and untracked, and that reading it leaves `.git` untouched |
+| `tests/git_status.rs` | what Status reads as staged, not staged and untracked, that reading it leaves `.git` untouched, and that many reads at once each see the same index |
+| `tests/git_worktree.rs` | the worktrees of a repository with their branch, upstream, locked and missing states and uncommitted changes, the agents herdr lists placed in them, and that reading them writes into none |
 | `tests/git_write.rs` | staging, unstaging and discarding files and single hunks, commits and the ways they fail, each on a temporary repository |
 | `tests/git_branch.rs` | listing branches against a local bare `origin`, the default branch, switching, creating, merging and deleting, and the count of commits a deletion would lose |
 | `tests/gh.rs` | reading pull requests: fixture JSON, and a fake `gh` that prints it, fails, prints something else or outlives the timeout |
 | `tests/manifest.rs` | `herdr-plugin.toml` against herdr 0.9.0's link rules |
-| `tests/pty.rs` | the real binary on a pseudo-terminal: keys, Esc, first-paint time, staging and committing a file, creating and deleting a branch |
+| `tests/pty.rs` | the real binary on a pseudo-terminal: keys, Esc, first-paint time, staging and committing a file, creating and deleting a branch, jumping to another worktree and back |
 | `tests/no_comments.rs` | no comments anywhere in our Rust or Python code |
 
 No test runs the real `gh` or touches the network. The Branches tab takes the

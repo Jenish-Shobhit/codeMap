@@ -17,6 +17,7 @@ use crate::status::StatusState;
 use crate::store::{Comment, PaneState, Reviews, Store};
 use crate::theme::Theme;
 use crate::util;
+use crate::worktrees::{Listing, WorktreesState};
 
 pub const HISTORY_LIMIT: usize = 2_000;
 
@@ -28,20 +29,27 @@ pub enum View {
     Changes,
     History,
     Branches,
+    Worktrees,
 }
 
 impl View {
-    pub const ALL: [View; 6] = [
+    pub const ALL: [View; 7] = [
         View::Files,
         View::Custom,
         View::Status,
         View::Changes,
         View::History,
         View::Branches,
+        View::Worktrees,
     ];
 
-    pub(crate) const GIT_TABS: [View; 4] =
-        [View::Status, View::Changes, View::History, View::Branches];
+    pub(crate) const GIT_TABS: [View; 5] = [
+        View::Status,
+        View::Changes,
+        View::History,
+        View::Branches,
+        View::Worktrees,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -51,6 +59,7 @@ impl View {
             View::Changes => "changes",
             View::History => "history",
             View::Branches => "branches",
+            View::Worktrees => "worktrees",
         }
     }
 
@@ -69,6 +78,7 @@ impl View {
             "changes" | "review" => Some(View::Changes),
             "history" | "graph" => Some(View::History),
             "branches" | "branch" => Some(View::Branches),
+            "worktrees" | "worktree" => Some(View::Worktrees),
             _ => None,
         }
     }
@@ -77,7 +87,9 @@ impl View {
         match self {
             View::Files => &[View::Files],
             View::Custom => &[View::Custom],
-            View::Status | View::Changes | View::History | View::Branches => &View::GIT_TABS,
+            View::Status | View::Changes | View::History | View::Branches | View::Worktrees => {
+                &View::GIT_TABS
+            }
         }
     }
 }
@@ -161,14 +173,6 @@ pub struct AgentRow {
     pub selected: bool,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct WorktreeRow {
-    pub path: PathBuf,
-    pub branch: Option<String>,
-    pub agents: Vec<(String, bool)>,
-    pub current: bool,
-}
-
 pub struct RepoLoad {
     pub root: PathBuf,
     pub repo: Result<RepoInfo, Option<String>>,
@@ -190,7 +194,7 @@ pub enum Msg {
     History {
         commits: Result<Vec<Commit>, String>,
         total: usize,
-        worktrees: Vec<WorktreeRow>,
+        worktrees: usize,
     },
     CommitDiff(String, Result<Vec<FileDiff>, String>),
     Committed(Result<(String, String), String>),
@@ -204,6 +208,10 @@ pub enum Msg {
         found: Result<Unique, String>,
     },
     Pulls(Result<PullRequests, String>),
+    Worktrees {
+        ask: u64,
+        read: Result<Listing, String>,
+    },
     Notice(String),
 }
 
@@ -238,7 +246,7 @@ pub struct HistoryState {
     pub total: usize,
     pub sel: usize,
     pub scroll: usize,
-    pub worktrees: Vec<WorktreeRow>,
+    pub worktrees: usize,
     pub error: Option<String>,
     pub detail: Option<(String, Vec<FileDiff>)>,
     pub show_diff: bool,
@@ -310,6 +318,7 @@ pub struct App {
     pub history: HistoryState,
     pub history_loaded: bool,
     pub branches: BranchesState,
+    pub worktrees: WorktreesState,
     pub gh: Gh,
     pub reviews: Reviews,
     pub drafts: Vec<Comment>,
@@ -324,6 +333,7 @@ pub struct App {
     tx: Sender<Msg>,
     rx: Receiver<Msg>,
     sync: bool,
+    root_chosen: bool,
 }
 
 impl App {
@@ -382,6 +392,7 @@ impl App {
             history: HistoryState::default(),
             history_loaded: false,
             branches: BranchesState::default(),
+            worktrees: WorktreesState::default(),
             gh: opts.gh,
             reviews: Reviews::default(),
             drafts: Vec::new(),
@@ -396,7 +407,49 @@ impl App {
             tx,
             rx,
             sync: false,
+            root_chosen: false,
         }
+    }
+
+    fn successor(&self, root: PathBuf, context: Option<PluginContext>) -> App {
+        let mut next = App::new(Options {
+            path: Some(root),
+            view: self.view,
+            context,
+            client: self.client.clone(),
+            store: self.store.clone(),
+            theme: self.theme,
+            gh: self.gh.clone(),
+        });
+        next.pinned = self.pinned;
+        next.sync = self.sync;
+        next
+    }
+
+    fn load(&mut self) {
+        if self.sync {
+            self.load_blocking();
+        } else {
+            self.start();
+        }
+    }
+
+    pub fn follow_pane(&mut self, root: PathBuf, context: PluginContext) {
+        *self = self.successor(root, Some(context));
+        self.load();
+    }
+
+    pub(crate) fn show_worktree(
+        &mut self,
+        root: PathBuf,
+        context: Option<PluginContext>,
+        worktrees: WorktreesState,
+    ) {
+        let mut next = self.successor(root, context);
+        next.root_chosen = true;
+        next.worktrees = worktrees;
+        *self = next;
+        self.load();
     }
 
     pub fn repo_key(&self) -> String {
@@ -416,7 +469,16 @@ impl App {
         let root = self.root.clone();
         let client = self.client.clone();
         let agent = self.agent.clone();
-        std::thread::spawn(move || load_repo(&tx, root, client, agent));
+        let root_from = self.root_from();
+        std::thread::spawn(move || load_repo(&tx, root, client, agent, root_from));
+    }
+
+    fn root_from(&self) -> RootFrom {
+        if self.root_chosen {
+            RootFrom::TheChoice
+        } else {
+            RootFrom::ThePane
+        }
     }
 
     pub fn load_blocking(&mut self) {
@@ -427,6 +489,7 @@ impl App {
             self.root.clone(),
             self.client.clone(),
             self.agent.clone(),
+            self.root_from(),
         );
         drop(tx);
         let msgs: Vec<Msg> = rx.into_iter().collect();
@@ -492,6 +555,7 @@ impl App {
                 self.request_history();
                 self.request_branches();
                 self.branches_shown();
+                self.worktrees_shown();
             }
             Msg::Custom { scanned, first } => {
                 self.custom.scanned = scanned;
@@ -574,6 +638,7 @@ impl App {
                     Err(why) => Pulls::Unknown(why),
                 }
             }
+            Msg::Worktrees { ask, read } => self.worktrees_read(ask, read),
             Msg::Notice(s) => self.message = Some(s),
         }
     }
@@ -643,6 +708,7 @@ impl App {
     }
 
     pub fn reload_status(&mut self) {
+        self.worktrees.outdated = true;
         let Some(repo) = self.repo.clone() else {
             return;
         };
@@ -686,7 +752,6 @@ impl App {
             self.history_loaded = true;
             return;
         };
-        let client = self.client.clone();
         self.spawn(move |tx| {
             let (commits, total) = if repo.head.is_none() {
                 (Ok(Vec::new()), 0)
@@ -696,7 +761,9 @@ impl App {
                     git::count_commits(&repo.root),
                 )
             };
-            let worktrees = worktree_rows(&repo, client.as_ref());
+            let worktrees = git::worktrees(&repo.root)
+                .map(|listed| listed.iter().filter(|worktree| !worktree.bare).count())
+                .unwrap_or(0);
             let _ = tx.send(Msg::History {
                 commits,
                 total,
@@ -1021,6 +1088,7 @@ impl App {
                 })
             }
             View::History | View::Branches => None,
+            View::Worktrees => self.worktrees.location(),
         }
     }
 
@@ -1074,7 +1142,19 @@ pub fn scope_name(s: &Scope) -> String {
     }
 }
 
-fn load_repo(tx: &Sender<Msg>, root: PathBuf, client: Option<Client>, agent: Option<AgentInfo>) {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RootFrom {
+    ThePane,
+    TheChoice,
+}
+
+fn load_repo(
+    tx: &Sender<Msg>,
+    root: PathBuf,
+    client: Option<Client>,
+    agent: Option<AgentInfo>,
+    root_from: RootFrom,
+) {
     let mut root = root;
     let mut agent = agent;
     if let (Some(client), Some(a)) = (&client, agent.as_mut()) {
@@ -1085,7 +1165,7 @@ fn load_repo(tx: &Sender<Msg>, root: PathBuf, client: Option<Client>, agent: Opt
                     .and_then(Value::as_str)
                     .or_else(|| pane.get("cwd").and_then(Value::as_str))
                     .map(PathBuf::from);
-                if let Some(cwd) = cwd.filter(|p| p.is_dir()) {
+                if let Some(cwd) = cwd.filter(|p| p.is_dir() && root_from == RootFrom::ThePane) {
                     root = cwd;
                 }
                 a.terminal_id = pane
@@ -1270,43 +1350,4 @@ fn head_changes(
     }
     let scratch = store.shadow(repo).dir;
     git::diff_head(repo, &scratch).map_err(|e| e.0)
-}
-
-fn worktree_rows(repo: &RepoInfo, client: Option<&Client>) -> Vec<WorktreeRow> {
-    let list = git::worktrees(&repo.root).unwrap_or_default();
-    let agents: Vec<Value> = client.and_then(|c| c.agent_list().ok()).unwrap_or_default();
-    list.into_iter()
-        .filter(|w| !w.bare)
-        .map(|w| {
-            let wp = w.path.canonicalize().unwrap_or(w.path.clone());
-            let mut names = Vec::new();
-            for a in &agents {
-                let cwd = a
-                    .get("foreground_cwd")
-                    .and_then(Value::as_str)
-                    .or_else(|| a.get("cwd").and_then(Value::as_str));
-                let Some(cwd) = cwd else { continue };
-                let cwd = PathBuf::from(cwd);
-                let cwd = cwd.canonicalize().unwrap_or(cwd);
-                if !cwd.starts_with(&wp) {
-                    continue;
-                }
-                let label = a
-                    .get("display_agent")
-                    .and_then(Value::as_str)
-                    .or_else(|| a.get("name").and_then(Value::as_str))
-                    .or_else(|| a.get("agent").and_then(Value::as_str))
-                    .unwrap_or("agent")
-                    .to_string();
-                let working = a.get("agent_status").and_then(Value::as_str) == Some("working");
-                names.push((label, working));
-            }
-            WorktreeRow {
-                current: wp == repo.root,
-                path: w.path,
-                branch: w.branch.or(w.head.map(|h| h[..h.len().min(7)].to_string())),
-                agents: names,
-            }
-        })
-        .collect()
 }

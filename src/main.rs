@@ -11,8 +11,8 @@ use codemap::theme::Theme;
 const HELP: &str = "codeMap: your agents' files, what they changed, and the history around it.
 
 usage:
-  codemap [PATH] [--view files|customisations|status|changes|history|branches]
-          [--trace-startup]
+  codemap [PATH] [--view files|customisations|status|changes|history|branches|
+                             worktrees] [--trace-startup]
   codemap open [--view VIEW] [--placement popup|split|tab]   (herdr action)
   codemap ui [--view VIEW]                                   (herdr pane)
   codemap edit                                               (herdr pane: the editor)

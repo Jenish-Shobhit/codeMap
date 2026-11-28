@@ -224,3 +224,123 @@ fn reading_the_status_writes_nothing_into_the_repository() {
     let left_behind: Vec<_> = std::fs::read_dir(&scratch).unwrap().flatten().collect();
     assert!(left_behind.is_empty(), "{left_behind:?}");
 }
+
+#[test]
+fn many_reads_of_one_repository_at_once_all_see_the_same_index() {
+    let repo = repo_with(&[
+        ("staged.py", "y = 1\n"),
+        ("edited.py", "z = 1\n"),
+        ("kept.py", "k = 1\n"),
+    ]);
+    let p = repo.path();
+    write(p, "staged.py", "y = 2\n");
+    git(p, &["add", "staged.py"]);
+    write(p, "edited.py", "z = 2\n");
+    write(p, "untracked.py", "w = 3\n");
+    let before = fingerprint(p);
+
+    let state = TempDir::new("status-crowd-state");
+    let info = git::discover(p).unwrap();
+    let scratch = Store::new(state.path()).shadow(&info).dir;
+    let status =
+        || git::status(&info, &scratch).map(|read| (shown(&read.staged), shown(&read.unstaged)));
+    let since_head = || git::diff_head(&info, &scratch).map(|files| shown(&files));
+    let alone = (status(), since_head());
+    assert_eq!(
+        alone.0,
+        Ok((
+            vec!["M staged.py +1 -1".to_string()],
+            vec![
+                "M edited.py +1 -1".to_string(),
+                "? untracked.py +1 -0".to_string()
+            ]
+        ))
+    );
+    assert_eq!(
+        alone.1,
+        Ok(vec![
+            "M edited.py +1 -1".to_string(),
+            "M staged.py +1 -1".to_string(),
+            "A untracked.py +1 -0".to_string()
+        ])
+    );
+
+    const READERS: usize = 12;
+    const READS_EACH: usize = 6;
+    let start = std::sync::Barrier::new(READERS);
+    let wrong: Vec<String> = std::thread::scope(|readers| {
+        let reading: Vec<_> = (0..READERS)
+            .map(|reader| {
+                let (status, since_head, alone, start) = (&status, &since_head, &alone, &start);
+                readers.spawn(move || {
+                    start.wait();
+                    let mut wrong = Vec::new();
+                    for read in 0..READS_EACH {
+                        if reader % 3 == 0 {
+                            let seen = since_head();
+                            if seen != alone.1 {
+                                wrong.push(format!("reader {reader} read {read}: {seen:?}"));
+                            }
+                        } else {
+                            let seen = status();
+                            if seen != alone.0 {
+                                wrong.push(format!("reader {reader} read {read}: {seen:?}"));
+                            }
+                        }
+                    }
+                    wrong
+                })
+            })
+            .collect();
+        reading
+            .into_iter()
+            .flat_map(|reader| reader.join().unwrap())
+            .collect()
+    });
+    assert!(
+        wrong.is_empty(),
+        "{} of {} reads saw another index:\n{}",
+        wrong.len(),
+        READERS * READS_EACH,
+        wrong.join("\n")
+    );
+
+    let left_behind: Vec<_> = std::fs::read_dir(&scratch).unwrap().flatten().collect();
+    assert!(left_behind.is_empty(), "{left_behind:?}");
+    let after = fingerprint(p);
+    assert_eq!(before.0, after.0, ".git changed while reading");
+    assert_eq!(before.1, after.1, "git status changed while reading");
+}
+
+#[test]
+fn a_copy_left_by_a_process_that_ended_is_removed_and_no_other_file_is() {
+    let repo = repo_with(&[("a.py", "x = 1\n")]);
+    let state = TempDir::new("status-leftover-state");
+    let info = git::discover(repo.path()).unwrap();
+    let scratch = Store::new(state.path()).shadow(&info).dir;
+    let mut ended = std::process::Command::new("git")
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let ended_id = ended.id();
+    ended.wait().unwrap();
+    let left_behind = format!("index.status.{ended_id}.3");
+    let being_read = format!("index.head.{}.999999", std::process::id());
+    for name in [
+        left_behind.as_str(),
+        being_read.as_str(),
+        "index.status",
+        "notes.txt",
+    ] {
+        write(&scratch, name, "not an index\n");
+    }
+    assert_eq!(git::status(&info, &scratch).unwrap(), Status::default());
+    let mut kept: Vec<String> = std::fs::read_dir(&scratch)
+        .unwrap()
+        .flatten()
+        .map(|file| file.file_name().to_string_lossy().into_owned())
+        .collect();
+    kept.sort();
+    assert_eq!(kept, [being_read.as_str(), "index.status", "notes.txt"]);
+}

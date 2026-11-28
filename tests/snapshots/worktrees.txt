@@ -1,0 +1,50 @@
+  status   review   history   branches   worktrees                                                                            ○ paneMorph · selector-fix   main
+
+ worktrees · 4                                            <tmp>/work
+ ● <tmp>/work                                             every tab shows this worktree
+     main  ○ claude  2 files +5 −2
+   <tmp>/docs                                             branch        main
+     docs  ○ pi  ● codex  2 files +4                      upstream      origin/main · in step
+   <tmp>/gone                                             agents        ○ claude  idle
+     gone  folder missing
+   <tmp>/pinned                                           staged · 1
+     66fbaa6  clean  locked                               M app.py   +1 −1
+
+                                                          not staged · 2
+                                                          M app.py   +1 −1
+                                                          ? notes.md +3
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ j k worktree                                             e editor  E VS Code  y copy path  ? keys

@@ -160,13 +160,17 @@ pub fn fingerprint(repo: &Path) -> (BTreeMap<String, (u64, u128, u64)>, String) 
             }
         }
     }
+    (map, status_without_refreshing(repo))
+}
+
+pub fn status_without_refreshing(folder: &Path) -> String {
     let status = Command::new("git")
-        .current_dir(repo)
+        .current_dir(folder)
         .env("GIT_OPTIONAL_LOCKS", "0")
         .args(["status", "--porcelain=v1", "--untracked-files=all"])
         .output()
         .unwrap();
-    (map, String::from_utf8_lossy(&status.stdout).into_owned())
+    String::from_utf8_lossy(&status.stdout).into_owned()
 }
 
 pub fn fixture(name: &str) -> String {
@@ -477,4 +481,140 @@ pub fn custom_app(roots: &codemap::custom::Roots, state: &Path) -> codemap::app:
     app.custom.roots = Some(roots.clone());
     app.load_blocking();
     app
+}
+
+pub struct Worktrees {
+    pub remoted: Remoted,
+    pub main: PathBuf,
+    pub docs: PathBuf,
+    pub gone: PathBuf,
+    pub pinned: PathBuf,
+}
+
+impl Worktrees {
+    pub fn base(&self) -> &Path {
+        self.remoted.tmp.path()
+    }
+
+    pub fn present(&self) -> [&Path; 3] {
+        [&self.main, &self.docs, &self.pinned]
+    }
+}
+
+pub fn worktrees_repo() -> Worktrees {
+    let remoted = repo_with_origin();
+    let main = remoted.root.clone();
+    let p = main.as_path();
+    let beside = |name: &str| remoted.tmp.path().join(name);
+    let (docs, gone, pinned) = (beside("docs"), beside("gone"), beside("pinned"));
+    let path = |folder: &Path| folder.to_str().unwrap().to_string();
+    git(p, &["worktree", "add", "-q", "-b", "docs", &path(&docs)]);
+    git(&docs, &["push", "-q", "-u", "origin", "docs"]);
+    commit_file(&docs, "guide.md", "# Guide\n", "docs: start the guide");
+    git(p, &["worktree", "add", "-q", "--detach", &path(&pinned)]);
+    git(
+        p,
+        &[
+            "worktree",
+            "lock",
+            "--reason",
+            "on a removable disk",
+            &path(&pinned),
+        ],
+    );
+    git(p, &["worktree", "add", "-q", "-b", "gone", &path(&gone)]);
+    std::fs::remove_dir_all(&gone).unwrap();
+    write(p, "app.py", "x = 2\n");
+    git(p, &["add", "app.py"]);
+    write(p, "app.py", "x = 3\n");
+    write(p, "notes.md", "# Notes\n\nKeep the timeout.\n");
+    write(&docs, "guide.md", "# Guide\n\nRun it.\n");
+    write(&docs, "examples/first.md", "one\ntwo\n");
+    git(&docs, &["add", "examples/first.md"]);
+    Worktrees {
+        remoted,
+        main,
+        docs,
+        gone,
+        pinned,
+    }
+}
+
+pub fn untouched(worktrees: &Worktrees) -> impl PartialEq + std::fmt::Debug {
+    let each: Vec<_> = worktrees
+        .present()
+        .iter()
+        .map(|folder| (tree_bytes(folder), status_without_refreshing(folder)))
+        .collect();
+    (fingerprint(&worktrees.main), each, worktrees.gone.exists())
+}
+
+pub struct FakeHerdr {
+    pub socket: PathBuf,
+}
+
+impl FakeHerdr {
+    pub fn client(&self) -> codemap::herdr::Client {
+        codemap::herdr::Client::new(&self.socket)
+    }
+}
+
+impl Drop for FakeHerdr {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.socket);
+    }
+}
+
+pub fn listed_agent(pane: &str, name: &str, status: &str, cwd: &Path) -> serde_json::Value {
+    serde_json::json!({
+        "pane_id": pane,
+        "terminal_id": format!("term_{pane}"),
+        "workspace_id": "w1",
+        "tab_id": "w1:t1",
+        "agent": name,
+        "agent_status": status,
+        "cwd": cwd.display().to_string(),
+    })
+}
+
+pub fn fake_herdr(agents: Vec<serde_json::Value>) -> FakeHerdr {
+    fake_herdr_where_panes_are(agents.clone(), agents)
+}
+
+pub fn fake_herdr_where_panes_are(
+    agents: Vec<serde_json::Value>,
+    panes: Vec<serde_json::Value>,
+) -> FakeHerdr {
+    use std::io::{BufRead, BufReader, Write};
+
+    let socket = PathBuf::from(format!(
+        "/tmp/cmw-{}-{}.sock",
+        std::process::id(),
+        COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    let _ = std::fs::remove_file(&socket);
+    let listener = std::os::unix::net::UnixListener::bind(&socket).unwrap();
+    std::thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            let mut asked = String::new();
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            if reader.read_line(&mut asked).unwrap_or(0) == 0 {
+                continue;
+            }
+            let request: serde_json::Value = serde_json::from_str(asked.trim()).unwrap();
+            let pane = panes
+                .iter()
+                .find(|pane| pane["pane_id"] == request["params"]["pane_id"]);
+            let reply = match (request["method"].as_str(), pane) {
+                (Some("agent.list"), _) => serde_json::json!({"result": {"agents": agents}}),
+                (Some("pane.get"), Some(pane)) => serde_json::json!({"result": {"pane": pane}}),
+                _ => serde_json::json!({"error": {"code": "unsupported", "message": "fake"}}),
+            };
+            let mut reply = reply;
+            reply["id"] = request["id"].clone();
+            let mut stream = stream;
+            let _ = writeln!(stream, "{reply}");
+        }
+    });
+    FakeHerdr { socket }
 }

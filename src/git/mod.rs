@@ -1,10 +1,12 @@
 pub mod branch;
 pub mod diff;
 pub mod graph;
+pub mod worktree;
 pub mod write;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub use diff::{DiffLine, FileDiff, FileStatus, Hunk, LineKind};
 pub use graph::{Commit, GraphRow};
@@ -249,14 +251,54 @@ const DIFF_FORMAT: [&str; 7] = [
 const STAGED_DIFF: &[&str] = &["--cached"];
 const UNSTAGED_DIFF: &[&str] = &["--ours"];
 
+static INDEX_COPIES: AtomicU64 = AtomicU64::new(0);
+
+fn is_running(process: u32) -> bool {
+    let Ok(pid) = libc::pid_t::try_from(process) else {
+        return false;
+    };
+    if pid <= 0 {
+        return false;
+    }
+    let signalled = unsafe { libc::kill(pid, 0) };
+    signalled == 0 || std::io::Error::last_os_error().raw_os_error() != Some(libc::ESRCH)
+}
+
+fn process_of_copy(file_name: &str) -> Option<u32> {
+    let mut parts = file_name.split('.');
+    let (index, kind) = (parts.next()?, parts.next()?);
+    let (process, serial) = (parts.next()?, parts.next()?);
+    if index != "index" || kind.is_empty() || parts.next().is_some() {
+        return None;
+    }
+    serial.parse::<u64>().ok()?;
+    process.parse().ok()
+}
+
+fn remove_copies_of_ended_processes(scratch: &Path) {
+    let Ok(entries) = std::fs::read_dir(scratch) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let owner = name.to_str().and_then(process_of_copy);
+        if owner.is_some_and(|process| !is_running(process)) {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
+}
+
 struct IndexCopy<'a> {
     info: &'a RepoInfo,
     path: PathBuf,
 }
 
 impl<'a> IndexCopy<'a> {
-    fn new(info: &'a RepoInfo, scratch: &Path, name: &str) -> Result<Self, GitError> {
+    fn new(info: &'a RepoInfo, scratch: &Path, kind: &str) -> Result<Self, GitError> {
         std::fs::create_dir_all(scratch).map_err(|e| GitError(e.to_string()))?;
+        remove_copies_of_ended_processes(scratch);
+        let serial = INDEX_COPIES.fetch_add(1, Ordering::Relaxed);
+        let name = format!("index.{kind}.{}.{serial}", std::process::id());
         let copy = IndexCopy {
             info,
             path: scratch.join(name),
@@ -306,7 +348,7 @@ impl Drop for IndexCopy<'_> {
 }
 
 pub fn diff_head(info: &RepoInfo, scratch: &Path) -> Result<Vec<FileDiff>, GitError> {
-    let index = IndexCopy::new(info, scratch, "index.head")?;
+    let index = IndexCopy::new(info, scratch, "head")?;
     let mut files = Vec::new();
     if info.head.is_some() {
         files = index.diff(&["HEAD"])?;
@@ -329,7 +371,7 @@ pub struct Status {
 }
 
 pub fn status(info: &RepoInfo, scratch: &Path) -> Result<Status, GitError> {
-    let index = IndexCopy::new(info, scratch, "index.status")?;
+    let index = IndexCopy::new(info, scratch, "status")?;
     let mut staged = index.diff(STAGED_DIFF)?;
     let mut unstaged = index.diff(UNSTAGED_DIFF)?;
     for rel in index.untracked()? {
@@ -363,18 +405,25 @@ pub fn show_commit(root: &Path, sha: &str) -> Result<Vec<FileDiff>, GitError> {
     Ok(diff::parse(&out))
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Worktree {
     pub path: PathBuf,
     pub head: Option<String>,
     pub branch: Option<String>,
     pub detached: bool,
     pub bare: bool,
+    pub locked: Option<String>,
+    pub prunable: Option<String>,
 }
 
 pub fn worktrees(root: &Path) -> Result<Vec<Worktree>, GitError> {
     let out = run(root, &["worktree", "list", "--porcelain"])?;
     Ok(parse_worktrees(&out))
+}
+
+fn reason_after(line: &str, word: &str) -> Option<String> {
+    let rest = line.strip_prefix(word)?;
+    (rest.is_empty() || rest.starts_with(' ')).then(|| rest.trim().to_string())
 }
 
 pub fn parse_worktrees(out: &str) -> Vec<Worktree> {
@@ -387,10 +436,7 @@ pub fn parse_worktrees(out: &str) -> Vec<Worktree> {
             }
             cur = Some(Worktree {
                 path: PathBuf::from(path),
-                head: None,
-                branch: None,
-                detached: false,
-                bare: false,
+                ..Default::default()
             });
         } else if let Some(w) = cur.as_mut() {
             if let Some(head) = line.strip_prefix("HEAD ") {
@@ -401,6 +447,10 @@ pub fn parse_worktrees(out: &str) -> Vec<Worktree> {
                 w.detached = true;
             } else if line == "bare" {
                 w.bare = true;
+            } else if let Some(why) = reason_after(line, "locked") {
+                w.locked = Some(why);
+            } else if let Some(why) = reason_after(line, "prunable") {
+                w.prunable = Some(why);
             }
         }
     }
@@ -429,5 +479,49 @@ mod tests {
         assert_eq!(w[0].branch.as_deref(), Some("main"));
         assert!(w[1].detached);
         assert_eq!(w[1].head.as_deref(), Some("2222"));
+        assert!(w.iter().all(|w| w.locked.is_none() && w.prunable.is_none()));
+    }
+
+    #[test]
+    fn a_locked_and_a_prunable_worktree_keep_what_git_said_about_them() {
+        let out = "worktree /a/repo\nHEAD 1111\nbranch refs/heads/main\n\nworktree /a/usb\nHEAD 2222\nbranch refs/heads/usb\nlocked on a removable disk\n\nworktree /a/kept\nHEAD 3333\ndetached\nlocked\n\nworktree /a/gone\nHEAD 4444\nbranch refs/heads/gone\nprunable gitdir file points to non-existent location\n\nworktree /a/bare.git\nbare\n";
+        let w = parse_worktrees(out);
+        let paths: Vec<_> = w.iter().map(|w| w.path.display().to_string()).collect();
+        assert_eq!(
+            paths,
+            ["/a/repo", "/a/usb", "/a/kept", "/a/gone", "/a/bare.git"]
+        );
+        assert_eq!(w[1].locked.as_deref(), Some("on a removable disk"));
+        assert_eq!(w[2].locked.as_deref(), Some(""));
+        assert_eq!(
+            w[3].prunable.as_deref(),
+            Some("gitdir file points to non-existent location")
+        );
+        assert_eq!((w[0].locked.as_ref(), w[0].prunable.as_ref()), (None, None));
+        assert!(w[4].bare && !w[3].bare);
+    }
+
+    #[test]
+    fn an_index_copy_is_named_after_the_process_that_made_it() {
+        assert_eq!(process_of_copy("index.status.4242.7"), Some(4242));
+        assert_eq!(process_of_copy("index.head.1.0"), Some(1));
+        for other in [
+            "index.status",
+            "index.head",
+            "index",
+            "shadow.git",
+            "notes.4242.7",
+            "index.4242.7",
+            "index.status.4242.7.lock",
+            "old.index.status.4242.7",
+            "index..4242.7",
+            "index.status.x.7",
+            "index.status.4242.x",
+        ] {
+            assert_eq!(process_of_copy(other), None, "{other}");
+        }
+        assert!(is_running(std::process::id()));
+        assert!(!is_running(0));
+        assert!(!is_running(u32::MAX));
     }
 }
