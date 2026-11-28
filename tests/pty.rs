@@ -369,7 +369,7 @@ fn worktrees_tab_jumps_to_another_worktree_and_shows_its_status() {
         140,
         30,
     );
-    p.wait_for("y copy path  ? keys", 0, Duration::from_secs(5))
+    p.wait_for("y copy path  r reread  ? keys", 0, Duration::from_secs(5))
         .expect("the list of worktrees");
     let screen = p.screen();
     for needle in [

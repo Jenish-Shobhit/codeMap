@@ -41,8 +41,9 @@ pub(super) fn hints(app: &App) -> Vec<(&'static str, String)> {
         return vec![keys];
     };
     let copy = ("y", "copy path".to_string());
+    let reread = ("r", "reread".to_string());
     if entry.checkout.is_missing() {
-        return vec![copy, keys];
+        return vec![copy, reread, keys];
     }
     let mut hints = Vec::new();
     if !app.shows(&entry.checkout) {
@@ -52,6 +53,7 @@ pub(super) fn hints(app: &App) -> Vec<(&'static str, String)> {
         ("e", "editor".to_string()),
         ("E", "VS Code".into()),
         copy,
+        reread,
         keys,
     ]);
     hints

@@ -204,6 +204,7 @@ Inside the popup:
 | `B` / `y` | Branches | open the branch's pull request, or else its page on GitHub / copy the branch name |
 | `j` `k`, `g` `G` | Worktrees | move between the worktrees |
 | `⏎` | Worktrees | show the selected worktree in every tab, and follow the agent working in it |
+| `r` | Worktrees | read the worktrees again |
 | `e` / `E`, `y` | Worktrees | open the worktree's folder in the editor / in VS Code, copy its path |
 
 The editor is `$VISUAL`, then `$EDITOR`, then `nvim` when it is installed.
@@ -403,9 +404,9 @@ the editor and in VS Code.
 
 Worktrees only reads. It never adds, removes, locks or prunes a worktree, and
 it reads each one's status through a private copy of that worktree's index, so
-looking at six worktrees writes into none of them. The list is read the first
-time the tab is shown, and again after you stage, commit, discard or act on a
-branch from another tab.
+looking at six worktrees writes into none of them. The list is read every
+time you enter the tab, on `r`, and after you stage, commit, discard or act on
+a branch from another tab. It stays on screen while it is read again.
 
 ## Standalone
 

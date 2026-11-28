@@ -47,4 +47,4 @@
 
 
 
- j k worktree                                             ⏎ show this worktree  e editor  E VS Code  y copy path  ? keys
+ j k worktree                                             ⏎ show this worktree  e editor  E VS Code  y copy path  r reread  ? keys

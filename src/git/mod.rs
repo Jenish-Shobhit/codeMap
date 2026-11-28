@@ -271,8 +271,12 @@ fn process_of_copy(file_name: &str) -> Option<u32> {
     if index != "index" || kind.is_empty() || parts.next().is_some() {
         return None;
     }
-    serial.parse::<u64>().ok()?;
-    process.parse().ok()
+    digits(serial)?.parse::<u64>().ok()?;
+    digits(process)?.parse().ok()
+}
+
+fn digits(part: &str) -> Option<&str> {
+    (!part.is_empty() && part.bytes().all(|b| b.is_ascii_digit())).then_some(part)
 }
 
 fn remove_copies_of_ended_processes(scratch: &Path) {
@@ -517,6 +521,18 @@ mod tests {
             "index..4242.7",
             "index.status.x.7",
             "index.status.4242.x",
+            "index.status.+4242.7",
+            "index.status.4242.+7",
+            "index.status.-1.7",
+            "index.status.4242.-1",
+            "index.status..7",
+            "index.status.4242.",
+            "index.status.42 42.7",
+            "index.status.4242.7 ",
+            "index.status.٤٢٤٢.7",
+            "index.status.4242.٧",
+            "index.status.4294967296.7",
+            "index.status.4242.18446744073709551616",
         ] {
             assert_eq!(process_of_copy(other), None, "{other}");
         }

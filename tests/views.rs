@@ -320,7 +320,7 @@ fn keys_switch_views_and_close() {
     let tall = ui::buffer_text(&draw(&mut app, W, 51));
     for needle in [
         "│ worktrees",
-        "⏎  y          show the worktree in every tab, copy its path",
+        "⏎  y  r       show in every tab, copy its path, read again",
     ] {
         assert!(tall.contains(needle), "missing {needle:?}\n{tall}");
     }
@@ -3626,7 +3626,7 @@ fn worktrees_view_lists_each_worktree_its_agents_and_its_changes() {
         "not staged · 2",
         "? notes.md +3",
         "j k worktree",
-        "e editor  E VS Code  y copy path  ? keys",
+        "e editor  E VS Code  y copy path  r reread  ? keys",
     ] {
         assert!(t.contains(needle), "missing {needle:?}\n{t}");
     }
@@ -3669,7 +3669,7 @@ fn worktrees_view_lists_each_worktree_its_agents_and_its_changes() {
         "A examples/first.md +2",
         "not staged · 1",
         "M guide.md          +2",
-        "⏎ show this worktree  e editor  E VS Code  y copy path  ? keys",
+        "⏎ show this worktree  e editor  E VS Code  y copy path  r reread  ? keys",
     ] {
         assert!(t.contains(needle), "missing {needle:?}\n{t}");
     }
@@ -3702,7 +3702,7 @@ fn a_detached_a_locked_and_a_missing_worktree_say_so_in_words() {
         "the folder is missing · git worktree prune forgets it",
         "branch        gone",
         "prunable      ",
-        "y copy path  ? keys",
+        "y copy path  r reread  ? keys",
     ] {
         assert!(t.contains(needle), "missing {needle:?}\n{t}");
     }
@@ -3836,7 +3836,7 @@ fn worktrees_of_a_repository_with_one_worktree() {
         "branch        main",
         "upstream      none",
         "nothing to commit, working tree clean",
-        "e editor  E VS Code  y copy path  ? keys",
+        "e editor  E VS Code  y copy path  r reread  ? keys",
     ] {
         assert!(t.contains(needle), "missing {needle:?}\n{t}");
     }
@@ -3955,7 +3955,7 @@ fn an_answer_to_an_earlier_question_is_dropped() {
 }
 
 #[test]
-fn the_worktrees_are_read_when_the_tab_is_first_shown() {
+fn the_worktrees_are_read_whenever_the_tab_is_entered() {
     let repo = worktrees_repo();
     let state = TempDir::new("worktrees-lazy-state");
     for view in [
@@ -3985,10 +3985,64 @@ fn the_worktrees_are_read_when_the_tab_is_first_shown() {
         key(&mut app, KeyCode::Char(tab));
         text(&mut app);
     }
-    assert_eq!(app.worktrees.asks, 1, "once for the popup");
+    assert_eq!(
+        app.worktrees.asks, 3,
+        "once for the popup, once for each return"
+    );
 
     let direct = loaded(git_options(&repo.main, &state, View::Worktrees, no_gh()));
     assert_eq!((direct.worktrees.asks, direct.worktrees.loaded), (1, true));
+}
+
+fn docs_summary(app: &mut App, repo: &Worktrees) -> String {
+    let base = repo.base().to_path_buf();
+    rail_and_body(app, &base)
+        .lines()
+        .find(|line| line.contains("     docs  "))
+        .unwrap_or_default()
+        .to_string()
+}
+
+#[test]
+fn coming_back_to_the_worktrees_shows_what_changed_while_away() {
+    let mut tab = worktrees_tab();
+    let (repo, app) = (&tab.repo, &mut tab.app);
+    assert!(docs_summary(app, repo).contains("2 files +4"));
+    key(app, KeyCode::Char('1'));
+    write(&repo.docs, "later.md", "one\ntwo\n");
+    key(app, KeyCode::Char('5'));
+    assert_eq!(app.worktrees.asks, 2);
+    let summary = docs_summary(app, repo);
+    assert!(summary.contains("3 files +6"), "{summary}");
+}
+
+#[test]
+fn r_reads_the_worktrees_again_without_leaving_the_tab() {
+    let mut tab = worktrees_tab();
+    let (repo, app) = (&tab.repo, &mut tab.app);
+    assert!(docs_summary(app, repo).contains("2 files +4"));
+    write(&repo.docs, "later.md", "one\ntwo\n");
+    assert!(
+        docs_summary(app, repo).contains("2 files +4"),
+        "not by itself"
+    );
+    key(app, KeyCode::Char('r'));
+    assert_eq!(app.worktrees.asks, 2);
+    assert!(app.worktrees.loaded, "the list stays while it is read");
+    let summary = docs_summary(app, repo);
+    assert!(summary.contains("3 files +6"), "{summary}");
+}
+
+#[test]
+fn moving_in_the_worktrees_tab_does_not_read_again() {
+    let mut tab = worktrees_tab();
+    let app = &mut tab.app;
+    assert_eq!(app.worktrees.asks, 1);
+    for step in [KeyCode::Char('j'), KeyCode::Char('k'), KeyCode::Char('G')] {
+        key(app, step);
+        text(app);
+    }
+    assert_eq!(app.worktrees.asks, 1);
 }
 
 #[test]
@@ -4150,7 +4204,7 @@ fn the_list_stays_on_screen_while_the_worktree_jumped_to_is_read() {
         "   <tmp>/work",
         " ● <tmp>/docs",
         "every tab shows this worktree",
-        "e editor  E VS Code  y copy path  ? keys",
+        "e editor  E VS Code  y copy path  r reread  ? keys",
     ] {
         assert!(t.contains(needle), "missing {needle:?}\n{t}");
     }

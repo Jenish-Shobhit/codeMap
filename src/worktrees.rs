@@ -205,7 +205,13 @@ fn named(path: &Path) -> String {
 impl App {
     pub fn worktrees_shown(&mut self) {
         let asked = self.worktrees.asks > 0 && !self.worktrees.outdated;
-        if self.view != View::Worktrees || asked {
+        if !asked {
+            self.worktrees_entered();
+        }
+    }
+
+    pub fn worktrees_entered(&mut self) {
+        if self.view != View::Worktrees {
             return;
         }
         let Some(repo) = self.repo.clone() else {

@@ -89,7 +89,7 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
                 app.history_move(0);
             }
             app.branches_shown();
-            app.worktrees_shown();
+            app.worktrees_entered();
             app.drain_if_sync();
             return Action::Redraw;
         }
@@ -99,6 +99,11 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
                 Some(branch) => Action::Copy(branch.name.clone()),
                 None => Action::None,
             };
+        }
+        KeyCode::Char('r') if !ctrl && app.view == View::Worktrees => {
+            app.worktrees_entered();
+            app.drain_if_sync();
+            return Action::Redraw;
         }
         KeyCode::Char('y') if !ctrl && app.view == View::Worktrees => {
             return match app.worktrees.selected() {

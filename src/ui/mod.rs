@@ -531,7 +531,7 @@ pub const KEYS: &[(&str, &[(&str, &str)])] = &[
     ),
     (
         "worktrees",
-        &[("⏎  y", "show the worktree in every tab, copy its path")],
+        &[("⏎  y  r", "show in every tab, copy its path, read again")],
     ),
 ];
 
