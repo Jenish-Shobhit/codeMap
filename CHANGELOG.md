@@ -120,6 +120,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   find it missing and show every file as deleted or untracked. Copies left by
   a popup that was closed in the middle of a read are removed by the next
   one.
+- A commit message can no longer make History run git with an option of its
+  own. A message holding a control character could list a commit that does
+  not exist, and selecting it ran `git show` with the text after the
+  character as an option, which could overwrite a file. History now lists
+  only real commit ids and tells git where its options end.
 
 ## [0.1.0] - 2026-09-27
 
