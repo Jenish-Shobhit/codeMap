@@ -31,7 +31,9 @@ unless you prefer otherwise.
 codeMap runs as your user, with the permissions of the herdr plugin that
 launches it. What it touches:
 
-- It reads the files and git metadata of the repository you open.
+- It reads the files and git metadata of the repository you open. The
+  Worktrees tab also reads the status of that repository's other worktrees,
+  wherever their folders are, and writes into none of them.
 - To read, and to record turns, it runs `git` with a private `GIT_DIR` and
   index in its plugin state directory (by default
   `~/.local/state/herdr/plugins/dev.codemap/`). Reading and recording never

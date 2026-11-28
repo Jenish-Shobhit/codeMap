@@ -49,6 +49,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   title, state and base branch. `B` opens the pull request, or the branch on
   GitHub. Without `gh` the tab says why and shows the rest. `CODEMAP_GH`
   names another program.
+- **Worktrees**: the fifth tab of the Git popup, on `5` or `--view
+  worktrees`. It lists every worktree of the repository with its branch, the
+  herdr agents working in it and a summary of its uncommitted changes, and
+  marks the one the popup is showing. The selected worktree shows its
+  upstream, each agent and its state, and its staged and not staged files; a
+  locked worktree and one whose folder is missing say so. The tab only reads,
+  through a private copy of each worktree's index.
+- **Jumping between worktrees**: `⏎` in Worktrees points the whole popup at
+  the selected worktree, so Status, Review, History and Branches show it, and
+  follows the agent herdr reports working there. `y` copies the worktree's
+  path, and `e` and `E` open its folder in the editor and in VS Code.
 
 ### Changed
 
@@ -64,8 +75,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `e` opens the editor in a herdr split beside the agent's pane and closes
   the popup. Outside herdr it still takes over the terminal. With `$VISUAL`
   and `$EDITOR` unset the editor is `nvim` when installed, where it was `vi`.
-- Each popup shows only its own views: `1` to `4` switch between Status,
-  Review, History and Branches, and Files stands alone.
+- Each popup shows only its own views: `1` to `5` switch between Status,
+  Review, History, Branches and Worktrees, and Files stands alone.
+- History no longer lists the worktrees under the graph, now that they have a
+  tab of their own. Its header still counts them.
 - The Changes tab is labelled `review`, beside `status`, `history` and
   `branches`. `--view changes`, `--view review` and the `dev.codemap.changes`
   action open it as before.
@@ -85,6 +98,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `dev.codemap.flow` action, `--view map` and `--view flow`, and the `1` key
   in History that opened the Map on a commit. Bind `dev.codemap.open` or
   `dev.codemap.changes` in place of `dev.codemap.flow`.
+
+### Fixed
+
+- Two reads of one worktree's index at the same moment, from two popups or
+  from two tabs of one, no longer disturb each other. Each read now copies
+  the index under a name of its own; they shared one file, and a read could
+  find it missing and show every file as deleted or untracked. Copies left by
+  a popup that was closed in the middle of a read are removed by the next
+  one.
 
 ## [0.1.0] - 2026-09-27
 

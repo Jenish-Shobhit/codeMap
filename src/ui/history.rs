@@ -32,7 +32,7 @@ pub fn header_summary(app: &App) -> Option<String> {
             "commits"
         ),
         util::plural(branches.len().max(1), "branch", "branches"),
-        util::plural(app.history.worktrees.len().max(1), "worktree", "worktrees"),
+        util::plural(app.history.worktrees.max(1), "worktree", "worktrees"),
         head
     ))
 }
@@ -222,12 +222,7 @@ fn rail(buf: &mut Buffer, area: Rect, app: &mut App) {
         return;
     }
     let t = app.theme;
-    let wt_rows = if app.history.worktrees.is_empty() {
-        0
-    } else {
-        app.history.worktrees.len().min(4) + 2
-    };
-    let graph_h = (area.height as usize).saturating_sub(1 + wt_rows);
+    let graph_h = (area.height as usize).saturating_sub(1);
     let sel_row = app
         .history
         .rows
@@ -306,34 +301,5 @@ fn rail(buf: &mut Buffer, area: Rect, app: &mut App) {
         }
         let _ = ri;
         r.line(line);
-    }
-    if !app.history.worktrees.is_empty() {
-        r.y = area.y + area.height.saturating_sub(1 + wt_rows as u16);
-        r.blank();
-        r.section("worktrees");
-        for w in app.history.worktrees.iter().take(4) {
-            let branch_w = w.branch.as_ref().map(|b| util::width(b)).unwrap_or(0);
-            let path_w = (area.width as usize).saturating_sub(branch_w + 6).max(12);
-            let mut line = Line::new()
-                .push(
-                    util::truncate_left(&util::tilde(&w.path), path_w),
-                    style(if w.current { t.text } else { t.text2 }, t.rail),
-                )
-                .push("  ", style(t.muted, t.rail))
-                .push(
-                    w.branch.clone().unwrap_or_default(),
-                    style(t.branch, t.rail),
-                );
-            for (name, working) in &w.agents {
-                line = line
-                    .push("   ", style(t.muted, t.rail))
-                    .push(
-                        if *working { "● " } else { "○ " },
-                        style(if *working { t.add } else { t.muted }, t.rail),
-                    )
-                    .push(name.clone(), style(t.text2, t.rail));
-            }
-            r.line(line);
-        }
     }
 }

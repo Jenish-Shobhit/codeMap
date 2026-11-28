@@ -148,10 +148,14 @@ fn remotes(root: &Path) -> Result<Vec<Remote>, GitError> {
         .collect())
 }
 
-pub fn list(root: &Path) -> Result<Branches, GitError> {
+pub fn local(root: &Path) -> Result<Vec<Branch>, GitError> {
     let out = run(root, &["for-each-ref", FIELDS, "refs/heads"])?;
+    Ok(parse_branches(&out))
+}
+
+pub fn list(root: &Path) -> Result<Branches, GitError> {
     Ok(Branches {
-        local: parse_branches(&out),
+        local: local(root)?,
         remotes: remotes(root)?,
         default: default_branch(root),
     })

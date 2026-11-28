@@ -1,4 +1,4 @@
-  status   review   history   branches                                                                                        ○ paneMorph · selector-fix   main
+  status   review   history   branches   worktrees                                                                            ○ paneMorph · selector-fix   main
 
  staged · 0                               f.txt   +3 −3    not staged    hunk 2 of 3
                                          │@@ line 11 · 12–18

@@ -106,7 +106,13 @@ pub fn run(opts: Options, trace: Trace) -> io::Result<i32> {
                     let path = app.root.join(&at.path);
                     match editor_pane(&app) {
                         Some((client, pane)) => {
-                            match open::edit_in_split(&client, &pane, &app.root, &path, at.line) {
+                            match open::edit_in_split(
+                                &client,
+                                &pane,
+                                &editor_directory(&app.root, &at),
+                                &path,
+                                at.line,
+                            ) {
                                 Ok(()) => break,
                                 Err(e) => app.message = Some(e),
                             }
@@ -234,19 +240,7 @@ fn retarget(app: &mut App, ctx: herdr::PluginContext) {
     if same_root && same_agent {
         return;
     }
-    let opts = Options {
-        path: Some(new_root),
-        view: app.view,
-        context: Some(ctx),
-        client: app.client.clone(),
-        store: app.store.clone(),
-        theme: app.theme,
-        gh: app.gh.clone(),
-    };
-    let pinned = app.pinned;
-    *app = App::new(opts);
-    app.pinned = pinned;
-    app.start();
+    app.follow_pane(new_root, ctx);
 }
 
 fn pin(app: &App, placement: &'static str) -> Result<(), String> {
@@ -282,6 +276,14 @@ fn editor_pane(app: &App) -> Option<(herdr::Client, String)> {
         return None;
     }
     Some((app.client.clone()?, app.target_pane()?))
+}
+
+fn editor_directory(root: &std::path::Path, at: &Location) -> std::path::PathBuf {
+    if at.dir {
+        root.join(&at.path)
+    } else {
+        root.to_path_buf()
+    }
 }
 
 fn open_outside(app: &App, opener: Opener, at: &Location) -> Result<String, String> {
@@ -356,6 +358,27 @@ fn base64(data: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use std::path::Path;
+
+    fn at(path: &str, dir: bool) -> Location {
+        Location {
+            path: path.into(),
+            line: None,
+            dir,
+        }
+    }
+
+    #[test]
+    fn the_editor_starts_in_the_root_for_a_file_and_in_the_folder_for_a_folder() {
+        let root = Path::new("/code/repo");
+        assert_eq!(editor_directory(root, &at("src/app.rs", false)), root);
+        assert_eq!(
+            editor_directory(root, &at("/code/repo-docs", true)),
+            Path::new("/code/repo-docs")
+        );
+    }
+
     #[test]
     fn base64_encodes() {
         assert_eq!(super::base64(b"a.py:42"), "YS5weTo0Mg==");

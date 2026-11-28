@@ -149,11 +149,14 @@ fn history_view() {
         "│ ● ",
         "├─╯",
         "tag: v0.1.0",
-        "worktrees",
         "M README.md",
     ] {
         assert!(t.contains(needle), "missing {needle:?}\n{t}");
     }
+    assert!(
+        !t.contains("\n worktrees") && !t.contains("/paneMorph  main"),
+        "the worktrees have a tab of their own\n{t}"
+    );
     snapshot("history", &normalize(&t, pm.tmp.path()));
     key(&mut app, KeyCode::Char('j'));
     key(&mut app, KeyCode::Char('j'));
@@ -285,6 +288,7 @@ fn keys_switch_views_and_close() {
     for (number, view, label) in [
         ('3', View::History, "history"),
         ('4', View::Branches, "branches"),
+        ('5', View::Worktrees, "worktrees"),
         ('1', View::Status, "status"),
         ('2', View::Changes, "review"),
     ] {
@@ -297,14 +301,14 @@ fn keys_switch_views_and_close() {
             .collect();
         assert_eq!(current.trim(), label);
     }
-    assert_eq!(key(&mut app, KeyCode::Char('5')), Action::None);
+    assert_eq!(key(&mut app, KeyCode::Char('6')), Action::None);
     assert_eq!(app.view, View::Changes);
     key(&mut app, KeyCode::Char('?'));
     assert!(app.show_help);
     let t = text(&mut app);
     assert!(t.contains("╭─ keys ─"), "{t}");
     for needle in [
-        "1 2 3 4       status, review, history, branches",
+        "1 2 3 4 5     status, review, history, branches, worktrees",
         "paste the draft",
         "branches",
         "⏎  n          switch to the branch, name a new one from HEAD",
@@ -312,6 +316,13 @@ fn keys_switch_views_and_close() {
         "B  y          open the pull request or branch page, copy name",
     ] {
         assert!(t.contains(needle), "missing {needle:?}\n{t}");
+    }
+    let tall = ui::buffer_text(&draw(&mut app, W, 51));
+    for needle in [
+        "│ worktrees",
+        "⏎  y  r       show in every tab, copy its path, read again",
+    ] {
+        assert!(tall.contains(needle), "missing {needle:?}\n{tall}");
     }
     key(&mut app, KeyCode::Esc);
     assert!(!app.show_help);
@@ -332,6 +343,9 @@ fn view_names_parse_and_the_removed_views_do_not() {
     }
     assert_eq!(View::parse("git"), Some(View::Status));
     assert_eq!(View::parse("Branches"), Some(View::Branches));
+    assert_eq!(View::parse("worktree"), Some(View::Worktrees));
+    assert_eq!(View::Worktrees.tabs(), View::Status.tabs());
+    assert_eq!(View::Status.tabs().len(), 5);
     assert_eq!(View::Changes.name(), "changes");
     assert_eq!(View::Changes.label(), "review");
     for gone in ["map", "flow", "open", "1", "2"] {
@@ -524,7 +538,13 @@ fn number_keys_stay_inside_a_popup() {
     assert_eq!(key(&mut app, KeyCode::Char('2')), Action::None);
     assert_eq!(app.view, View::Files);
     assert_eq!(View::Files.tabs(), [View::Files]);
-    let git_popup = [View::Status, View::Changes, View::History, View::Branches];
+    let git_popup = [
+        View::Status,
+        View::Changes,
+        View::History,
+        View::Branches,
+        View::Worktrees,
+    ];
     for tab in git_popup {
         assert_eq!(tab.tabs(), git_popup);
     }
@@ -922,8 +942,8 @@ fn status_opens_the_selected_file_at_the_first_change_of_the_shown_diff() {
 #[test]
 fn only_the_git_popup_reads_the_status() {
     let pm = status_repo();
-    for view in [View::Status, View::Changes, View::History] {
-        let app = app_for(&pm, view, true);
+    for view in View::Status.tabs() {
+        let app = app_for(&pm, *view, true);
         assert!(app.status.loaded, "{view:?}");
         assert_eq!(app.status.len(), 8, "{view:?}");
     }
@@ -1964,7 +1984,7 @@ fn walking_the_status_tab_writes_nothing() {
     key(&mut app, KeyCode::Char('?'));
     text(&mut app);
     key(&mut app, KeyCode::Esc);
-    for tab in ['2', '3', '4', '1'] {
+    for tab in ['2', '3', '4', '5', '1'] {
         key(&mut app, KeyCode::Char(tab));
         text(&mut app);
     }
@@ -3185,6 +3205,7 @@ fn gh_runs_once_and_only_when_the_branches_tab_is_first_shown() {
         View::Status,
         View::Changes,
         View::History,
+        View::Worktrees,
     ] {
         let mut app = loaded(git_options(p, &state, view, gh.clone()));
         text(&mut app);
@@ -3193,7 +3214,7 @@ fn gh_runs_once_and_only_when_the_branches_tab_is_first_shown() {
     }
     let mut app = loaded(git_options(p, &state, View::Status, gh.clone()));
     assert!(app.branches.loaded, "the branches are read with the popup");
-    for tab in ['2', '3', '1'] {
+    for tab in ['2', '3', '5', '1'] {
         key(&mut app, KeyCode::Char(tab));
         text(&mut app);
     }
@@ -3399,10 +3420,11 @@ fn walking_the_branches_tab_writes_nothing() {
     key(&mut app, KeyCode::Char('?'));
     text(&mut app);
     key(&mut app, KeyCode::Esc);
-    for tab in ['1', '2', '3', '4'] {
+    for tab in ['1', '2', '3', '5', '4'] {
         key(&mut app, KeyCode::Char(tab));
         text(&mut app);
     }
+    assert_eq!(app.worktrees.entries.len(), 2);
     assert_eq!(key(&mut app, KeyCode::Esc), Action::Quit);
     assert_eq!(runs(bin.path()), 1);
     let after = (fingerprint(p), tree_bytes(p));
@@ -3460,6 +3482,1091 @@ fn the_branch_questions_and_the_name_prompt_fit_small_terminals() {
     key(&mut app, KeyCode::Esc);
     key(&mut app, KeyCode::Char('n'));
     chars(&mut app, &"a-long-name-".repeat(20));
+    for (w, h) in sizes {
+        let _ = draw(&mut app, w, h);
+    }
+}
+
+struct WorktreesTab {
+    repo: Worktrees,
+    _state: TempDir,
+    _herdr: FakeHerdr,
+    app: App,
+}
+
+fn agents_in(repo: &Worktrees) -> Vec<serde_json::Value> {
+    vec![
+        listed_agent("w1:p2", "claude", "idle", &repo.main),
+        listed_agent("w2:p2", "pi", "idle", &repo.docs),
+        listed_agent("w2:p1", "codex", "working", &repo.docs.join("examples")),
+        listed_agent("w3:p1", "amp", "working", repo.base()),
+    ]
+}
+
+fn worktrees_tab_showing(view: View) -> WorktreesTab {
+    let repo = worktrees_repo();
+    let state = TempDir::new("worktrees-state");
+    let herdr = fake_herdr(agents_in(&repo));
+    let app = loaded(Options {
+        client: Some(herdr.client()),
+        ..git_options(&repo.main, &state, view, no_gh())
+    });
+    WorktreesTab {
+        repo,
+        _state: state,
+        _herdr: herdr,
+        app,
+    }
+}
+
+fn worktrees_tab() -> WorktreesTab {
+    worktrees_tab_showing(View::Worktrees)
+}
+
+fn on_worktree(app: &App) -> std::path::PathBuf {
+    app.worktrees
+        .selected()
+        .map(|entry| entry.checkout.path.clone())
+        .unwrap_or_default()
+}
+
+fn select_worktree(app: &mut App, folder: &std::path::Path) {
+    key(app, KeyCode::Char('g'));
+    while on_worktree(app) != folder {
+        let before = app.worktrees.sel;
+        key(app, KeyCode::Char('j'));
+        assert_ne!(app.worktrees.sel, before, "{folder:?} is not listed");
+    }
+}
+
+fn colour_at(app: &mut App, shown: &str) -> Option<Color> {
+    let buf = draw(app, W, H);
+    let frame = ui::buffer_text(&buf);
+    frame.lines().enumerate().find_map(|(row, line)| {
+        let before = line.find(shown)?;
+        let column = line[..before].chars().count();
+        Some(buf[(column as u16, row as u16)].fg)
+    })
+}
+
+fn rail_and_body_rows(app: &mut App, base: &std::path::Path) -> Vec<String> {
+    let frame = text(app);
+    let rail = ui::areas(ratatui::layout::Rect::new(0, 0, W, H), app.view).rail;
+    let split = rail.width as usize + 1;
+    let fixed = |row: usize, line: &str| -> String {
+        let cells: Vec<char> = line.chars().collect();
+        if row == 0 || cells.len() <= split {
+            return normalize(line, base).trim_end().to_string();
+        }
+        let left: String = cells[..split].iter().collect();
+        let right: String = cells[split..].iter().collect();
+        let joined = format!(
+            "{:<split$}{}",
+            normalize(&left, base).trim_end(),
+            normalize(&right, base).trim_end()
+        );
+        joined.trim_end().to_string()
+    };
+    frame
+        .lines()
+        .enumerate()
+        .map(|(row, line)| fixed(row, line))
+        .collect()
+}
+
+fn without_temporary_paths(rows: &[String]) -> String {
+    let out = format!("{}\n", rows.join("\n"));
+    assert!(
+        !out.contains("codemap-test"),
+        "a temporary path is still in the frame\n{out}"
+    );
+    out
+}
+
+fn rail_and_body(app: &mut App, base: &std::path::Path) -> String {
+    without_temporary_paths(&rail_and_body_rows(app, base))
+}
+
+fn below_the_header(app: &mut App, base: &std::path::Path) -> String {
+    without_temporary_paths(&rail_and_body_rows(app, base)[1..])
+}
+
+#[test]
+fn worktrees_view_lists_each_worktree_its_agents_and_its_changes() {
+    let mut tab = worktrees_tab();
+    let base = tab.repo.base().to_path_buf();
+    let app = &mut tab.app;
+    assert_eq!(on_worktree(app), tab.repo.main, "it opens on the one shown");
+    let t = rail_and_body(app, &base);
+    let header = t.lines().next().unwrap();
+    assert!(
+        header.contains(" status   review   history   branches   worktrees "),
+        "{header}"
+    );
+    assert!(
+        header.ends_with("○ paneMorph · selector-fix   main"),
+        "{header}"
+    );
+    for needle in [
+        " worktrees · 4",
+        " ● <tmp>/work",
+        "     main  ○ claude  2 files +5 −2",
+        "   <tmp>/docs",
+        "     docs  ○ pi  ● codex  2 files +4",
+        "   <tmp>/gone",
+        "     gone  folder missing",
+        "   <tmp>/pinned",
+        "  clean  locked",
+        "every tab shows this worktree",
+        "branch        main",
+        "upstream      origin/main · in step",
+        "agents        ○ claude  idle",
+        "staged · 1",
+        "M app.py   +1 −1",
+        "not staged · 2",
+        "? notes.md +3",
+        "j k worktree",
+        "e editor  E VS Code  y copy path  r reread  ? keys",
+    ] {
+        assert!(t.contains(needle), "missing {needle:?}\n{t}");
+    }
+    assert!(!t.contains("⏎ show"), "the one shown is not offered");
+    assert!(!t.contains("amp"), "an agent outside every worktree\n{t}");
+    snapshot("worktrees", &t);
+
+    let theme = dracula();
+    assert_eq!(colour_at(app, "● "), Some(theme.add));
+    assert_eq!(colour_at(app, "○ claude  2 files"), Some(theme.muted));
+    assert_eq!(colour_at(app, "● codex"), Some(theme.add));
+    assert_eq!(colour_at(app, "main  ○ claude"), Some(theme.branch));
+    assert_eq!(colour_at(app, "+5 −2"), Some(theme.add));
+    assert_eq!(colour_at(app, "−2"), Some(theme.del));
+    assert_eq!(colour_at(app, "M app.py"), Some(theme.modified));
+    assert_eq!(colour_at(app, "? notes.md"), Some(theme.add));
+    assert_eq!(colour_at(app, "folder missing"), Some(theme.modified));
+    assert_eq!(colour_at(app, "locked"), Some(theme.modified));
+    let buf = draw(app, W, H);
+    let current_tab: String = (0..W)
+        .filter(|&x| buf[(x, 0)].bg == theme.accent)
+        .map(|x| buf[(x, 0)].symbol().to_string())
+        .collect();
+    assert_eq!(current_tab.trim(), "worktrees");
+    let selected_rows = (0..H)
+        .filter(|&y| buf[(2, y)].bg == theme.active_row)
+        .count();
+    assert_eq!(selected_rows, 2, "both lines of the selected worktree");
+
+    select_worktree(app, &tab.repo.docs);
+    let t = rail_and_body(app, &base);
+    for needle in [
+        " ● <tmp>/work",
+        "⏎ shows this worktree in every tab",
+        "branch        docs",
+        "upstream      origin/docs · 1 commit ahead",
+        "agents        ○ pi     idle",
+        "              ● codex  working",
+        "staged · 1",
+        "A examples/first.md +2",
+        "not staged · 1",
+        "M guide.md          +2",
+        "⏎ show this worktree  e editor  E VS Code  y copy path  r reread  ? keys",
+    ] {
+        assert!(t.contains(needle), "missing {needle:?}\n{t}");
+    }
+    snapshot("worktrees_another", &t);
+}
+
+#[test]
+fn a_detached_a_locked_and_a_missing_worktree_say_so_in_words() {
+    let mut tab = worktrees_tab();
+    let base = tab.repo.base().to_path_buf();
+    let app = &mut tab.app;
+    select_worktree(app, &tab.repo.pinned);
+    let t = rail_and_body(app, &base);
+    let short = &commit_at(&tab.repo.main, "refs/heads/main")[..7];
+    for needle in [
+        format!("     {short}  clean  locked"),
+        format!("branch        none · HEAD is detached at {short}"),
+        "upstream      none".to_string(),
+        "agents        none".to_string(),
+        "locked        on a removable disk".to_string(),
+        "nothing to commit, working tree clean".to_string(),
+    ] {
+        assert!(t.contains(&needle), "missing {needle:?}\n{t}");
+    }
+    select_worktree(app, &tab.repo.gone);
+    let t = rail_and_body(app, &base);
+    for needle in [
+        "     gone  folder missing",
+        "<tmp>/gone",
+        "the folder is missing · git worktree prune forgets it",
+        "branch        gone",
+        "prunable      ",
+        "y copy path  r reread  ? keys",
+    ] {
+        assert!(t.contains(needle), "missing {needle:?}\n{t}");
+    }
+    for absent in ["staged ·", "⏎ show", "e editor", "working tree clean"] {
+        assert!(!t.contains(absent), "{absent:?} for a missing folder\n{t}");
+    }
+    assert_eq!(
+        colour_at(app, "the folder is missing"),
+        Some(dracula().modified)
+    );
+}
+
+#[test]
+fn worktrees_selection_moves_and_stops_at_both_ends() {
+    let mut tab = worktrees_tab();
+    let repo = &tab.repo;
+    let app = &mut tab.app;
+    assert_eq!(on_worktree(app), repo.main);
+    assert_eq!(key(app, KeyCode::Up), Action::Redraw);
+    assert_eq!(on_worktree(app), repo.main, "the first one stays selected");
+    assert_eq!(key(app, KeyCode::Down), Action::Redraw);
+    assert_eq!(on_worktree(app), repo.docs);
+    assert_eq!(key(app, KeyCode::Char('j')), Action::Redraw);
+    assert_eq!(on_worktree(app), repo.gone);
+    key(app, KeyCode::Char('k'));
+    assert_eq!(on_worktree(app), repo.docs);
+    key(app, KeyCode::Char('G'));
+    assert_eq!(on_worktree(app), repo.pinned);
+    key(app, KeyCode::Char('j'));
+    assert_eq!(on_worktree(app), repo.pinned, "the last one stays selected");
+    key(app, KeyCode::Char('g'));
+    assert_eq!(on_worktree(app), repo.main);
+    key(app, KeyCode::End);
+    assert_eq!(on_worktree(app), repo.pinned);
+    key(app, KeyCode::Home);
+    assert_eq!(on_worktree(app), repo.main);
+    ctrl(app, 'd');
+    assert_eq!(on_worktree(app), repo.pinned);
+    ctrl(app, 'u');
+    assert_eq!(on_worktree(app), repo.main);
+    key(app, KeyCode::PageDown);
+    assert_eq!(on_worktree(app), repo.pinned);
+    key(app, KeyCode::PageUp);
+    assert_eq!(on_worktree(app), repo.main);
+    assert_eq!(key(app, KeyCode::Tab), Action::Redraw);
+    assert_eq!(app.focus(), Focus::Rail, "one list, nothing to step into");
+    assert_eq!(key(app, KeyCode::Char('x')), Action::None);
+}
+
+#[test]
+fn a_short_rail_scrolls_with_the_selected_worktree() {
+    let mut tab = worktrees_tab();
+    let base = tab.repo.base().to_path_buf();
+    let app = &mut tab.app;
+    let frame = |app: &mut App| normalize(&ui::buffer_text(&draw(app, W, 8)), &base);
+    let t = frame(app);
+    assert!(
+        t.contains(" worktrees · 4") && t.contains("<tmp>/docs"),
+        "{t}"
+    );
+    assert!(!t.contains("<tmp>/gone"), "{t}");
+    key(app, KeyCode::Char('G'));
+    let t = frame(app);
+    assert!(t.contains(" worktrees · 4"), "the title stays\n{t}");
+    assert!(
+        t.contains("   <tmp>/gone") && t.contains("  clean  locked"),
+        "{t}"
+    );
+    assert!(!t.contains(" ● <tmp>/work"), "{t}");
+    key(app, KeyCode::Char('g'));
+    let t = frame(app);
+    assert!(
+        t.contains(" ● <tmp>/work") && !t.contains("<tmp>/pinned\n"),
+        "{t}"
+    );
+}
+
+#[test]
+fn worktrees_loading_state() {
+    let repo = worktrees_repo();
+    let state = TempDir::new("worktrees-loading-state");
+    let mut app = App::new(git_options(&repo.main, &state, View::Worktrees, no_gh()));
+    let t = text(&mut app);
+    assert!(
+        t.contains(" status   review   history   branches   worktrees "),
+        "{t}"
+    );
+    assert!(t.contains("reading worktrees…"), "{t}");
+    assert!(!t.contains("worktrees ·"), "{t}");
+    assert!(t.contains("? keys") && !t.contains("copy path"), "{t}");
+    for code in [KeyCode::Char('j'), KeyCode::Char('G'), KeyCode::Enter] {
+        assert_eq!(key(&mut app, code), Action::Redraw);
+        assert!(app.message.is_none());
+    }
+    for nothing in ['y', 'e', 'E', 'b', 'B'] {
+        assert_eq!(key(&mut app, KeyCode::Char(nothing)), Action::None);
+    }
+    app.load_blocking();
+    assert!(text(&mut app).contains(" worktrees · 4"));
+}
+
+#[test]
+fn worktrees_not_a_git_repository_state() {
+    let plain = TempDir::new("worktrees-plain");
+    let state = TempDir::new("worktrees-plain-state");
+    write(plain.path(), "tool.py", "def run():\n    return 1\n");
+    let mut app = loaded(git_options(plain.path(), &state, View::Worktrees, no_gh()));
+    let t = text(&mut app);
+    assert!(t.contains("not a git repository · "), "{t}");
+    assert!(!t.contains("worktrees ·"), "{t}");
+    assert_eq!(app.worktrees.asks, 0, "there is nothing to read");
+    assert_eq!(key(&mut app, KeyCode::Enter), Action::Redraw);
+    assert!(app.message.is_none());
+    for nothing in ['y', 'e', 'E'] {
+        assert_eq!(key(&mut app, KeyCode::Char(nothing)), Action::None);
+    }
+    assert!(!plain.path().join(".git").exists());
+}
+
+#[test]
+fn worktrees_of_a_repository_with_one_worktree() {
+    let repo = repo_with(&[("a.py", "x = 1\n")]);
+    let state = TempDir::new("worktrees-single-state");
+    let mut app = loaded(git_options(repo.path(), &state, View::Worktrees, no_gh()));
+    let t = rail_and_body(&mut app, repo.path());
+    for needle in [
+        " worktrees · 1",
+        " ● <tmp>",
+        "     main  clean",
+        "every tab shows this worktree · the repository has no other",
+        "branch        main",
+        "upstream      none",
+        "nothing to commit, working tree clean",
+        "e editor  E VS Code  y copy path  r reread  ? keys",
+    ] {
+        assert!(t.contains(needle), "missing {needle:?}\n{t}");
+    }
+    assert!(!t.contains("agents"), "{t}");
+    snapshot("worktrees_one", &t);
+    for code in [KeyCode::Char('j'), KeyCode::Char('k'), KeyCode::Char('G')] {
+        assert_eq!(key(&mut app, code), Action::Redraw);
+        assert_eq!(on_worktree(&app), repo.path());
+    }
+    assert_eq!(key(&mut app, KeyCode::Enter), Action::Redraw);
+    let said = app.message.clone().unwrap();
+    assert!(said.starts_with("already showing "), "{said}");
+    assert_eq!(app.root, repo.path());
+}
+
+#[test]
+fn worktrees_of_a_repository_with_no_commits() {
+    let unborn = TempDir::new("worktrees-unborn");
+    let state = TempDir::new("worktrees-unborn-state");
+    git(unborn.path(), &["init", "-q"]);
+    write(unborn.path(), "first.py", "x = 1\n");
+    let mut app = loaded(git_options(unborn.path(), &state, View::Worktrees, no_gh()));
+    let t = text(&mut app);
+    for needle in [
+        " worktrees · 1",
+        "     main  1 file +1",
+        "branch        main · no commits yet",
+        "not staged · 1",
+        "? first.py +1",
+    ] {
+        assert!(t.contains(needle), "missing {needle:?}\n{t}");
+    }
+}
+
+#[test]
+fn without_herdr_no_agents_are_shown() {
+    let repo = worktrees_repo();
+    let state = TempDir::new("worktrees-standalone-state");
+    let mut app = loaded(Options {
+        context: None,
+        ..git_options(&repo.main, &state, View::Worktrees, no_gh())
+    });
+    assert!(!app.worktrees.agents_known);
+    let t = below_the_header(&mut app, repo.base());
+    for needle in [
+        " worktrees · 4",
+        "     main  2 files +5 −2",
+        "     docs  2 files +4",
+        "upstream      origin/main · in step",
+        "staged · 1",
+    ] {
+        assert!(t.contains(needle), "missing {needle:?}\n{t}");
+    }
+    for absent in ["agents", "○", "claude", "codex"] {
+        assert!(!t.contains(absent), "{absent:?} without herdr\n{t}");
+    }
+    select_worktree(&mut app, &repo.docs);
+    key(&mut app, KeyCode::Enter);
+    assert_eq!(app.root, repo.docs);
+    assert!(app.agent.is_none() && app.scope == Scope::Head);
+    let said = app.message.clone().unwrap();
+    assert!(
+        said.starts_with("every tab now shows ") && said.ends_with("/docs"),
+        "{said}"
+    );
+}
+
+#[test]
+fn a_worktree_read_that_fails_shows_what_git_said() {
+    let mut tab = worktrees_tab();
+    let app = &mut tab.app;
+    let showing = app.root.clone();
+    app.worktrees.load(
+        Err("fatal: unable to read the worktree list".into()),
+        &showing,
+    );
+    let t = text(app);
+    assert!(
+        t.contains("git: fatal: unable to read the worktree list"),
+        "{t}"
+    );
+    assert!(!t.contains("worktrees ·"), "{t}");
+    assert_eq!(key(app, KeyCode::Enter), Action::Redraw);
+    assert_eq!(app.root, tab.repo.main);
+    assert_eq!(key(app, KeyCode::Char('y')), Action::None);
+}
+
+#[test]
+fn an_answer_to_an_earlier_question_is_dropped() {
+    use codemap::app::Msg;
+
+    let mut tab = worktrees_tab();
+    let app = &mut tab.app;
+    let newest = app.worktrees.asks;
+    assert_eq!(newest, 1);
+    app.apply(Msg::Worktrees {
+        ask: newest - 1,
+        read: Ok(Default::default()),
+    });
+    assert_eq!(
+        app.worktrees.entries.len(),
+        4,
+        "the older answer is dropped"
+    );
+    app.apply(Msg::Worktrees {
+        ask: newest + 1,
+        read: Err("an answer nobody asked for".into()),
+    });
+    assert!(app.worktrees.error.is_none());
+    app.apply(Msg::Worktrees {
+        ask: newest,
+        read: Ok(Default::default()),
+    });
+    assert!(app.worktrees.entries.is_empty());
+    assert!(text(app).contains("no worktrees"));
+}
+
+#[test]
+fn the_worktrees_are_read_whenever_the_tab_is_entered() {
+    let repo = worktrees_repo();
+    let state = TempDir::new("worktrees-lazy-state");
+    for view in [
+        View::Files,
+        View::Custom,
+        View::Status,
+        View::Changes,
+        View::History,
+        View::Branches,
+    ] {
+        let mut app = loaded(git_options(&repo.main, &state, view, no_gh()));
+        text(&mut app);
+        assert_eq!(app.worktrees.asks, 0, "{view:?} does not read them");
+        assert!(!app.worktrees.loaded && app.worktrees.entries.is_empty());
+    }
+    let mut app = loaded(git_options(&repo.main, &state, View::Status, no_gh()));
+    for tab in ['2', '3', '4', '1'] {
+        key(&mut app, KeyCode::Char(tab));
+        text(&mut app);
+    }
+    assert_eq!(app.worktrees.asks, 0);
+    key(&mut app, KeyCode::Char('5'));
+    assert_eq!(app.view, View::Worktrees);
+    assert_eq!((app.worktrees.asks, app.worktrees.loaded), (1, true));
+    assert!(text(&mut app).contains(" worktrees · 4"));
+    for tab in ['1', '5', '3', '5'] {
+        key(&mut app, KeyCode::Char(tab));
+        text(&mut app);
+    }
+    assert_eq!(
+        app.worktrees.asks, 3,
+        "once for the popup, once for each return"
+    );
+
+    let direct = loaded(git_options(&repo.main, &state, View::Worktrees, no_gh()));
+    assert_eq!((direct.worktrees.asks, direct.worktrees.loaded), (1, true));
+}
+
+fn docs_summary(app: &mut App, repo: &Worktrees) -> String {
+    let base = repo.base().to_path_buf();
+    rail_and_body(app, &base)
+        .lines()
+        .find(|line| line.contains("     docs  "))
+        .unwrap_or_default()
+        .to_string()
+}
+
+#[test]
+fn coming_back_to_the_worktrees_shows_what_changed_while_away() {
+    let mut tab = worktrees_tab();
+    let (repo, app) = (&tab.repo, &mut tab.app);
+    assert!(docs_summary(app, repo).contains("2 files +4"));
+    key(app, KeyCode::Char('1'));
+    write(&repo.docs, "later.md", "one\ntwo\n");
+    key(app, KeyCode::Char('5'));
+    assert_eq!(app.worktrees.asks, 2);
+    let summary = docs_summary(app, repo);
+    assert!(summary.contains("3 files +6"), "{summary}");
+}
+
+#[test]
+fn r_reads_the_worktrees_again_without_leaving_the_tab() {
+    let mut tab = worktrees_tab();
+    let (repo, app) = (&tab.repo, &mut tab.app);
+    assert!(docs_summary(app, repo).contains("2 files +4"));
+    write(&repo.docs, "later.md", "one\ntwo\n");
+    assert!(
+        docs_summary(app, repo).contains("2 files +4"),
+        "not by itself"
+    );
+    key(app, KeyCode::Char('r'));
+    assert_eq!(app.worktrees.asks, 2);
+    assert!(app.worktrees.loaded, "the list stays while it is read");
+    let summary = docs_summary(app, repo);
+    assert!(summary.contains("3 files +6"), "{summary}");
+}
+
+#[test]
+fn moving_in_the_worktrees_tab_does_not_read_again() {
+    let mut tab = worktrees_tab();
+    let app = &mut tab.app;
+    assert_eq!(app.worktrees.asks, 1);
+    for step in [KeyCode::Char('j'), KeyCode::Char('k'), KeyCode::Char('G')] {
+        key(app, step);
+        text(app);
+    }
+    assert_eq!(app.worktrees.asks, 1);
+}
+
+#[test]
+fn after_a_write_from_another_tab_the_worktrees_are_read_again() {
+    let repo = worktrees_repo();
+    let state = TempDir::new("worktrees-reread-state");
+    let mut app = loaded(git_options(&repo.main, &state, View::Worktrees, no_gh()));
+    assert!(text(&mut app).contains("     main  2 files +5 −2"));
+    key(&mut app, KeyCode::Char('1'));
+    select(&mut app, "notes.md", false);
+    key(&mut app, KeyCode::Char('x'));
+    key(&mut app, KeyCode::Char('y'));
+    assert_eq!(app.message.as_deref(), Some("deleted notes.md"));
+    assert_eq!(app.worktrees.asks, 1, "not before the tab is shown again");
+    key(&mut app, KeyCode::Char('5'));
+    assert_eq!(app.worktrees.asks, 2);
+    let t = text(&mut app);
+    assert!(t.contains("     main  1 file +2 −2"), "{t}");
+    assert!(
+        t.contains("not staged · 1") && !t.contains("notes.md"),
+        "{t}"
+    );
+    key(&mut app, KeyCode::Char('4'));
+    key(&mut app, KeyCode::Char('n'));
+    chars(&mut app, "feat/next");
+    key(&mut app, KeyCode::Enter);
+    assert_eq!(checked_out(&repo.main), "feat/next");
+    key(&mut app, KeyCode::Char('5'));
+    assert_eq!(app.worktrees.asks, 3);
+    let t = text(&mut app);
+    assert!(t.contains("     feat/next  1 file +2 −2"), "{t}");
+    assert!(t.contains("branch        feat/next"), "{t}");
+}
+
+#[test]
+fn enter_shows_another_worktree_in_every_tab() {
+    let mut tab = worktrees_tab();
+    let base = tab.repo.base().to_path_buf();
+    let (main, docs) = (tab.repo.main.clone(), tab.repo.docs.clone());
+    let before = untouched(&tab.repo);
+    let app = &mut tab.app;
+    select_worktree(app, &docs);
+    assert_eq!(key(app, KeyCode::Enter), Action::Redraw);
+    assert_eq!(app.root, docs);
+    assert_eq!(app.view, View::Worktrees, "one key from jumping back");
+    assert_eq!(on_worktree(app), docs);
+    let said = app.message.clone().unwrap();
+    assert!(said.starts_with("every tab now shows "), "{said}");
+    assert!(said.ends_with("/docs · following codex"), "{said}");
+    let t = rail_and_body(app, &base);
+    let header = t.lines().next().unwrap();
+    assert!(header.ends_with("● docs · codex   docs"), "{header}");
+    for needle in [
+        "   <tmp>/work",
+        " ● <tmp>/docs",
+        "every tab shows this worktree",
+        "branch        docs",
+        "every tab now shows",
+    ] {
+        assert!(t.contains(needle), "missing {needle:?}\n{t}");
+    }
+    assert!(!t.contains(" ● <tmp>/work"), "the mark moved\n{t}");
+
+    key(app, KeyCode::Char('1'));
+    assert_eq!(app.view, View::Status);
+    let t = text(app);
+    for needle in [
+        " staged · 1",
+        "A first.md",
+        " not staged · 1",
+        "M guide.md",
+        "examples/first.md   +2    staged",
+    ] {
+        assert!(t.contains(needle), "missing {needle:?}\n{t}");
+    }
+    for elsewhere in ["notes.md", "app.py"] {
+        assert!(
+            !t.contains(elsewhere),
+            "{elsewhere} is in the other one\n{t}"
+        );
+    }
+    assert!(
+        t.lines().next().unwrap().ends_with("● docs · codex   docs"),
+        "{t}"
+    );
+    key(app, KeyCode::Char('2'));
+    let t = text(app);
+    assert!(t.contains("since HEAD · 2 files"), "{t}");
+    assert!(t.contains("A first.md") && t.contains("M guide.md"), "{t}");
+    key(app, KeyCode::Char('3'));
+    let t = text(app);
+    assert!(t.contains("docs: start the guide  docs"), "{t}");
+    assert!(t.contains("· 4 worktrees · HEAD docs"), "{t}");
+    key(app, KeyCode::Char('4'));
+    let t = text(app);
+    assert!(t.contains(" ● docs") && !t.contains(" ● main"), "{t}");
+    assert!(t.contains("docs    current branch"), "{t}");
+    assert_eq!(
+        app.branches.selected().unwrap().name,
+        "docs",
+        "the branches open on this worktree's branch"
+    );
+
+    key(app, KeyCode::Char('5'));
+    assert_eq!(on_worktree(app), docs);
+    assert_eq!(key(app, KeyCode::Enter), Action::Redraw);
+    let said = app.message.clone().unwrap();
+    assert!(said.starts_with("already showing ") && said.ends_with("/docs"));
+    assert_eq!(app.root, docs);
+    select_worktree(app, &main);
+    key(app, KeyCode::Enter);
+    assert_eq!(
+        (app.root.clone(), app.view),
+        (main.clone(), View::Worktrees)
+    );
+    let t = rail_and_body(app, &base);
+    assert!(
+        t.contains(" ● <tmp>/work") && t.contains("   <tmp>/docs"),
+        "{t}"
+    );
+    assert!(
+        t.lines()
+            .next()
+            .unwrap()
+            .ends_with("○ work · claude   main"),
+        "{t}"
+    );
+    key(app, KeyCode::Char('1'));
+    let t = text(app);
+    for needle in [" staged · 1", "M app.py", " not staged · 2", "? notes.md"] {
+        assert!(t.contains(needle), "missing {needle:?}\n{t}");
+    }
+    assert!(!t.contains("guide.md"), "{t}");
+    assert_eq!(before, untouched(&tab.repo), "jumping wrote something");
+}
+
+#[test]
+fn the_list_stays_on_screen_while_the_worktree_jumped_to_is_read() {
+    let tab = worktrees_tab();
+    let base = tab.repo.base().to_path_buf();
+    let read_before_the_jump = codemap::worktrees::Listing {
+        entries: tab.app.worktrees.entries.clone(),
+        agents_known: true,
+    };
+    let state = TempDir::new("worktrees-carried-state");
+    let mut arriving = App::new(git_options(
+        &tab.repo.docs,
+        &state,
+        View::Worktrees,
+        no_gh(),
+    ));
+    assert!(text(&mut arriving).contains("reading worktrees…"));
+    let showing = arriving.root.clone();
+    arriving.worktrees.load(Ok(read_before_the_jump), &showing);
+    assert!(arriving.repo.is_none(), "git has not answered yet");
+    let t = rail_and_body(&mut arriving, &base);
+    for needle in [
+        " worktrees · 4",
+        "   <tmp>/work",
+        " ● <tmp>/docs",
+        "every tab shows this worktree",
+        "e editor  E VS Code  y copy path  r reread  ? keys",
+    ] {
+        assert!(t.contains(needle), "missing {needle:?}\n{t}");
+    }
+    assert!(!t.contains("reading worktrees…"), "{t}");
+    assert_eq!(on_worktree(&arriving), tab.repo.docs);
+}
+
+#[test]
+fn the_file_tree_is_read_from_the_worktree_jumped_to() {
+    let mut tab = worktrees_tab();
+    let docs = tab.repo.docs.clone();
+    let app = &mut tab.app;
+    assert!(app.files.tree.has_file("notes.md"));
+    select_worktree(app, &docs);
+    key(app, KeyCode::Enter);
+    assert!(app.files.loaded);
+    assert_eq!(app.files.tree.len(), 3);
+    for file in ["app.py", "examples/first.md", "guide.md"] {
+        assert!(app.files.tree.has_file(file), "{file}");
+    }
+    assert!(!app.files.tree.has_file("notes.md"));
+}
+
+fn record_a_turn(store: &codemap::store::Store, worktree: &std::path::Path, pane: &str) {
+    let info = codemap::git::discover(worktree).unwrap();
+    let shadow = store.shadow(&info);
+    let mut start = shadow.snapshot("turn 4 start").unwrap();
+    write(worktree, "turn.md", "written in the last turn\n");
+    let mut end = shadow.snapshot("turn 4 end").unwrap();
+    start.at = NOW - 420;
+    end.at = NOW - 120;
+    let terminal = format!("term_{pane}");
+    store
+        .save_pane(&codemap::store::PaneState {
+            pane_key: codemap::store::PaneState::key_for(Some(&terminal), pane, Some("codex")),
+            pane_id: pane.into(),
+            terminal_id: Some(terminal),
+            agent: Some("codex".into()),
+            last_status: Some("idle".into()),
+            updated: NOW - 120,
+            turns: vec![codemap::store::Turn {
+                n: 4,
+                repo_root: info.root.to_string_lossy().into_owned(),
+                start: Some(start),
+                end: Some(end),
+                end_status: Some("idle".into()),
+                open: false,
+            }],
+        })
+        .unwrap();
+}
+
+#[test]
+fn the_popup_follows_the_agent_working_in_the_worktree_it_shows() {
+    codemap::util::freeze_time(NOW);
+    let repo = worktrees_repo();
+    let state = TempDir::new("worktrees-follow-state");
+    let store = codemap::store::Store::new(state.path());
+    record_a_turn(&store, &repo.docs, "w2:p1");
+    let herdr = fake_herdr(agents_in(&repo));
+    let mut app = loaded(Options {
+        client: Some(herdr.client()),
+        ..git_options(&repo.main, &state, View::Worktrees, no_gh())
+    });
+    assert_eq!(app.target_pane().as_deref(), Some("w1:p2"));
+    select_worktree(&mut app, &repo.docs);
+    let listed: Vec<&str> = app
+        .worktrees
+        .selected()
+        .unwrap()
+        .agents
+        .iter()
+        .map(|a| a.name.as_str())
+        .collect();
+    assert_eq!(listed, ["pi", "codex"], "herdr lists the idle one first");
+    key(&mut app, KeyCode::Enter);
+    let agent = app.agent.clone().unwrap();
+    assert_eq!(agent.pane_id.as_deref(), Some("w2:p1"), "the working one");
+    assert_eq!(agent.terminal_id.as_deref(), Some("term_w2:p1"));
+    assert_eq!(agent.agent.as_deref(), Some("codex"));
+    assert!(agent.is_working());
+    assert_eq!(app.target_pane().as_deref(), Some("w2:p1"));
+    assert_eq!(app.scope, Scope::Turn);
+    assert_eq!(app.root, repo.docs, "not the subfolder the agent is in");
+    key(&mut app, KeyCode::Char('2'));
+    let t = text(&mut app);
+    let header = t.lines().next().unwrap();
+    assert!(
+        header.ends_with("● docs · codex   docs   turn 4 · 2m"),
+        "{header}"
+    );
+    for needle in ["codex w2:p1", "this turn · 1 file", "A turn.md"] {
+        assert!(t.contains(needle), "missing {needle:?}\n{t}");
+    }
+    assert!(!t.contains("guide.md"), "only what the turn wrote\n{t}");
+
+    key(&mut app, KeyCode::Char('5'));
+    select_worktree(&mut app, &repo.pinned);
+    key(&mut app, KeyCode::Enter);
+    assert_eq!(app.root, repo.pinned);
+    assert!(app.agent.is_none(), "nobody works in that one");
+    assert_eq!((app.target_pane(), app.scope.clone()), (None, Scope::Head));
+    let said = app.message.clone().unwrap();
+    assert!(said.ends_with("/pinned"), "{said}");
+    let t = text(&mut app);
+    let header = t.lines().next().unwrap();
+    assert!(
+        !header.contains("codex") && !header.contains('●'),
+        "{header}"
+    );
+    key(&mut app, KeyCode::Char('2'));
+    let t = text(&mut app);
+    assert!(t.contains("since HEAD"), "{t}");
+    assert!(
+        t.contains("no changes since HEAD") || t.contains("since HEAD · 0 files"),
+        "{t}"
+    );
+    chars(&mut app, "P");
+    assert!(app.message.is_some(), "no agent to send comments to");
+
+    key(&mut app, KeyCode::Char('5'));
+    select_worktree(&mut app, &repo.main);
+    key(&mut app, KeyCode::Enter);
+    assert_eq!(app.target_pane().as_deref(), Some("w1:p2"));
+    assert!(!app.agent.clone().unwrap().is_working());
+}
+
+#[test]
+fn a_jump_lands_on_the_chosen_worktree_even_when_its_agent_has_moved() {
+    let repo = worktrees_repo();
+    let state = TempDir::new("worktrees-moved-state");
+    let agents = agents_in(&repo);
+    let moved_since: Vec<serde_json::Value> = agents
+        .iter()
+        .map(|agent| {
+            let mut pane = agent.clone();
+            pane["cwd"] = serde_json::json!(repo.main.display().to_string());
+            pane["agent_status"] = serde_json::json!("blocked");
+            pane
+        })
+        .collect();
+    let herdr = fake_herdr_where_panes_are(agents, moved_since);
+    let mut app = loaded(Options {
+        client: Some(herdr.client()),
+        ..git_options(&repo.main, &state, View::Worktrees, no_gh())
+    });
+    select_worktree(&mut app, &repo.docs);
+    key(&mut app, KeyCode::Enter);
+    assert_eq!(app.root, repo.docs);
+    assert_eq!(app.repo.as_ref().unwrap().branch.as_deref(), Some("docs"));
+    let agent = app.agent.clone().unwrap();
+    assert_eq!(agent.pane_id.as_deref(), Some("w2:p1"));
+    assert_eq!(
+        agent.status.as_deref(),
+        Some("blocked"),
+        "its state is read again"
+    );
+    key(&mut app, KeyCode::Char('1'));
+    assert!(text(&mut app).contains("M guide.md"));
+}
+
+#[test]
+fn a_worktree_whose_folder_is_missing_cannot_be_shown() {
+    let mut tab = worktrees_tab();
+    let (main, gone) = (tab.repo.main.clone(), tab.repo.gone.clone());
+    let app = &mut tab.app;
+    select_worktree(app, &gone);
+    assert_eq!(key(app, KeyCode::Enter), Action::Redraw);
+    let said = app.message.clone().unwrap();
+    assert!(
+        said.ends_with("/gone is missing · nothing to show"),
+        "{said}"
+    );
+    assert_eq!((app.root.clone(), app.view), (main, View::Worktrees));
+    assert_eq!(on_worktree(app), gone);
+    assert_eq!(app.worktrees.asks, 1, "nothing was read again");
+    assert!(text(app).contains("/gone is missing · nothing to show"));
+    for nothing in ['e', 'E', 'b', 'B'] {
+        assert_eq!(key(app, KeyCode::Char(nothing)), Action::None);
+    }
+    assert_eq!(
+        key(app, KeyCode::Char('y')),
+        Action::Copy(gone.display().to_string())
+    );
+    assert!(!gone.exists(), "looking does not bring the folder back");
+
+    let pinned = tab.repo.pinned.clone();
+    select_worktree(app, &pinned);
+    assert!(text(app).contains("⏎ show this worktree"));
+    std::fs::remove_dir_all(&pinned).unwrap();
+    key(app, KeyCode::Enter);
+    let said = app.message.clone().unwrap();
+    assert!(
+        said.ends_with("/pinned is missing · nothing to show"),
+        "a folder removed after the list was read\n{said}"
+    );
+    assert_eq!(app.root, tab.repo.main);
+}
+
+#[test]
+fn y_copies_the_path_and_e_opens_the_folder_of_the_selected_worktree() {
+    let mut tab = worktrees_tab();
+    let docs = tab.repo.docs.clone();
+    let app = &mut tab.app;
+    select_worktree(app, &docs);
+    let folder = Location {
+        path: docs.display().to_string(),
+        line: None,
+        dir: true,
+    };
+    assert_eq!(
+        key(app, KeyCode::Char('y')),
+        Action::Copy(docs.display().to_string())
+    );
+    assert_eq!(key(app, KeyCode::Char('e')), Action::Edit(folder.clone()));
+    assert_eq!(
+        key(app, KeyCode::Char('E')),
+        Action::Open(Opener::VsCode, folder.clone())
+    );
+    assert_eq!(app.root.join(&folder.path), docs, "the path run.rs opens");
+    for nothing in ['b', 'B'] {
+        assert_eq!(key(app, KeyCode::Char(nothing)), Action::None);
+    }
+    app.message = Some("a message on screen".into());
+    assert_eq!(
+        key(app, KeyCode::Char('b')),
+        Action::Redraw,
+        "a key that does nothing still clears the message"
+    );
+    for held in [KeyModifiers::CONTROL, KeyModifiers::ALT] {
+        keys::handle(app, KeyEvent::new(KeyCode::Enter, held));
+        assert_eq!(app.root, tab.repo.main, "{held:?}");
+        assert!(app.message.is_none());
+    }
+}
+
+#[test]
+fn walking_the_worktrees_tab_writes_nothing() {
+    let repo = worktrees_repo();
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    write(&repo.main, "app.py", "x = 3\n");
+    write(&repo.docs, "guide.md", "# Guide\n\nRun it.\n");
+    write(&repo.pinned, "app.py", "x = 1\n");
+    let before = untouched(&repo);
+    let state = TempDir::new("worktrees-walk-state");
+    let herdr = fake_herdr(agents_in(&repo));
+    let mut app = loaded(Options {
+        client: Some(herdr.client()),
+        context: Some(working_context()),
+        ..git_options(&repo.main, &state, View::Worktrees, no_gh())
+    });
+    text(&mut app);
+    for step in [
+        KeyCode::Char('j'),
+        KeyCode::Char('j'),
+        KeyCode::Char('j'),
+        KeyCode::Char('k'),
+        KeyCode::Char('G'),
+        KeyCode::Char('g'),
+        KeyCode::Up,
+        KeyCode::Down,
+        KeyCode::PageDown,
+        KeyCode::PageUp,
+        KeyCode::End,
+        KeyCode::Home,
+        KeyCode::Tab,
+        KeyCode::Enter,
+    ] {
+        key(&mut app, step);
+        text(&mut app);
+    }
+    ctrl(&mut app, 'd');
+    ctrl(&mut app, 'u');
+    for folder in [&repo.docs, &repo.pinned, &repo.gone, &repo.main, &repo.docs] {
+        select_worktree(&mut app, folder);
+        text(&mut app);
+        key(&mut app, KeyCode::Enter);
+        assert_eq!(app.view, View::Worktrees);
+        text(&mut app);
+        for tab in ['1', '2', '3', '4', '5'] {
+            key(&mut app, KeyCode::Char(tab));
+            text(&mut app);
+            key(&mut app, KeyCode::Char('j'));
+            key(&mut app, KeyCode::Char('k'));
+            text(&mut app);
+        }
+        for looks in ['y', 'e', 'E', 'b', 'B'] {
+            key(&mut app, KeyCode::Char(looks));
+        }
+        key(&mut app, KeyCode::Char('?'));
+        text(&mut app);
+        key(&mut app, KeyCode::Esc);
+    }
+    assert_eq!(app.root, repo.docs);
+    for held in [KeyModifiers::CONTROL, KeyModifiers::ALT] {
+        keys::handle(&mut app, KeyEvent::new(KeyCode::Enter, held));
+    }
+    keys::paste(&mut app, "\rjk\n");
+    assert_eq!(key(&mut app, KeyCode::Esc), Action::Quit);
+    assert_eq!(before, untouched(&repo), "a worktree changed while looking");
+    let copies: Vec<_> = std::fs::read_dir(state.path().join("repos"))
+        .unwrap()
+        .flatten()
+        .flat_map(|folder| std::fs::read_dir(folder.path()).unwrap().flatten())
+        .filter(|file| file.file_name().to_string_lossy().starts_with("index"))
+        .collect();
+    assert!(copies.is_empty(), "{copies:?}");
+}
+
+#[test]
+fn the_worktrees_tab_fits_small_terminals() {
+    let repo = worktrees_repo();
+    let long = "feat/a-very-long-branch-name-that-goes-on-and-on-and-on-and-on-and-on-for-a-while";
+    let far = repo
+        .base()
+        .join("a/very/long/folder/name/that/goes/on/and/on/and/on/for/a/while");
+    git(
+        &repo.main,
+        &["worktree", "add", "-q", "-b", long, far.to_str().unwrap()],
+    );
+    for n in 0..40 {
+        write(
+            &far,
+            &format!("a/long/folder/of/notes/number-{n}.md"),
+            "x\n",
+        );
+    }
+    let state = TempDir::new("worktrees-small-state");
+    let herdr = fake_herdr(vec![
+        listed_agent("w1:p1", &"a-long-agent-name-".repeat(6), "working", &far),
+        listed_agent("w1:p2", "claude", "idle", &far),
+    ]);
+    let mut app = loaded(Options {
+        client: Some(herdr.client()),
+        ..git_options(&repo.main, &state, View::Worktrees, no_gh())
+    });
+    let sizes = [
+        (20u16, 6u16),
+        (24, 8),
+        (40, 10),
+        (60, 20),
+        (80, 24),
+        (200, 60),
+    ];
+    for folder in [&repo.main, &far, &repo.gone, &repo.pinned] {
+        select_worktree(&mut app, folder);
+        for (w, h) in sizes {
+            let _ = draw(&mut app, w, h);
+        }
+    }
+    select_worktree(&mut app, &far);
+    let t = text(&mut app);
+    assert!(t.contains("not staged · 40"), "{t}");
+    let more = t
+        .lines()
+        .find(|line| line.contains("and ") && line.contains(" more"))
+        .unwrap_or_else(|| panic!("the files past the room are not counted\n{t}"));
+    assert!(t.trim_end().lines().count() <= H as usize);
+    let listed = t.matches("number-").count();
+    assert_eq!(more.trim(), format!("and {} more", 40 - listed), "{t}");
+    key(&mut app, KeyCode::Enter);
+    assert_eq!(app.root, far);
     for (w, h) in sizes {
         let _ = draw(&mut app, w, h);
     }

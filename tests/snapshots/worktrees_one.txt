@@ -1,0 +1,50 @@
+  status   review   history   branches   worktrees                                                                            ○ paneMorph · selector-fix   main
+
+ worktrees · 1                                            <tmp>
+ ● <tmp>                                                  every tab shows this worktree · the repository has no other
+     main  clean
+                                                          branch        main
+                                                          upstream      none
+
+                                                          nothing to commit, working tree clean
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ j k worktree                                             e editor  E VS Code  y copy path  r reread  ? keys

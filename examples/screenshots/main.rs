@@ -24,6 +24,7 @@ const STATUS: (u16, u16) = (140, 36);
 const CHANGES: (u16, u16) = (150, 46);
 const HISTORY: (u16, u16) = (128, 40);
 const BRANCHES: (u16, u16) = (140, 18);
+const WORKTREES: (u16, u16) = (140, 18);
 const NOW: i64 = 1_790_027_160;
 
 fn main() {
@@ -157,6 +158,13 @@ fn main() {
     frame(&mut branches, BRANCHES);
     key(&mut branches, KeyCode::Char('j'));
     shots.push(("branches", "Branches", frame(&mut branches, BRANCHES)));
+
+    demo::work_in_the_second_worktree(&repo);
+    let mut worktrees = App::new(over_the_agent(View::Worktrees, &no_gh));
+    worktrees.load_blocking();
+    frame(&mut worktrees, WORKTREES);
+    key(&mut worktrees, KeyCode::Char('j'));
+    shots.push(("worktrees", "Worktrees", frame(&mut worktrees, WORKTREES)));
 
     let theme = app.theme;
     for (name, view, buf) in &shots {

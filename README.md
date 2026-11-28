@@ -27,15 +27,16 @@ Coding agents change more code in a turn than anyone reads line by line.
 codeMap is a [herdr](https://herdr.dev) plugin that opens over the agent you are
 watching and shows its worktree as a file tree with what the last turn touched,
 the turn itself as a reviewable diff, what is staged and what is not, the
-repository's history as a graph and its branches with their pull requests, so
-you see what just changed and answer it without leaving the terminal.
+repository's history as a graph, its branches with their pull requests and its
+worktrees with the agents working in them, so you see what just changed and
+answer it without leaving the terminal.
 
 ## Features
 
 - **Popups over the agent you are watching.** One key opens the file tree,
   another the Git popup with the working tree's status, the review of the
-  last turn, the history and the branches, a third the skills, hooks and
-  settings the agent runs with.
+  last turn, the history, the branches and the worktrees, a third the skills,
+  hooks and settings the agent runs with.
 - **Open anything where you work.** `e` opens the file in neovim in a split
   beside the agent, `E` in VS Code, `b` in the browser and `B` on GitHub.
 - **Turn-aware.** An event hook snapshots the worktree whenever an agent starts
@@ -50,6 +51,10 @@ you see what just changed and answer it without leaving the terminal.
   how far each is from its upstream, its pull request and whether CI passed.
   `⏎` switches to a branch, `n` creates one, `m` merges and `D` deletes, the
   last two after asking.
+- **Every worktree, one key apart.** The Worktrees tab lists the repository's
+  worktrees with the branch, the agents working there and what is uncommitted
+  in each. `⏎` points the whole popup at another worktree and follows the
+  agent working in it.
 - **Looking writes nothing.** Checkpoints live in codeMap's own state
   directory, and opening, reading and reviewing leave your repository as it
   was. It changes only when you press `space`, `c` or `x` in the Status tab,
@@ -158,7 +163,8 @@ description = "codeMap: git status of the focused agent's worktree"
 Then run `herdr config check` and `herdr server reload-config`.
 `dev.codemap.open` and `dev.codemap.changes` open the Git popup on the review
 of the last turn, `dev.codemap.git` on the working tree's status and
-`dev.codemap.history` on the commit graph; `4` inside it shows the branches.
+`dev.codemap.history` on the commit graph; `4` inside it shows the branches
+and `5` the worktrees.
 `dev.codemap.files` opens the file tree, and `dev.codemap.customisations` the
 agent's setup.
 
@@ -179,7 +185,7 @@ Inside the popup:
 | `/` | Files | find a file by name; `↑` `↓` pick, `⏎` go |
 | `1` `2` `3` `4` | Customisations | project, global, tools, other agents |
 | `j` `k`, `h` `l`, `⏎` | Customisations | move through the list, change scope, open the file in the editor |
-| `1` `2` `3` `4` | Status, Review, History, Branches | Status, Review, History, Branches |
+| `1` `2` `3` `4` `5` | Status, Review, History, Branches, Worktrees | Status, Review, History, Branches, Worktrees |
 | `j` `k`, `tab`, `⎋` | Status | move through the staged and not staged files, read the selected file's diff, go back to the files |
 | `]` `[` | Status | next or previous hunk of the diff |
 | `space` | Status | stage the selected file, or unstage it; in the diff, the hunk under the cursor |
@@ -196,6 +202,10 @@ Inside the popup:
 | `m` | Branches | merge the selected branch into the current one, after a question only `y` confirms |
 | `D` | Branches | delete the selected branch, after a question that says what would be lost and only `y` confirms |
 | `B` / `y` | Branches | open the branch's pull request, or else its page on GitHub / copy the branch name |
+| `j` `k`, `g` `G` | Worktrees | move between the worktrees |
+| `⏎` | Worktrees | show the selected worktree in every tab, and follow the agent working in it |
+| `r` | Worktrees | read the worktrees again |
+| `e` / `E`, `y` | Worktrees | open the worktree's folder in the editor / in VS Code, copy its path |
 
 The editor is `$VISUAL`, then `$EDITOR`, then `nvim` when it is installed.
 Inside herdr it opens in a split beside the agent's pane and the popup closes;
@@ -260,8 +270,8 @@ The first tab of the Git popup: what `git status` reports, as two lists.
 **staged** is the index against `HEAD`, and **not staged** is the working tree
 against the index, with untracked files marked `?`. A file that is partly
 staged is in both lists, each time with its own diff. `j` and `k` move through
-both lists, `tab` steps into the selected file's diff and `⎋` comes back. `2`,
-`3` and `4` switch to Review, History and Branches.
+both lists, `tab` steps into the selected file's diff and `⎋` comes back. `2`
+to `5` switch to Review, History, Branches and Worktrees.
 
 `space` stages the selected file, or unstages it when it is in the staged
 list. In the diff, `]` and `[` move between hunks, a bar marks the hunk under
@@ -307,11 +317,10 @@ waiting on a question, codeMap says so and keeps the draft.
 
 ### History
 
-<img src="docs/assets/history.svg" width="100%" alt="The History view: a commit graph with two merged branches and a tag, the selected commit's files on the right, and two worktrees with the agents working in them at the bottom.">
+<img src="docs/assets/history.svg" width="100%" alt="The History view: a commit graph with two merged branches and a tag, a header that counts the commits, branches and worktrees, and the selected commit's files on the right.">
 
-The commit graph with branches, tags and `HEAD`, and the repository's worktrees
-with the herdr agents working in each (`●` working, `○` idle). `⏎` shows a
-commit's diff.
+The commit graph with branches, tags and `HEAD`. The header counts the
+commits, the branches and the worktrees. `⏎` shows a commit's diff.
 
 ### Branches
 
@@ -364,6 +373,40 @@ else the branch's page on GitHub; `y` copies the branch name.
 
 Branches never pushes, pulls or fetches, never creates, changes or deletes
 anything on a remote, and never stashes, rebases or resets.
+
+### Worktrees
+
+<img src="docs/assets/worktrees.svg" width="100%" alt="The Worktrees tab: two worktrees, the one the popup shows marked with a dot, each with its branch, the agent working in it and a count of its uncommitted files and lines. On the right the selected worktree's branch, its upstream one commit ahead, the agent codex marked as working, one staged file and two that are not staged.">
+
+The fifth tab of the Git popup (`5`, or `--view worktrees`): every worktree of
+the repository, the main one first. Each takes two lines: its path, with a `●`
+on the worktree the popup is showing, then its branch (the short hash when
+`HEAD` is detached), the herdr agents working in it (`●` working, `○` idle)
+and what is uncommitted there, as in `3 files +62 −26`, or `clean`. The right
+side tells the selected worktree in words: its branch, its upstream and how
+far apart they are, each agent and its state, and its changed files under
+**staged** and **not staged** as the Status tab lists them, as many as fit. A
+locked worktree says so with the reason git recorded, and one whose folder is
+gone says that `git worktree prune` forgets it. Outside herdr the tab shows no
+agents.
+
+`⏎` points the whole popup at the selected worktree: Status, Review, History
+and Branches then show that worktree, the header names it, and the tab stays
+on Worktrees, so the worktree you came from is one `⏎` away. When herdr
+reports an agent whose working directory is inside that worktree, the popup
+follows that agent, the first one that is working when there are several:
+Review shows its turns, `P` and `S` send comments to it, and `e` opens the
+editor beside it. With no agent there, Review starts at "since `HEAD`", as it
+does outside herdr. A worktree whose folder is missing cannot be shown.
+
+`y` copies the selected worktree's path, and `e` and `E` open its folder in
+the editor and in VS Code.
+
+Worktrees only reads. It never adds, removes, locks or prunes a worktree, and
+it reads each one's status through a private copy of that worktree's index, so
+looking at six worktrees writes into none of them. The list is read every
+time you enter the tab, on `r`, and after you stage, commit, discard or act on
+a branch from another tab. It stays on screen while it is read again.
 
 ## Standalone
 
@@ -449,13 +492,15 @@ stash, no index changes and no objects.
 - Commands that write objects never see your object store, so git cannot
   "freshen" (touch) objects in it. Read-only diffs borrow it for one process
   through `GIT_ALTERNATE_OBJECT_DIRECTORIES`.
-- The "since `HEAD`" diff and the Status tab read a private copy of your
-  index.
+- The "since `HEAD`" diff, the Status tab and the Worktrees tab read private
+  copies of the index: one for each read, and for the Worktrees tab one for
+  each worktree.
 - The test suite fingerprints every file under `.git` before and after each
   read, after a walk through the Status tab that opens and cancels the commit
-  box and the discard question, and after a walk through the Branches tab
-  that opens and cancels every question and the name prompt, and fails on any
-  change.
+  box and the discard question, after a walk through the Branches tab that
+  opens and cancels every question and the name prompt, and after a walk
+  through the Worktrees tab that jumps to every worktree and through every
+  tab there, and fails on any change in any worktree.
 - codeMap itself opens no network connection. It talks to the local herdr
   socket, the git commands it runs stay on this machine, and it sends text to
   an agent only when you press `P` or `S`.
@@ -469,7 +514,9 @@ stash, no index changes and no objects.
 
 **codeMap changes your repository only when you press one of seven keys**:
 three in the Status tab, which act on the selected file or hunk, and four in
-the Branches tab, which act on the selected branch.
+the Branches tab, which act on the selected branch. They act in the worktree
+the popup is showing: the agent's, or the one you chose with `⏎` in the
+Worktrees tab, which itself writes nothing.
 
 | Key | Tab | What it writes |
 | --- | --- | --- |

@@ -16,3 +16,4 @@ pub mod store;
 pub mod theme;
 pub mod ui;
 pub mod util;
+pub mod worktrees;
