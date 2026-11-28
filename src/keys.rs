@@ -43,6 +43,10 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
     match key.code {
         KeyCode::Char('q') if !ctrl => return quit(app),
         KeyCode::Esc => {
+            if page == View::Blame {
+                app.leave_blame();
+                return Action::Redraw;
+            }
             if page == View::History && app.shown_history().show_diff {
                 app.shown_history_mut().show_diff = false;
                 return Action::Redraw;
@@ -75,6 +79,7 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
                 return Action::None;
             };
             app.file_history = None;
+            app.blame = None;
             app.custom.set_scope(scope);
             return Action::Redraw;
         }
@@ -83,6 +88,7 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
                 return Action::None;
             };
             app.file_history = None;
+            app.blame = None;
             app.view = view;
             if view == View::History
                 && app.history.detail.is_none()
@@ -93,6 +99,16 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
             app.branches_shown();
             app.worktrees_entered();
             app.drain_if_sync();
+            return Action::Redraw;
+        }
+        KeyCode::Char('B') if page == View::Blame => return blame_commit_page(app),
+        KeyCode::Char('y') if !ctrl && page == View::Blame => return copy_blamed_sha(app),
+        KeyCode::Char('L') if page == View::Blame => {
+            app.blame_to_history();
+            return Action::Redraw;
+        }
+        KeyCode::Char('A') if blame_opens_here(app, page) => {
+            app.open_blame();
             return Action::Redraw;
         }
         KeyCode::Char('B') if app.view == View::Branches => return branch_page(app),
@@ -178,6 +194,7 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
         View::History => history_key(app, key),
         View::Branches => branches_key(app, key),
         View::Worktrees => worktrees_key(app, key),
+        View::Blame => blame_key(app, key),
     };
     if r == Action::None && had_message {
         Action::Redraw
@@ -246,6 +263,70 @@ fn open(app: &App, opener: Opener) -> Action {
     }
 }
 
+fn blame_opens_here(app: &App, page: View) -> bool {
+    match page {
+        View::Files | View::Custom | View::Status | View::Changes => true,
+        View::History => app.file_history.is_some(),
+        View::Branches | View::Worktrees | View::Blame => false,
+    }
+}
+
+fn blame_commit_page(app: &mut App) -> Action {
+    match app.blame_commit_link() {
+        Ok(page) => Action::Browse(page),
+        Err(why) => {
+            app.message = Some(why);
+            Action::Redraw
+        }
+    }
+}
+
+fn copy_blamed_sha(app: &mut App) -> Action {
+    match app.blame_commit() {
+        Ok(commit) => Action::Copy(commit.sha.clone()),
+        Err(why) => {
+            app.message = Some(why);
+            Action::Redraw
+        }
+    }
+}
+
+fn blame_key(app: &mut App, key: KeyEvent) -> Action {
+    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    let Some(page) = app.blame.as_mut() else {
+        return Action::None;
+    };
+    if let Some(diff) = page.diff.as_mut() {
+        match key.code {
+            KeyCode::Up | KeyCode::Char('k') => diff.scroll = diff.scroll.saturating_sub(1),
+            KeyCode::Down | KeyCode::Char('j') => diff.scroll += 1,
+            KeyCode::Char('d') if ctrl => diff.scroll += 15,
+            KeyCode::Char('u') if ctrl => diff.scroll = diff.scroll.saturating_sub(15),
+            KeyCode::PageDown | KeyCode::Char(' ') => diff.scroll += 30,
+            KeyCode::PageUp => diff.scroll = diff.scroll.saturating_sub(30),
+            KeyCode::Char('g') | KeyCode::Home => diff.scroll = 0,
+            KeyCode::Backspace | KeyCode::Delete | KeyCode::Left | KeyCode::Enter => {
+                page.diff = None
+            }
+            _ => return Action::None,
+        }
+        return Action::Redraw;
+    }
+    match key.code {
+        KeyCode::Up | KeyCode::Char('k') => page.move_by(-1),
+        KeyCode::Down | KeyCode::Char('j') => page.move_by(1),
+        KeyCode::Char('d') if ctrl => page.move_by(15),
+        KeyCode::Char('u') if ctrl => page.move_by(-15),
+        KeyCode::PageDown => page.move_by(30),
+        KeyCode::PageUp => page.move_by(-30),
+        KeyCode::Char('g') | KeyCode::Home => page.move_by(i64::MIN),
+        KeyCode::Char('G') | KeyCode::End => page.move_by(i64::MAX),
+        KeyCode::Enter | KeyCode::Right => app.open_blame_diff(),
+        _ => return Action::None,
+    }
+    Action::Redraw
+}
+
 fn branch_page(app: &mut App) -> Action {
     match app.branch_link() {
         Ok(page) => Action::Browse(page),
@@ -284,7 +365,7 @@ fn toggle_focus(app: &mut App) {
         View::Files => &mut app.files.focus,
         View::Status => &mut app.status.focus,
         View::Changes => &mut app.changes.focus,
-        View::Custom | View::History | View::Branches | View::Worktrees => return,
+        View::Custom | View::History | View::Branches | View::Worktrees | View::Blame => return,
     };
     *focus = match *focus {
         Focus::Body => Focus::Rail,

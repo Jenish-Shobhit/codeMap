@@ -24,9 +24,21 @@ const STATUS: (u16, u16) = (140, 36);
 const CHANGES: (u16, u16) = (150, 46);
 const HISTORY: (u16, u16) = (128, 40);
 const FILE_HISTORY: (u16, u16) = (144, 16);
+const BLAME: (u16, u16) = (140, 22);
 const BRANCHES: (u16, u16) = (140, 18);
 const WORKTREES: (u16, u16) = (140, 18);
 const NOW: i64 = 1_790_027_160;
+
+fn row_of_line(app: &App, line: u32) -> usize {
+    let rows = app.change_rows(app.changes.file);
+    let hunks = &app.diffs[app.changes.file].hunks;
+    rows.iter()
+        .position(|r| match *r {
+            codemap::app::CRow::Line(h, l) => hunks[h].lines[l].new_no == Some(line),
+            _ => false,
+        })
+        .unwrap_or_else(|| panic!("open_selector.py line {line} is in the diff"))
+}
 
 fn main() {
     let print_text = std::env::args().any(|a| a == "--text");
@@ -81,16 +93,7 @@ fn main() {
     frame(&mut app, CHANGES);
     key(&mut app, KeyCode::Char('}'));
     key(&mut app, KeyCode::Char(' '));
-    let rows = app.change_rows(app.changes.file);
-    let lines = &app.diffs[app.changes.file].hunks;
-    let loop_row = rows
-        .iter()
-        .position(|r| match *r {
-            codemap::app::CRow::Line(h, l) => lines[h].lines[l].new_no == Some(43),
-            _ => false,
-        })
-        .expect("open_selector.py line 43 is in the diff");
-    app.changes.row = loop_row;
+    app.changes.row = row_of_line(&app, 43);
     key(&mut app, KeyCode::Char('v'));
     key(&mut app, KeyCode::Char('j'));
     key(&mut app, KeyCode::Char('j'));
@@ -101,6 +104,14 @@ fn main() {
     );
     key(&mut app, KeyCode::Enter);
     shots.push(("changes", "Review", frame(&mut app, CHANGES)));
+
+    let before_the_loop = row_of_line(&app, 37);
+    let after_the_comment = app.changes.row;
+    app.changes.row = before_the_loop;
+    key(&mut app, KeyCode::Char('A'));
+    shots.push(("blame", "Blame", frame(&mut app, BLAME)));
+    key(&mut app, KeyCode::Esc);
+    app.changes.row = after_the_comment;
 
     app.view = View::History;
     frame(&mut app, HISTORY);

@@ -69,6 +69,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Commits on GitHub**: `B` in History opens the selected commit on GitHub
   when a branch on `origin` already holds it, and otherwise says why not;
   `y` copies its full sha. Both read only the local repository.
+- **Blame**: `A` on a file in Files, Status, Review, the history of a file,
+  or on a file inside the repository in Customisations, shows who last
+  changed each line of the file as it is in the working tree: short commit
+  id, author and date once per run of lines, with lines not committed yet
+  marked as such. It opens on the line `e` would open. `⏎` shows what the
+  line's commit did to the file, `B` opens that commit on GitHub, `y` copies
+  its sha, `e`, `E` and `b` open the file at the line and `L` shows its
+  history. New, untracked, deleted, binary, empty files and files over 1 MB
+  say why there is nothing to blame.
 
 ### Changed
 

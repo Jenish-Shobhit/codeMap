@@ -119,6 +119,12 @@ pub fn date_time(unix: i64) -> String {
     format!("{} {} {}, {}", t.day, month, t.year, clock(unix))
 }
 
+pub fn date(unix: i64) -> String {
+    let t = local_time(unix);
+    let month = MONTHS[(t.month.clamp(1, 12) - 1) as usize];
+    format!("{} {} {}", t.day, month, t.year)
+}
+
 pub fn width(s: &str) -> usize {
     UnicodeWidthStr::width(s)
 }

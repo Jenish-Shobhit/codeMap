@@ -47,4 +47,4 @@
                                              50+         raise HerdrError(result["error"])
                                              51+     if result.get("choice") is None:
  scope  last turn · done 9:44 PM             52+         return
- tab files                                ] [ hunk  space reviewed  v select  c comment  P send  s scope  L history  ? keys
+ tab files                                ] [ hunk  space reviewed  v select  c comment  P send  s scope  L history  A blame  ? keys

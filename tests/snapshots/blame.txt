@@ -1,0 +1,16 @@
+  files                                                                           blame src/main.rs · 6 lines
+
+ not committed yet · line 4 changed since the last commit
+
+ 369a4ac Grace Hopper 21 Sep 2026   1   fn main() -> ExitCode {
+ 67e4f1b Test         21 Sep 2026   2       count();
+ 5362109 Ada Lovelace 21 Sep 2026   3       report();
+ not committed                      4 ›     let wide = "日本語";
+                                    5       exit()
+ 67e4f1b Test         21 Sep 2026   6   }
+
+
+
+
+
+ ⎋ back  j k line  e editor  L history  ? keys

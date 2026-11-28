@@ -55,7 +55,7 @@ pub fn parse_log(out: &str) -> Vec<Commit> {
     out.split(RECORD).filter_map(parse_commit).collect()
 }
 
-fn is_object_id(sha: &str) -> bool {
+pub fn is_object_id(sha: &str) -> bool {
     matches!(sha.len(), 40 | 64) && sha.bytes().all(|b| b.is_ascii_hexdigit())
 }
 

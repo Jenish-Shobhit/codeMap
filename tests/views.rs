@@ -383,7 +383,7 @@ fn files_view_opens_on_the_first_changed_file() {
         "panemorph/__init__.py   79 B · 3 lines   M +1 −2",
         "3+ __version__ = \"0.1.2\"",
         "marks  last turn · done 9:44 PM",
-        "⏎ open  e editor  E VS Code  b browser  B GitHub  L history  / find",
+        "⏎ open  e editor  E VS Code  b browser  B GitHub  L history  A blame  / find",
     ] {
         assert!(t.contains(needle), "missing {needle:?}\n{t}");
     }
@@ -739,7 +739,7 @@ fn status_view_lists_staged_and_unstaged_files() {
         "@@ top level · 1–3",
         "   3+ __version__ = \"0.1.2\"",
         "tab diff",
-        "j k file  space unstage  c commit  e editor  L history  ? keys",
+        "j k file  space unstage  c commit  e editor  L history  A blame  ? keys",
     ] {
         assert!(t.contains(needle), "missing {needle:?}\n{t}");
     }
@@ -838,7 +838,7 @@ fn status_body_scrolls_and_escape_returns_to_the_list() {
     assert!(t.contains("tab files"), "{t}");
     assert!(
         t.contains(
-            "j k scroll  ] [ hunk  space stage hunk  x discard  c commit  e editor  L history  ? keys"
+            "j k scroll  ] [ hunk  space stage hunk  x discard  c commit  e editor  L history  A blame  ? keys"
         ),
         "{t}"
     );
@@ -1161,7 +1161,7 @@ fn space_stages_the_selected_file_and_moves_to_the_next() {
         " staged · 0",
         " not staged · 5",
         "a.py   +1 −1    not staged",
-        "j k file  space stage  x discard  c commit  e editor  L history  ? keys",
+        "j k file  space stage  x discard  c commit  e editor  L history  A blame  ? keys",
     ] {
         assert!(t.contains(needle), "missing {needle:?}\n{t}");
     }
@@ -4769,7 +4769,7 @@ fn l_in_the_customisations_popup_only_for_a_file_inside_the_repository() {
     };
     let mut app = custom_app(&roots, state.path());
     assert_eq!(app.custom.scope, CustomScope::Project);
-    assert!(text(&mut app).contains("L history  ? keys"));
+    assert!(text(&mut app).contains("L history  A blame  ? keys"));
     key(&mut app, KeyCode::Char('L'));
     assert_eq!(app.view, View::Custom);
     assert_eq!(app.file_history.as_ref().unwrap().path, "CLAUDE.md");
@@ -5093,7 +5093,7 @@ fn the_history_hint_shows_only_where_l_works() {
     let (repo, state) = file_history_repo();
     let mut files = app_at(repo.path(), &state, View::Files);
     files.select_path("src/main.rs");
-    assert!(text(&mut files).contains("B GitHub  L history  / find"));
+    assert!(text(&mut files).contains("B GitHub  L history  A blame  / find"));
     key(&mut files, KeyCode::Char('g'));
     assert!(files.selected_file_row().unwrap().dir);
     let t = text(&mut files);
@@ -5106,4 +5106,654 @@ fn the_history_hint_shows_only_where_l_works() {
     let mut review = app_at(clean.path(), &state, View::Changes);
     assert!(review.diffs.is_empty());
     assert!(!text(&mut review).contains("L history"));
+}
+
+fn blame_repo() -> (TempDir, TempDir) {
+    let repo = repo_with(&[
+        ("src/main.rs", "fn main() {\n    count();\n}\n"),
+        ("README.md", "# demo\n"),
+    ]);
+    let p = repo.path();
+    let by = |author: &str, subject: &str| {
+        let author = format!("--author={author}");
+        git(p, &["commit", "-qam", subject, &author]);
+    };
+    write(
+        p,
+        "src/main.rs",
+        "fn main() {\n    count();\n    report();\n}\n",
+    );
+    by("Ada Lovelace <ada@example.com>", "feat: report the count");
+    write(
+        p,
+        "src/main.rs",
+        "fn main() -> ExitCode {\n    count();\n    report();\n}\n",
+    );
+    by("Grace Hopper <grace@example.com>", "feat: exit with a code");
+    write(
+        p,
+        "src/main.rs",
+        "fn main() -> ExitCode {\n    count();\n    report();\n\tlet wide = \"日本語\";\n    exit()\n}\n",
+    );
+    write(p, "notes.md", "# Notes\n");
+    codemap::util::freeze_time(NOW);
+    (repo, TempDir::new("blame-state"))
+}
+
+fn blame_page(app: &App) -> &codemap::blame::BlamePage {
+    app.blame.as_ref().expect("the blame page is open")
+}
+
+fn selected_row(app: &mut App) -> String {
+    text(app)
+        .lines()
+        .find(|l| l.contains(" › "))
+        .unwrap_or_default()
+        .to_string()
+}
+
+#[test]
+fn a_in_the_status_tab_blames_the_working_tree_file_and_escape_comes_back() {
+    let (repo, state) = blame_repo();
+    let mut app = app_at(repo.path(), &state, View::Status);
+    select(&mut app, "src/main.rs", false);
+    assert!(text(&mut app).contains("L history  A blame  ? keys"));
+    assert_eq!(key(&mut app, KeyCode::Char('A')), Action::Redraw);
+    assert_eq!(app.view, View::Status, "the page is drawn over the tab");
+    assert_eq!(app.page(), View::Blame);
+    let t = text(&mut app);
+    for needle in [
+        " status   review   history ",
+        "blame src/main.rs · 6 lines",
+        "not committed yet · line 4 changed since the last commit",
+        "Grace Hopper 21 Sep 2026   1   fn main() -> ExitCode {",
+        "Test         21 Sep 2026   2       count();",
+        "Ada Lovelace 21 Sep 2026   3       report();",
+        "not committed                      4 ›     let wide = \"日本語\";",
+        "                                   5       exit()",
+        "Test         21 Sep 2026   6   }",
+        "⎋ back  j k line  e editor  L history  ? keys",
+    ] {
+        assert!(t.contains(needle), "missing {needle:?}\n{t}");
+    }
+    assert!(!t.contains("0000000"), "{t}");
+    assert_eq!(blame_page(&app).selected_number(), 4, "the first change");
+
+    key(&mut app, KeyCode::Char('k'));
+    let t = text(&mut app);
+    assert!(
+        t.contains("feat: report the count   Ada Lovelace · 21 Sep 2026"),
+        "{t}"
+    );
+    assert!(
+        t.contains("⎋ back  j k line  ⏎ diff  B GitHub  y copy sha  e editor  L history  ? keys"),
+        "{t}"
+    );
+    let sha = sha_of(repo.path(), "HEAD~1");
+    assert_eq!(key(&mut app, KeyCode::Char('y')), Action::Copy(sha));
+    assert_eq!(
+        key(&mut app, KeyCode::Char('e')),
+        Action::Edit(at("src/main.rs", Some(3)))
+    );
+    assert_eq!(
+        key(&mut app, KeyCode::Char('E')),
+        Action::Open(Opener::VsCode, at("src/main.rs", Some(3)))
+    );
+    assert_eq!(
+        key(&mut app, KeyCode::Char('b')),
+        Action::Open(Opener::Browser, at("src/main.rs", Some(3)))
+    );
+    for not_here in ['s', 'c', 'x', ' ', 'A'] {
+        key(&mut app, KeyCode::Char(not_here));
+    }
+    assert!(!app.commit.open && app.confirm.is_none());
+    assert_eq!(porcelain(repo.path()).len(), 2);
+
+    assert_eq!(key(&mut app, KeyCode::Esc), Action::Redraw);
+    assert!(app.blame.is_none());
+    assert_eq!(app.view, View::Status);
+    assert_eq!(app.status.selected().unwrap().path, "src/main.rs");
+    assert!(!text(&mut app).contains("blame src/main.rs"));
+
+    key(&mut app, KeyCode::Char('A'));
+    assert_eq!(key(&mut app, KeyCode::Char('3')), Action::Redraw);
+    assert_eq!((app.view, app.blame.is_none()), (View::History, true));
+    assert!(text(&mut app).contains("3 commits"));
+}
+
+#[test]
+fn not_committed_lines_say_so_instead_of_doing_nothing() {
+    let (repo, state) = blame_repo();
+    let mut app = app_at(repo.path(), &state, View::Status);
+    select(&mut app, "src/main.rs", false);
+    key(&mut app, KeyCode::Char('A'));
+    text(&mut app);
+    for code in [KeyCode::Enter, KeyCode::Char('B'), KeyCode::Char('y')] {
+        assert_eq!(key(&mut app, code), Action::Redraw, "{code:?}");
+        assert_eq!(
+            app.message.as_deref(),
+            Some("this line is not committed yet"),
+            "{code:?}"
+        );
+        assert!(text(&mut app).contains("this line is not committed yet"));
+        assert!(blame_page(&app).diff.is_none());
+    }
+}
+
+#[test]
+fn enter_shows_what_the_line_s_commit_did_and_back_keeps_the_line() {
+    let (repo, state) = blame_repo();
+    let mut app = app_at(repo.path(), &state, View::Status);
+    select(&mut app, "src/main.rs", false);
+    key(&mut app, KeyCode::Char('A'));
+    key(&mut app, KeyCode::Char('g'));
+    assert_eq!(blame_page(&app).selected_number(), 1);
+    key(&mut app, KeyCode::Enter);
+    let t = text(&mut app);
+    for needle in [
+        "feat: exit with a code   ⌫ back",
+        "src/main.rs  +1 −1",
+        "fn main() -> ExitCode {",
+        "⌫ blame  j k scroll  B GitHub  y copy sha  ? keys",
+    ] {
+        assert!(t.contains(needle), "missing {needle:?}\n{t}");
+    }
+    assert!(!t.contains("README.md"), "{t}");
+    for _ in 0..3 {
+        key(&mut app, KeyCode::Char('j'));
+    }
+    key(&mut app, KeyCode::Backspace);
+    assert!(blame_page(&app).diff.is_none());
+    assert_eq!(blame_page(&app).selected_number(), 1);
+    assert!(selected_row(&mut app).contains("1 ›"));
+    key(&mut app, KeyCode::Char('j'));
+    key(&mut app, KeyCode::Enter);
+    assert!(text(&mut app).contains("initial   ⌫ back"));
+    assert_eq!(key(&mut app, KeyCode::Esc), Action::Redraw);
+    assert!(app.blame.is_some() && blame_page(&app).diff.is_none());
+    assert_eq!(blame_page(&app).selected_number(), 2);
+    key(&mut app, KeyCode::Right);
+    key(&mut app, KeyCode::Enter);
+    assert!(blame_page(&app).diff.is_none());
+    assert_eq!(blame_page(&app).selected_number(), 2);
+}
+
+#[test]
+fn over_the_files_popup_blame_opens_on_the_selected_file_and_escape_closes_it() {
+    let (repo, state) = blame_repo();
+    let mut app = app_at(repo.path(), &state, View::Files);
+    codemap::util::freeze_time(NOW);
+    app.select_path("src/main.rs");
+    let selected = app.files.sel;
+    assert!(text(&mut app).contains("L history  A blame  / find"));
+    key(&mut app, KeyCode::Char('A'));
+    assert_eq!(app.view, View::Files);
+    let t = ui::buffer_text(&draw(&mut app, 110, 16));
+    let header = t.lines().next().unwrap();
+    assert!(
+        header.contains(" files ") && !header.contains("status"),
+        "{t}"
+    );
+    assert!(header.contains("blame src/main.rs · 6 lines"), "{t}");
+    snapshot("blame", &normalize(&t, repo.path()));
+    for not_here in ['/', 's', 'a'] {
+        key(&mut app, KeyCode::Char(not_here));
+    }
+    assert!(app.input.is_none() && app.scope == Scope::Head);
+    key(&mut app, KeyCode::Tab);
+    assert_eq!(app.files.focus, Focus::Rail);
+    assert_eq!(key(&mut app, KeyCode::Esc), Action::Redraw);
+    assert!(app.blame.is_none());
+    assert_eq!((app.view, app.files.sel), (View::Files, selected));
+
+    app.select_path("README.md");
+    key(&mut app, KeyCode::Char('A'));
+    let t = text(&mut app);
+    assert!(t.contains("blame README.md · 1 line"), "{t}");
+    assert!(selected_row(&mut app).contains("1 › # demo"));
+    key(&mut app, KeyCode::Esc);
+
+    key(&mut app, KeyCode::Char('g'));
+    assert!(app.selected_file_row().unwrap().dir);
+    let t = text(&mut app);
+    assert!(
+        t.contains("B GitHub  / find") && !t.contains("A blame"),
+        "{t}"
+    );
+    assert_eq!(key(&mut app, KeyCode::Char('A')), Action::Redraw);
+    assert!(app.blame.is_none());
+    assert_eq!(
+        app.message.as_deref(),
+        Some("A blames a file · this is a folder")
+    );
+}
+
+#[test]
+fn a_in_the_review_tab_starts_on_the_line_under_the_cursor() {
+    let (repo, state) = blame_repo();
+    let mut app = app_at(repo.path(), &state, View::Changes);
+    assert_eq!(app.diffs[app.changes.file].path, "notes.md");
+    assert!(text(&mut app).contains("L history  A blame  ? keys"));
+    key(&mut app, KeyCode::Char('A'));
+    let t = text(&mut app);
+    assert!(
+        t.contains("notes.md is not committed yet · nothing to blame"),
+        "{t}"
+    );
+    assert!(
+        t.contains("a new or untracked file has a blame once it is committed"),
+        "{t}"
+    );
+    assert!(t.contains("⎋ back  e editor  L history  ? keys"), "{t}");
+    for code in [KeyCode::Char('j'), KeyCode::Char('G')] {
+        key(&mut app, code);
+    }
+    assert_eq!(key(&mut app, KeyCode::Enter), Action::Redraw);
+    assert_eq!(app.message.as_deref(), Some("no line is selected"));
+    key(&mut app, KeyCode::Esc);
+    assert_eq!(app.page(), View::Changes);
+
+    key(&mut app, KeyCode::Char('}'));
+    assert_eq!(app.diffs[app.changes.file].path, "src/main.rs");
+    let rows = app.change_rows(app.changes.file);
+    let hunks = &app.diffs[app.changes.file].hunks;
+    let on_line_two = rows
+        .iter()
+        .position(|r| match *r {
+            codemap::app::CRow::Line(h, l) => hunks[h].lines[l].new_no == Some(2),
+            _ => false,
+        })
+        .expect("line 2 is in the diff");
+    app.changes.focus = Focus::Body;
+    app.changes.row = on_line_two;
+    assert_eq!(app.location().unwrap().line, Some(2));
+    key(&mut app, KeyCode::Char('A'));
+    assert_eq!(blame_page(&app).selected_number(), 2);
+    assert!(selected_row(&mut app).contains("2 ›     count();"));
+    key(&mut app, KeyCode::Esc);
+    assert_eq!(
+        (app.page(), app.changes.file, app.changes.row),
+        (View::Changes, 1, on_line_two)
+    );
+}
+
+#[test]
+fn a_in_the_customisations_popup_only_for_a_file_inside_the_repository() {
+    let repo = repo_with(&[("CLAUDE.md", "# demo\n")]);
+    let home = TempDir::new("custom-home");
+    write(home.path(), ".claude/CLAUDE.md", "# Everywhere\n");
+    let state = TempDir::new("custom-state");
+    let roots = codemap::custom::Roots {
+        repo: repo.path().to_path_buf(),
+        home: home.path().to_path_buf(),
+        config: home.path().join(".config"),
+    };
+    let mut app = custom_app(&roots, state.path());
+    assert!(text(&mut app).contains("L history  A blame  ? keys"));
+    key(&mut app, KeyCode::Char('A'));
+    assert_eq!(app.view, View::Custom);
+    let t = text(&mut app);
+    assert!(t.contains("blame CLAUDE.md · 1 line"), "{t}");
+    assert!(t.contains("initial"), "{t}");
+    key(&mut app, KeyCode::Char('2'));
+    assert!(app.blame.is_none());
+    assert_eq!(app.custom.scope, CustomScope::Global);
+    assert!(!text(&mut app).contains("A blame"));
+    key(&mut app, KeyCode::Char('A'));
+    assert!(app.blame.is_none());
+    assert_eq!(
+        app.message.as_deref(),
+        Some("this file is not in the repository · nothing to blame")
+    );
+}
+
+#[test]
+fn blame_and_the_history_of_a_file_lead_to_each_other() {
+    let (repo, state) = blame_repo();
+    let mut app = app_at(repo.path(), &state, View::Status);
+    select(&mut app, "src/main.rs", false);
+    key(&mut app, KeyCode::Char('A'));
+    assert_eq!(key(&mut app, KeyCode::Char('L')), Action::Redraw);
+    assert!(app.blame.is_none());
+    assert_eq!(app.page(), View::History);
+    let t = text(&mut app);
+    assert!(t.contains("history of src/main.rs · 3 commits"), "{t}");
+    assert!(
+        t.contains("⎋ back  ⏎ diff  B GitHub  y copy sha  e editor  ? keys"),
+        "{t}"
+    );
+    key(&mut app, KeyCode::Char('j'));
+    let in_history = app.shown_history().sel;
+    key(&mut app, KeyCode::Char('A'));
+    assert_eq!(app.page(), View::Blame);
+    assert!(text(&mut app).contains("blame src/main.rs · 6 lines"));
+    assert_eq!(blame_page(&app).selected_number(), 1);
+    key(&mut app, KeyCode::Esc);
+    assert_eq!(app.page(), View::History);
+    assert_eq!(app.shown_history().sel, in_history);
+    key(&mut app, KeyCode::Char('A'));
+    key(&mut app, KeyCode::Char('L'));
+    assert_eq!(app.page(), View::History);
+    assert_eq!(app.shown_history().sel, in_history);
+    key(&mut app, KeyCode::Esc);
+    assert_eq!((app.page(), app.view), (View::Status, View::Status));
+    assert_eq!(app.status.selected().unwrap().path, "src/main.rs");
+}
+
+fn blame_states_repo() -> (TempDir, TempDir) {
+    let repo = repo_with(&[
+        ("gone.rs", "fn gone() {}\n"),
+        ("empty.txt", ""),
+        ("picture.bin", "\0\u{1}\u{2}"),
+        ("big.txt", "small\n"),
+    ]);
+    let p = repo.path();
+    std::fs::remove_file(p.join("gone.rs")).unwrap();
+    let line = "a line that is long enough to add up to a large file quickly\n";
+    let lines = codemap::git::blame::BLAME_BYTES as usize / line.len() + 1;
+    write(p, "big.txt", &line.repeat(lines));
+    (repo, TempDir::new("blame-states"))
+}
+
+#[test]
+fn files_with_nothing_to_blame_have_a_page_that_says_why() {
+    let (repo, state) = blame_states_repo();
+    let mut status = app_at(repo.path(), &state, View::Status);
+    select(&mut status, "gone.rs", false);
+    key(&mut status, KeyCode::Char('A'));
+    let t = text(&mut status);
+    assert!(
+        t.contains("gone.rs is deleted from the working tree · nothing to blame"),
+        "{t}"
+    );
+    assert!(t.contains("L lists the commits that touched it"), "{t}");
+    assert!(t.contains("⎋ back  L history  ? keys"), "{t}");
+    key(&mut status, KeyCode::Char('L'));
+    assert!(text(&mut status).contains("history of gone.rs · 1 commit"));
+
+    let mut files = app_at(repo.path(), &state, View::Files);
+    for (path, said) in [
+        ("empty.txt", "empty.txt is empty · nothing to blame"),
+        (
+            "picture.bin",
+            "picture.bin is a binary file · nothing to blame",
+        ),
+        ("big.txt", "big.txt is 1.0 MB · too large to blame here"),
+    ] {
+        files.select_path(path);
+        key(&mut files, KeyCode::Char('A'));
+        let t = text(&mut files);
+        assert!(t.contains(said), "missing {said:?}\n{t}");
+        assert!(t.contains("⎋ back  e editor  L history  ? keys"), "{t}");
+        assert!(!t.contains("git"), "no raw git error\n{t}");
+        key(&mut files, KeyCode::Esc);
+    }
+    files.select_path("big.txt");
+    key(&mut files, KeyCode::Char('A'));
+    assert!(text(&mut files).contains("blame reads files up to 1.0 MB"));
+    key(&mut files, KeyCode::Esc);
+    files.select_path("picture.bin");
+    key(&mut files, KeyCode::Char('A'));
+    assert!(text(&mut files).contains("blame reads a text file line by line"));
+}
+
+#[test]
+fn the_page_says_it_is_reading_and_drops_a_result_for_an_earlier_a() {
+    let (repo, state) = blame_repo();
+    let mut app = app_at(repo.path(), &state, View::Status);
+    select(&mut app, "src/main.rs", false);
+    key(&mut app, KeyCode::Char('A'));
+    let ask = blame_page(&app).ask;
+    app.blame.as_mut().unwrap().read = None;
+    assert!(text(&mut app).contains("reading the blame…"));
+    app.apply(codemap::app::Msg::Blame {
+        ask: ask - 1,
+        read: Ok(codemap::git::blame::BlameRead::Empty),
+    });
+    assert!(blame_page(&app).read.is_none());
+    app.apply(codemap::app::Msg::Blame {
+        ask,
+        read: Err("fatal: something\nwent wrong".into()),
+    });
+    let t = text(&mut app);
+    assert!(
+        t.contains("could not blame src/main.rs · fatal: something went wrong"),
+        "{t}"
+    );
+
+    key(&mut app, KeyCode::Esc);
+    key(&mut app, KeyCode::Char('A'));
+    key(&mut app, KeyCode::Char('g'));
+    key(&mut app, KeyCode::Enter);
+    let ask = blame_page(&app).ask;
+    let shown = blame_page(&app).diff.as_ref().unwrap().sha.clone();
+    let before = blame_page(&app).diff.as_ref().unwrap().files.clone();
+    app.blame.as_mut().unwrap().diff.as_mut().unwrap().files = None;
+    assert!(text(&mut app).contains("reading the diff…"));
+    app.apply(codemap::app::Msg::BlameDiff {
+        ask: ask - 1,
+        sha: shown.clone(),
+        read: Ok(Vec::new()),
+    });
+    app.apply(codemap::app::Msg::BlameDiff {
+        ask,
+        sha: "f".repeat(40),
+        read: Ok(Vec::new()),
+    });
+    assert_eq!(blame_page(&app).diff.as_ref().unwrap().files, None);
+    app.apply(codemap::app::Msg::BlameDiff {
+        ask,
+        sha: shown,
+        read: Ok(before.clone().unwrap()),
+    });
+    assert_eq!(blame_page(&app).diff.as_ref().unwrap().files, before);
+}
+
+#[test]
+fn shift_b_on_a_line_opens_its_commit_on_github_only_when_origin_has_it() {
+    let remoted = repo_with_origin();
+    let p = remoted.root.as_path();
+    let pushed = sha_of(p, "HEAD");
+    commit_file(p, "app.py", "x = 1\ny = 2\n", "fix: not pushed yet");
+    let state = TempDir::new("blame-page-state");
+    let mut files = app_at(p, &state, View::Files);
+    files.select_path("app.py");
+    key(&mut files, KeyCode::Char('A'));
+    key(&mut files, KeyCode::Char('g'));
+    assert_eq!(key(&mut files, KeyCode::Char('B')), Action::Redraw);
+    assert_eq!(
+        files.message.as_deref(),
+        Some("origin is not on GitHub · nothing to open")
+    );
+    git(
+        p,
+        &[
+            "remote",
+            "set-url",
+            "origin",
+            "git@github.com:acme/widgets.git",
+        ],
+    );
+    let before = fingerprint(p);
+    let page = format!("https://github.com/acme/widgets/commit/{pushed}");
+    assert_eq!(
+        key(&mut files, KeyCode::Char('B')),
+        Action::Browse(page.clone())
+    );
+    key(&mut files, KeyCode::Enter);
+    assert_eq!(key(&mut files, KeyCode::Char('B')), Action::Browse(page));
+    key(&mut files, KeyCode::Esc);
+    key(&mut files, KeyCode::Char('j'));
+    key(&mut files, KeyCode::Char('B'));
+    assert_eq!(
+        files.message.as_deref(),
+        Some("this commit is not on origin yet · nothing to open")
+    );
+    assert_eq!(fingerprint(p), before, "nothing contacts or writes origin");
+}
+
+#[test]
+fn looking_at_a_blame_writes_nothing() {
+    let (repo, state) = blame_repo();
+    let p = repo.path();
+    let before = (fingerprint(p), tree_bytes(p));
+    for view in [View::Status, View::Files, View::Changes] {
+        let mut app = app_at(p, &state, view);
+        match view {
+            View::Status => select(&mut app, "src/main.rs", false),
+            View::Files => app.select_path("src/main.rs"),
+            _ => {
+                key(&mut app, KeyCode::Char('}'));
+            }
+        }
+        key(&mut app, KeyCode::Char('A'));
+        assert!(blame_page(&app).blamed().is_some());
+        for step in [KeyCode::Char('g'), KeyCode::Enter] {
+            key(&mut app, step);
+            text(&mut app);
+        }
+        assert!(blame_page(&app).diff.as_ref().unwrap().files.is_some());
+        key(&mut app, KeyCode::Char('B'));
+        key(&mut app, KeyCode::Esc);
+        key(&mut app, KeyCode::Char('j'));
+        key(&mut app, KeyCode::Enter);
+        text(&mut app);
+        key(&mut app, KeyCode::Esc);
+        key(&mut app, KeyCode::Esc);
+        assert!(app.blame.is_none());
+    }
+    assert_eq!((fingerprint(p), tree_bytes(p)), before);
+}
+
+#[test]
+fn the_keys_of_the_blame_page_come_first_in_its_help() {
+    let (repo, state) = blame_repo();
+    let mut app = app_at(repo.path(), &state, View::Status);
+    select(&mut app, "src/main.rs", false);
+    key(&mut app, KeyCode::Char('?'));
+    assert!(!text(&mut app).contains("history of the file, back to where A was"));
+    key(&mut app, KeyCode::Esc);
+    key(&mut app, KeyCode::Char('A'));
+    key(&mut app, KeyCode::Char('?'));
+    let t = text(&mut app);
+    let blame_at = t.find("│ blame ").expect("a blame section");
+    let status_at = t.find("│ status ").expect("a status section");
+    assert!(blame_at < status_at, "{t}");
+    for needle in [
+        "A             blame of a file in Files, Status, Review",
+        "j k  g G      move by line, to the first or the last",
+        "⏎  ⌫          what the line's commit did to the file, back",
+        "B  y          the line's commit on GitHub, copy its full sha",
+        "e  E  b       open the file at the selected line",
+        "L  ⎋          history of the file, back to where A was",
+    ] {
+        assert!(t.contains(needle), "missing {needle:?}\n{t}");
+    }
+}
+
+#[test]
+fn the_blame_hint_shows_only_where_a_works() {
+    let (repo, state) = blame_repo();
+    let clean = repo_with(&[("a.txt", "a\n")]);
+    let mut review = app_at(clean.path(), &state, View::Changes);
+    assert!(review.diffs.is_empty());
+    assert!(!text(&mut review).contains("A blame"));
+    key(&mut review, KeyCode::Char('A'));
+    assert_eq!(review.message.as_deref(), Some("no file is selected"));
+    let mut status = app_at(clean.path(), &state, View::Status);
+    assert!(!text(&mut status).contains("A blame"));
+    key(&mut status, KeyCode::Char('A'));
+    assert!(status.blame.is_none());
+    for view in [View::History, View::Branches, View::Worktrees] {
+        let mut app = app_at(repo.path(), &state, view);
+        let t = text(&mut app);
+        assert!(!t.contains("A blame"), "{view:?}\n{t}");
+        key(&mut app, KeyCode::Char('A'));
+        assert!(app.blame.is_none(), "{view:?}");
+    }
+    let outside = TempDir::new("not-a-repository");
+    write(outside.path(), "a.txt", "a\n");
+    let mut files = app_at(outside.path(), &state, View::Files);
+    files.select_path("a.txt");
+    assert!(!text(&mut files).contains("A blame"));
+    key(&mut files, KeyCode::Char('A'));
+    assert_eq!(
+        files.message.as_deref(),
+        Some("not a git repository · nothing to blame")
+    );
+}
+
+#[test]
+fn a_long_file_scrolls_one_screen_at_a_time() {
+    let lines: String = (1..=20_000).map(|n| format!("line {n}\n")).collect();
+    let repo = repo_with(&[("long.txt", lines.as_str())]);
+    let state = TempDir::new("blame-long");
+    let mut app = app_at(repo.path(), &state, View::Files);
+    app.select_path("long.txt");
+    key(&mut app, KeyCode::Char('A'));
+    assert_eq!(blame_page(&app).line_count(), 20_000);
+    assert!(text(&mut app).contains("blame long.txt · 20000 lines"));
+    let started = std::time::Instant::now();
+    for _ in 0..200 {
+        key(&mut app, KeyCode::Char('j'));
+        text(&mut app);
+    }
+    for _ in 0..50 {
+        key(&mut app, KeyCode::PageDown);
+        text(&mut app);
+    }
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(20),
+        "{:?}",
+        started.elapsed()
+    );
+    assert_eq!(blame_page(&app).selected_number(), 1 + 200 + 50 * 30);
+    assert!(selected_row(&mut app).contains("1701 › line 1701"));
+    key(&mut app, KeyCode::Char('G'));
+    let t = text(&mut app);
+    assert!(t.contains("20000 › line 20000"), "{t}");
+    assert!(!t.contains("line 1701"), "{t}");
+    ctrl(&mut app, 'u');
+    assert_eq!(blame_page(&app).selected_number(), 20_000 - 15);
+    key(&mut app, KeyCode::Home);
+    assert_eq!(blame_page(&app).selected_number(), 1);
+    key(&mut app, KeyCode::Up);
+    assert_eq!(blame_page(&app).selected_number(), 1);
+}
+
+#[test]
+fn the_blame_page_its_diff_and_its_help_survive_small_terminals() {
+    let (repo, state) = blame_repo();
+    let (states, states_state) = blame_states_repo();
+    for (diff, help) in [(false, false), (true, false), (false, true), (true, true)] {
+        let mut app = app_at(repo.path(), &state, View::Status);
+        select(&mut app, "src/main.rs", false);
+        key(&mut app, KeyCode::Char('A'));
+        key(&mut app, KeyCode::Char('k'));
+        if diff {
+            key(&mut app, KeyCode::Enter);
+        }
+        if help {
+            key(&mut app, KeyCode::Char('?'));
+            for _ in 0..5 {
+                key(&mut app, KeyCode::Char('j'));
+            }
+        }
+        for w in 0..=45u16 {
+            for h in 0..=14u16 {
+                let _ = draw(&mut app, w, h);
+            }
+        }
+    }
+    let mut files = app_at(states.path(), &states_state, View::Files);
+    for path in ["empty.txt", "picture.bin", "big.txt"] {
+        files.select_path(path);
+        key(&mut files, KeyCode::Char('A'));
+        for w in 0..=45u16 {
+            for h in 0..=14u16 {
+                let _ = draw(&mut files, w, h);
+            }
+        }
+        key(&mut files, KeyCode::Esc);
+    }
 }
