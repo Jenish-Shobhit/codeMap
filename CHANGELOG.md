@@ -76,8 +76,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   marked as such. It opens on the line `e` would open. `⏎` shows what the
   line's commit did to the file, `B` opens that commit on GitHub, `y` copies
   its sha, `e`, `E` and `b` open the file at the line and `L` shows its
-  history. New, untracked, deleted, binary, empty files and files over 1 MB
-  say why there is nothing to blame.
+  history. New, untracked, deleted, binary, empty files, files over 1 MB
+  and files that are not regular files say why there is nothing to blame.
 
 ### Changed
 

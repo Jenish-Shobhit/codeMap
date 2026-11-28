@@ -69,7 +69,7 @@ pub struct LocalTime {
     pub minute: u32,
 }
 
-pub fn local_time(unix: i64) -> LocalTime {
+fn convert_time(unix: i64) -> Option<LocalTime> {
     let utc = FORCE_UTC.load(std::sync::atomic::Ordering::Relaxed);
     unsafe {
         let t: libc::time_t = unix as libc::time_t;
@@ -80,22 +80,26 @@ pub fn local_time(unix: i64) -> LocalTime {
             libc::localtime_r(&t, &mut tm)
         };
         if res.is_null() {
-            return LocalTime {
-                year: 1970,
-                month: 1,
-                day: 1,
-                hour: 0,
-                minute: 0,
-            };
+            return None;
         }
-        LocalTime {
+        Some(LocalTime {
             year: tm.tm_year + 1900,
             month: (tm.tm_mon + 1) as u32,
             day: tm.tm_mday as u32,
             hour: tm.tm_hour as u32,
             minute: tm.tm_min as u32,
-        }
+        })
     }
+}
+
+pub fn local_time(unix: i64) -> LocalTime {
+    convert_time(unix).unwrap_or(LocalTime {
+        year: 1970,
+        month: 1,
+        day: 1,
+        hour: 0,
+        minute: 0,
+    })
 }
 
 pub fn clock(unix: i64) -> String {
@@ -120,7 +124,9 @@ pub fn date_time(unix: i64) -> String {
 }
 
 pub fn date(unix: i64) -> String {
-    let t = local_time(unix);
+    let Some(t) = convert_time(unix) else {
+        return "?".to_string();
+    };
     let month = MONTHS[(t.month.clamp(1, 12) - 1) as usize];
     format!("{} {} {}", t.day, month, t.year)
 }

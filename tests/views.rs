@@ -348,7 +348,7 @@ fn view_names_parse_and_the_removed_views_do_not() {
     assert_eq!(View::Status.tabs().len(), 5);
     assert_eq!(View::Changes.name(), "changes");
     assert_eq!(View::Changes.label(), "review");
-    for gone in ["map", "flow", "open", "1", "2"] {
+    for gone in ["map", "flow", "open", "1", "2", "blame", "Blame"] {
         assert_eq!(View::parse(gone), None, "{gone}");
     }
 }
@@ -5254,7 +5254,7 @@ fn enter_shows_what_the_line_s_commit_did_and_back_keeps_the_line() {
         "feat: exit with a code   ⌫ back",
         "src/main.rs  +1 −1",
         "fn main() -> ExitCode {",
-        "⌫ blame  j k scroll  B GitHub  y copy sha  ? keys",
+        "⌫ blame  j k scroll  B GitHub  y copy sha  e editor  ? keys",
     ] {
         assert!(t.contains(needle), "missing {needle:?}\n{t}");
     }
@@ -5756,4 +5756,57 @@ fn the_blame_page_its_diff_and_its_help_survive_small_terminals() {
         }
         key(&mut files, KeyCode::Esc);
     }
+}
+
+#[test]
+fn a_on_the_blame_page_does_nothing_and_p_and_t_pin_the_view_underneath() {
+    let (repo, state) = blame_repo();
+    let mut app = app_at(repo.path(), &state, View::Status);
+    select(&mut app, "src/main.rs", false);
+    key(&mut app, KeyCode::Char('A'));
+    let ask = blame_page(&app).ask;
+    let sel = blame_page(&app).sel;
+    assert_eq!(key(&mut app, KeyCode::Char('A')), Action::None);
+    assert_eq!(blame_page(&app).ask, ask);
+    assert_eq!(blame_page(&app).sel, sel);
+    assert_eq!(app.page(), View::Blame);
+    assert_eq!(key(&mut app, KeyCode::Char('p')), Action::Pin("split"));
+    assert_eq!(key(&mut app, KeyCode::Char('T')), Action::Pin("tab"));
+    assert_eq!(app.view, View::Status);
+    assert_eq!(app.view.name(), "status");
+    assert!(app.blame.is_some());
+}
+
+#[test]
+fn the_blame_diff_hints_the_editor_and_keeps_back_and_keys_at_the_ends() {
+    let (repo, state) = blame_repo();
+    let mut app = app_at(repo.path(), &state, View::Status);
+    select(&mut app, "src/main.rs", false);
+    key(&mut app, KeyCode::Char('A'));
+    key(&mut app, KeyCode::Char('g'));
+    key(&mut app, KeyCode::Enter);
+    let wide = ui::buffer_text(&draw(&mut app, 160, 24));
+    let hint = wide
+        .lines()
+        .rev()
+        .find(|l| l.contains("keys"))
+        .unwrap_or_else(|| panic!("{wide}"));
+    assert!(hint.trim_start().starts_with("⌫ blame"), "{hint}");
+    assert!(hint.contains("e editor"), "{hint}");
+    assert!(hint.trim_end().ends_with("? keys"), "{hint}");
+    assert!(matches!(key(&mut app, KeyCode::Char('e')), Action::Edit(_)));
+}
+
+#[test]
+fn a_very_long_line_is_cropped_before_it_is_drawn() {
+    let (repo, state) = blame_repo();
+    let p = repo.path();
+    let long = format!("{}END\n", "x\t".repeat(200_000));
+    write(p, "src/main.rs", &long);
+    let mut app = app_at(p, &state, View::Status);
+    select(&mut app, "src/main.rs", false);
+    key(&mut app, KeyCode::Char('A'));
+    let t = text(&mut app);
+    assert!(t.contains("x   x"), "{t}");
+    assert!(!t.contains("END"), "{t}");
 }

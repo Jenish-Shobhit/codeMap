@@ -56,6 +56,7 @@ impl Blamed {
 pub enum BlameRead {
     Lines(Blamed),
     NotCommitted,
+    NotRegular,
     Deleted,
     Binary,
     TooLarge(u64),
@@ -191,10 +192,17 @@ pub fn blame(
     if meta.is_dir() {
         return Err(GitError(format!("{path} is a folder")));
     }
+    let is_link = meta.file_type().is_symlink();
+    if !is_link && !meta.file_type().is_file() {
+        return Ok(BlameRead::NotRegular);
+    }
     let Some(name) = committed_name(&info.root, path, was)? else {
         return Ok(BlameRead::NotCommitted);
     };
-    if !meta.file_type().is_symlink() {
+    if is_link && name != path {
+        return Ok(BlameRead::NotCommitted);
+    }
+    if !is_link {
         if let Some(refused) = worth_blaming(&full, meta.len())? {
             return Ok(refused);
         }

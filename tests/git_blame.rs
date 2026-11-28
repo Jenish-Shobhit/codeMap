@@ -360,3 +360,79 @@ fn reading_a_blame_leaves_the_repository_and_its_index_alone() {
     }
     assert_eq!((fingerprint(p), tree_bytes(p)), before);
 }
+
+#[cfg(unix)]
+#[test]
+fn anything_but_a_regular_file_or_a_link_is_refused_without_being_opened() {
+    let repo = repo_with(&[("pipe.txt", "x\n")]);
+    let p = repo.path();
+    std::fs::remove_file(p.join("pipe.txt")).unwrap();
+    let made = std::process::Command::new("mkfifo")
+        .arg(p.join("pipe.txt"))
+        .status()
+        .unwrap();
+    assert!(made.success());
+    let (tx, rx) = std::sync::mpsc::channel();
+    let root = p.to_path_buf();
+    std::thread::spawn(move || {
+        let _ = tx.send(read(&root, "pipe.txt", None));
+    });
+    let read = rx
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .expect("a pipe must not block the blame");
+    assert_eq!(read, BlameRead::NotRegular);
+}
+
+#[cfg(unix)]
+fn repo_with_a_link_to_outside() -> (TempDir, TempDir) {
+    let outside = TempDir::new("outside");
+    write(outside.path(), "secret.txt", "OUTSIDE-MARKER\nsecond\n");
+    let repo = TempDir::new("repo");
+    let p = repo.path();
+    git(p, &["init", "-q"]);
+    write(p, "seed.txt", "seed\n");
+    std::os::unix::fs::symlink(outside.path().join("secret.txt"), p.join("link")).unwrap();
+    git(p, &["add", "-A"]);
+    git(p, &["commit", "-q", "-m", "initial"]);
+    (repo, outside)
+}
+
+#[cfg(unix)]
+#[test]
+fn a_committed_link_is_blamed_as_its_own_text_never_as_its_target() {
+    let (repo, outside) = repo_with_a_link_to_outside();
+    let blamed = blamed(repo.path(), "link");
+    let target = outside.path().join("secret.txt");
+    assert_eq!(
+        rows(&blamed),
+        [row(1, "Test", "initial", &target.display().to_string())]
+    );
+    assert!(!format!("{blamed:?}").contains("OUTSIDE-MARKER"));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_link_renamed_but_not_committed_is_never_read_through() {
+    let (repo, _outside) = repo_with_a_link_to_outside();
+    let p = repo.path();
+    git(p, &["mv", "link", "moved"]);
+    let result = read(p, "moved", Some("link"));
+    assert_eq!(result, BlameRead::NotCommitted);
+    assert!(!format!("{result:?}").contains("OUTSIDE-MARKER"));
+    assert_eq!(read(p, "moved", None), BlameRead::NotCommitted);
+}
+
+#[test]
+fn a_date_that_cannot_be_converted_is_a_question_mark_and_none_panics() {
+    codemap::util::freeze_time(1_790_027_160);
+    assert_eq!(codemap::util::date(i64::MIN), "?");
+    assert_eq!(codemap::util::date(i64::MAX), "?");
+    assert_eq!(codemap::util::date(0), "1 Jan 1970");
+    assert_eq!(codemap::util::date(253_402_300_800), "1 Jan 10000");
+    assert_eq!(codemap::util::date(99_999_999_999_999), "7 Nov 3170843");
+    assert_eq!(codemap::util::date(-124_271_193_600), "2 Jan -1968");
+    for unix in [i64::MIN, i64::MAX, 0, 253_402_300_800, -124_271_193_600] {
+        let shown = codemap::util::pad(&codemap::util::date(unix), 11);
+        assert_eq!(codemap::util::width(&shown), 11, "{unix}");
+    }
+}

@@ -50,7 +50,7 @@ pub(super) fn hints(app: &App) -> Vec<(&'static str, String)> {
         hints.push(("y", "copy sha".into()));
     }
     let deleted = matches!(page.read, Some(Ok(BlameRead::Deleted)));
-    if !in_the_diff && !deleted {
+    if !deleted {
         hints.push(("e", "editor".into()));
     }
     if !in_the_diff {
@@ -98,6 +98,10 @@ fn refusal(name: &str, read: &BlameRead, t: &Theme) -> Vec<(String, Style)> {
             format!("{name} is not committed yet · nothing to blame"),
             "a new or untracked file has a blame once it is committed".to_string(),
         ),
+        BlameRead::NotRegular => (
+            format!("{name} is not a regular file · nothing to blame"),
+            "blame reads a text file line by line".to_string(),
+        ),
         BlameRead::Deleted => (
             format!("{name} is deleted from the working tree · nothing to blame"),
             "L lists the commits that touched it".to_string(),
@@ -125,6 +129,7 @@ struct Columns {
     author: usize,
     date: bool,
     digits: usize,
+    room: usize,
 }
 
 impl Columns {
@@ -143,12 +148,15 @@ impl Columns {
         } else {
             (false, 0, false)
         };
-        Columns {
+        let mut columns = Columns {
             id,
             author,
             date,
             digits,
-        }
+            room: 0,
+        };
+        columns.room = text_room(columns.meta_width());
+        columns
     }
 
     fn meta_width(&self) -> usize {
@@ -236,6 +244,10 @@ struct Mark {
     selected: bool,
 }
 
+fn visible(text: &str, room: usize) -> String {
+    text.chars().take(room.saturating_mul(4)).collect()
+}
+
 fn row(
     blamed: &Blamed,
     line: &BlameLine,
@@ -282,7 +294,10 @@ fn row(
     };
     out.push(number, number_look)
         .push(pointer, style(t.accent, bg))
-        .push(util::sanitize_line(&line.text), text_look)
+        .push(
+            util::sanitize_line(&visible(&line.text, columns.room)),
+            text_look,
+        )
 }
 
 fn diff(buf: &mut Buffer, body: Rect, page: &mut BlamePage, t: &Theme) {
