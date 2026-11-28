@@ -195,7 +195,7 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
     }
 }
 
-fn hunk_name(h: &Hunk) -> String {
+pub(super) fn hunk_name(h: &Hunk) -> String {
     if h.section.is_empty() {
         "top level".into()
     } else {
@@ -335,7 +335,7 @@ fn rail(buf: &mut Buffer, area: Rect, app: &App) {
             let bg = if sel { t.active_row } else { t.rail };
             let letter = f.status.letter();
             let lc = match f.status {
-                FileStatus::Added => t.add,
+                FileStatus::Added | FileStatus::Untracked => t.add,
                 FileStatus::Deleted => t.del,
                 FileStatus::Renamed | FileStatus::Copied => t.renamed,
                 FileStatus::Modified => t.modified,

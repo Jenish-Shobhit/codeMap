@@ -2,6 +2,7 @@ mod changes;
 mod custom;
 mod files;
 mod history;
+mod status;
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -91,6 +92,7 @@ pub fn render_buf(buf: &mut Buffer, area: Rect, app: &mut App) {
     match app.view {
         View::Files => files::render(buf, &a, app),
         View::Custom => custom::render(buf, &a, app),
+        View::Status => status::render(buf, &a, app),
         View::Changes => changes::render(buf, &a, app),
         View::History => history::render(buf, &a, app),
     }
@@ -253,7 +255,7 @@ fn header(buf: &mut Buffer, r: Rect, app: &App) {
         app.view
             .tabs()
             .iter()
-            .map(|v| (v.name(), *v == app.view))
+            .map(|v| (v.label(), *v == app.view))
             .collect()
     };
     for (name, current) in tabs {
@@ -313,7 +315,7 @@ fn header(buf: &mut Buffer, r: Rect, app: &App) {
                 .push("   ", style(t.muted, t.body))
                 .push(b, style(t.branch, t.body));
         }
-        if !app.scope_info.header.is_empty() {
+        if app.view != View::Status && !app.scope_info.header.is_empty() {
             ctx = ctx
                 .push("   ", style(t.muted, t.body))
                 .push(app.scope_info.header.clone(), style(t.muted, t.body));
@@ -347,6 +349,21 @@ fn view_hints(app: &App) -> Vec<(&'static str, String)> {
             ("/", "find".into()),
             ("?", "keys".into()),
         ],
+        View::Status => vec![
+            (
+                "j k",
+                match app.status.focus {
+                    Focus::Rail => "file".to_string(),
+                    Focus::Body => "scroll".into(),
+                },
+            ),
+            ("e", "editor".into()),
+            ("E", "VS Code".into()),
+            ("b", "browser".into()),
+            ("B", "GitHub".into()),
+            ("y", "copy".into()),
+            ("?", "keys".into()),
+        ],
         View::Changes => vec![
             ("] [", "hunk".to_string()),
             ("space", "reviewed".into()),
@@ -377,8 +394,9 @@ fn hints_line(buf: &mut Buffer, a: &Areas, app: &App) {
             (View::Custom, _) => "j k move  h l scope",
             (View::Files, Focus::Rail) => "tab preview",
             (View::Files, Focus::Body) => "tab tree",
+            (View::Status, Focus::Rail) => "tab diff",
             (_, Focus::Rail) => "tab body",
-            (View::Changes, _) => "tab files",
+            (View::Status | View::Changes, _) => "tab files",
             (View::History, _) => "j k commit",
         };
         put(
@@ -464,9 +482,16 @@ pub const KEYS: &[(&str, &[(&str, &str)])] = &[
         ],
     ),
     (
-        "changes",
+        "status",
         &[
-            ("1 2", "changes, history"),
+            ("1 2 3", "status, review, history"),
+            ("j k", "move through the staged and not staged files"),
+            ("tab  ⎋", "read the diff, go back to the files"),
+        ],
+    ),
+    (
+        "review",
+        &[
             ("j k", "move by line"),
             ("] [  } {", "next or previous hunk, file"),
             ("space", "mark the hunk reviewed"),
@@ -540,6 +565,7 @@ impl App {
         match self.view {
             View::Files => self.files.focus,
             View::Custom => Focus::Rail,
+            View::Status => self.status.focus,
             View::Changes => self.changes.focus,
             View::History => Focus::Body,
         }

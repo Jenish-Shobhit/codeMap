@@ -164,7 +164,7 @@ pub fn render(buf: &mut Buffer, a: &Areas, app: &mut App) {
                     break;
                 }
                 let lc = match f.status {
-                    FileStatus::Added => t.add,
+                    FileStatus::Added | FileStatus::Untracked => t.add,
                     FileStatus::Deleted => t.del,
                     FileStatus::Renamed | FileStatus::Copied => t.renamed,
                     FileStatus::Modified => t.modified,

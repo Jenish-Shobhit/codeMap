@@ -240,8 +240,7 @@ fn loading_state_paints_the_frame_first() {
     });
     assert!(app.is_loading());
     let t = text(&mut app);
-    assert!(t.contains(" changes "), "{t}");
-    assert!(t.contains(" history "), "{t}");
+    assert!(t.contains(" status   review   history "), "{t}");
     assert!(t.contains("paneMorph · selector-fix"), "{t}");
     assert!(t.contains("reading git status…"), "{t}");
     app.view = View::History;
@@ -262,7 +261,7 @@ fn theme_colours_reach_the_screen() {
         .iter()
         .map(|&x| buf[(x, 0)].symbol().to_string())
         .collect();
-    assert_eq!(label.trim(), "changes");
+    assert_eq!(label.trim(), "review");
     assert_eq!(buf[(0, 5)].bg, Color::Rgb(0, 0, 0), "rail is black");
     assert_eq!(
         buf[(W - 1, 5)].bg,
@@ -280,14 +279,27 @@ fn keys_switch_views_and_close() {
     let pm = panemorph_repo();
     let mut app = app_for(&pm, View::Changes, true);
     text(&mut app);
-    key(&mut app, KeyCode::Char('2'));
-    assert_eq!(app.view, View::History);
-    key(&mut app, KeyCode::Char('1'));
+    for (number, view, label) in [
+        ('3', View::History, "history"),
+        ('1', View::Status, "status"),
+        ('2', View::Changes, "review"),
+    ] {
+        assert_eq!(key(&mut app, KeyCode::Char(number)), Action::Redraw);
+        assert_eq!(app.view, view);
+        let buf = draw(&mut app, W, H);
+        let current: String = (0..W)
+            .filter(|&x| buf[(x, 0)].bg == app.theme.accent)
+            .map(|x| buf[(x, 0)].symbol().to_string())
+            .collect();
+        assert_eq!(current.trim(), label);
+    }
+    assert_eq!(key(&mut app, KeyCode::Char('4')), Action::None);
     assert_eq!(app.view, View::Changes);
     key(&mut app, KeyCode::Char('?'));
     assert!(app.show_help);
     let t = text(&mut app);
     assert!(t.contains("╭─ keys ─"), "{t}");
+    assert!(t.contains("1 2 3         status, review, history"), "{t}");
     assert!(t.contains("paste the draft"), "{t}");
     key(&mut app, KeyCode::Esc);
     assert!(!app.show_help);
@@ -304,7 +316,11 @@ fn keys_switch_views_and_close() {
 fn view_names_parse_and_the_removed_views_do_not() {
     for v in View::ALL {
         assert_eq!(View::parse(v.name()), Some(v));
+        assert_eq!(View::parse(v.label()), Some(v));
     }
+    assert_eq!(View::parse("git"), Some(View::Status));
+    assert_eq!(View::Changes.name(), "changes");
+    assert_eq!(View::Changes.label(), "review");
     for gone in ["map", "flow", "open", "1", "2"] {
         assert_eq!(View::parse(gone), None, "{gone}");
     }
@@ -329,7 +345,7 @@ fn files_view_opens_on_the_first_changed_file() {
     let header = t.lines().next().unwrap();
     assert!(header.contains(" files "), "{header}");
     assert!(
-        !header.contains("changes") && !header.contains("history"),
+        !header.contains("status") && !header.contains("review") && !header.contains("history"),
         "{header}"
     );
     for needle in [
@@ -495,7 +511,9 @@ fn number_keys_stay_inside_a_popup() {
     assert_eq!(key(&mut app, KeyCode::Char('2')), Action::None);
     assert_eq!(app.view, View::Files);
     assert_eq!(View::Files.tabs(), [View::Files]);
-    assert_eq!(View::History.tabs(), [View::Changes, View::History]);
+    for tab in [View::Status, View::Changes, View::History] {
+        assert_eq!(tab.tabs(), [View::Status, View::Changes, View::History]);
+    }
 }
 
 #[test]
@@ -613,4 +631,380 @@ fn customisations_opens_on_global_when_the_project_has_none() {
         "{t}"
     );
     assert!(t.contains("Skills"), "empty kinds still show\n{t}");
+}
+
+fn status_repo() -> PmRepo {
+    let pm = panemorph_repo();
+    let p = pm.root.as_path();
+    git(p, &["mv", "panemorph/doctor.py", "panemorph/checkup.py"]);
+    git(p, &["rm", "-q", "panemorph/topology.py"]);
+    write(
+        p,
+        "panemorph/actions/undo.py",
+        "def undo(service, pane):\n    service.restore(pane)\n    return 0\n",
+    );
+    git(
+        p,
+        &["add", "panemorph/__init__.py", "panemorph/actions/undo.py"],
+    );
+    write(
+        p,
+        "panemorph/__init__.py",
+        "\"\"\"paneMorph: live pane and tab workflows for Herdr.\"\"\"\n\n__version__ = \"0.1.2\"\n\n__all__ = [\"__version__\"]\n",
+    );
+    write(p, "notes.md", "# Notes\n\nThe selector needs a timeout.\n");
+    pm
+}
+
+fn app_at(root: &std::path::Path, state: &TempDir, view: View) -> App {
+    let mut app = App::new(Options {
+        path: Some(root.to_path_buf()),
+        view,
+        context: None,
+        client: None,
+        store: codemap::store::Store::new(state.path()),
+        theme: dracula(),
+    });
+    app.load_blocking();
+    app
+}
+
+fn at(path: &str, line: Option<u32>) -> Location {
+    Location {
+        path: path.into(),
+        line,
+        dir: false,
+    }
+}
+
+#[test]
+fn status_view_lists_staged_and_unstaged_files() {
+    let pm = status_repo();
+    let mut app = app_for(&pm, View::Status, true);
+    let t = text(&mut app);
+    let header = t.lines().next().unwrap();
+    assert!(header.contains(" status   review   history "), "{header}");
+    assert!(
+        header.contains("paneMorph · selector-fix   main"),
+        "{header}"
+    );
+    assert!(!header.contains("turn 3"), "the turn is the review tab's");
+    for needle in [
+        " staged · 4",
+        "M __init__.py          +1 −2",
+        "R checkup.py",
+        "D topology.py          −89",
+        "A undo.py              +3",
+        " not staged · 4",
+        "? notes.md             +3",
+        "M __init__.py          +2",
+        "M open_selector.py     +50 −13",
+        "M selector.py          +11 −11",
+        "panemorph/__init__.py   +1 −2    staged",
+        "@@ top level · 1–3",
+        "   3+ __version__ = \"0.1.2\"",
+        "tab diff",
+        "j k file  e editor  E VS Code  b browser  B GitHub  y copy  ? keys",
+    ] {
+        assert!(t.contains(needle), "missing {needle:?}\n{t}");
+    }
+    snapshot("status", &normalize(&t, pm.tmp.path()));
+
+    let buf = draw(&mut app, W, H);
+    let theme = dracula();
+    let letter = |symbol: &str| {
+        (0..H)
+            .find(|&y| buf[(1, y)].symbol() == symbol)
+            .map(|y| buf[(1, y)].fg)
+    };
+    assert_eq!(letter("M"), Some(theme.modified));
+    assert_eq!(letter("R"), Some(theme.renamed));
+    assert_eq!(letter("D"), Some(theme.del));
+    assert_eq!(letter("A"), Some(theme.add));
+    assert_eq!(letter("?"), Some(theme.add));
+    let band = |bg: Color| (0..H).any(|y| (0..W).any(|x| buf[(x, y)].bg == bg));
+    assert!(band(theme.add_bg) && band(theme.del_bg));
+}
+
+#[test]
+fn status_selection_moves_through_both_groups() {
+    let pm = status_repo();
+    let mut app = app_for(&pm, View::Status, true);
+    let shown = |app: &mut App| text(app).lines().nth(2).unwrap().to_string();
+    assert!(shown(&mut app).contains("panemorph/__init__.py   +1 −2    staged"));
+    key(&mut app, KeyCode::Char('j'));
+    let t = text(&mut app);
+    assert!(
+        t.contains("panemorph/checkup.py  ← panemorph/doctor.py      staged"),
+        "{t}"
+    );
+    assert!(t.contains("renamed, content unchanged"), "{t}");
+    key(&mut app, KeyCode::Down);
+    let t = text(&mut app);
+    assert!(t.contains("panemorph/topology.py   −89    staged"), "{t}");
+    assert!(
+        t.contains("   1− from __future__ import annotations"),
+        "{t}"
+    );
+    key(&mut app, KeyCode::Char('j'));
+    key(&mut app, KeyCode::Char('j'));
+    assert!(shown(&mut app).contains("notes.md   +3    untracked"));
+    key(&mut app, KeyCode::Char('j'));
+    let t = text(&mut app);
+    assert!(
+        t.contains("panemorph/__init__.py   +2    not staged"),
+        "{t}"
+    );
+    assert!(t.contains("   5+ __all__ = [\"__version__\"]"), "{t}");
+    assert!(!t.contains("0.1.0"), "the staged half stays out\n{t}");
+    key(&mut app, KeyCode::Up);
+    assert!(shown(&mut app).contains("notes.md"));
+    key(&mut app, KeyCode::Char('G'));
+    assert!(shown(&mut app).contains("panemorph/actions/selector.py   +11 −11    not staged"));
+    assert_eq!(key(&mut app, KeyCode::Char('j')), Action::Redraw);
+    assert_eq!(app.status.sel, 7, "the last file stays selected");
+    key(&mut app, KeyCode::Char('g'));
+    assert_eq!(app.status.sel, 0);
+    keys::handle(
+        &mut app,
+        KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL),
+    );
+    assert_eq!(app.status.sel, 7);
+    keys::handle(
+        &mut app,
+        KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL),
+    );
+    assert_eq!(app.status.sel, 0);
+    assert_eq!(key(&mut app, KeyCode::Char('s')), Action::None);
+    assert_eq!(app.scope, Scope::Turn, "s belongs to the review tab");
+    assert_eq!(key(&mut app, KeyCode::Char(' ')), Action::None);
+    assert_eq!(key(&mut app, KeyCode::Enter), Action::None);
+}
+
+#[test]
+fn status_body_scrolls_and_escape_returns_to_the_list() {
+    let pm = status_repo();
+    let mut app = app_for(&pm, View::Status, true);
+    assert_eq!(app.status.focus, Focus::Rail);
+    for _ in 0..6 {
+        key(&mut app, KeyCode::Char('j'));
+    }
+    let t = text(&mut app);
+    assert!(
+        t.contains("panemorph/actions/open_selector.py   +50 −13    not staged"),
+        "{t}"
+    );
+    assert!(
+        t.contains("   1  from __future__ import annotations"),
+        "{t}"
+    );
+    assert_eq!(key(&mut app, KeyCode::Tab), Action::Redraw);
+    assert_eq!(app.status.focus, Focus::Body);
+    let t = text(&mut app);
+    assert!(t.contains("tab files"), "{t}");
+    assert!(t.contains("j k scroll  e editor"), "{t}");
+    for _ in 0..4 {
+        key(&mut app, KeyCode::Char('j'));
+    }
+    assert_eq!((app.status.sel, app.status.scroll), (6, 4));
+    let t = text(&mut app);
+    assert!(t.contains("›   4+ import json"), "{t}");
+    assert!(!t.contains("   3  import os"), "{t}");
+    key(&mut app, KeyCode::Char('k'));
+    assert!(text(&mut app).contains("›   3  import os"));
+    keys::handle(
+        &mut app,
+        KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL),
+    );
+    assert_eq!(app.status.scroll, 18);
+    keys::handle(
+        &mut app,
+        KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL),
+    );
+    assert_eq!(app.status.scroll, 3);
+    key(&mut app, KeyCode::Char('G'));
+    let last = app.status.scroll;
+    assert!(last > 60, "{last}");
+    key(&mut app, KeyCode::Char('j'));
+    assert_eq!(app.status.scroll, last, "the last row stays on screen");
+    let t = text(&mut app);
+    assert!(
+        t.contains("panemorph/actions/open_selector.py   +50 −13"),
+        "the path stays above the scrolled diff\n{t}"
+    );
+    key(&mut app, KeyCode::Char('g'));
+    assert_eq!(app.status.scroll, 0);
+    key(&mut app, KeyCode::Char('j'));
+    assert_eq!(key(&mut app, KeyCode::Esc), Action::Redraw);
+    assert_eq!(app.status.focus, Focus::Rail);
+    key(&mut app, KeyCode::Char('k'));
+    assert_eq!(
+        (app.status.sel, app.status.scroll),
+        (5, 0),
+        "another file starts at its top"
+    );
+    assert_eq!(key(&mut app, KeyCode::Esc), Action::Quit);
+}
+
+#[test]
+fn status_opens_the_selected_file_at_the_first_change_of_the_shown_diff() {
+    let pm = status_repo();
+    let mut app = app_for(&pm, View::Status, true);
+    let staged = at("panemorph/__init__.py", Some(3));
+    assert_eq!(app.location(), Some(staged.clone()));
+    assert_eq!(
+        key(&mut app, KeyCode::Char('e')),
+        Action::Edit(staged.clone())
+    );
+    assert_eq!(
+        key(&mut app, KeyCode::Char('E')),
+        Action::Open(Opener::VsCode, staged.clone())
+    );
+    assert_eq!(
+        key(&mut app, KeyCode::Char('b')),
+        Action::Open(Opener::Browser, staged.clone())
+    );
+    assert_eq!(
+        key(&mut app, KeyCode::Char('B')),
+        Action::Open(Opener::GitHub, staged)
+    );
+    assert_eq!(
+        key(&mut app, KeyCode::Char('y')),
+        Action::Copy("panemorph/__init__.py:3".into())
+    );
+    key(&mut app, KeyCode::Char('j'));
+    assert_eq!(
+        key(&mut app, KeyCode::Char('y')),
+        Action::Copy("panemorph/checkup.py".into()),
+        "a rename without text changes has no line"
+    );
+    for _ in 0..4 {
+        key(&mut app, KeyCode::Char('j'));
+    }
+    assert_eq!(
+        key(&mut app, KeyCode::Char('y')),
+        Action::Copy("panemorph/__init__.py:4".into()),
+        "the same file, not staged, opens at its own change"
+    );
+    key(&mut app, KeyCode::Char('j'));
+    key(&mut app, KeyCode::Tab);
+    assert_eq!(
+        key(&mut app, KeyCode::Char('e')),
+        Action::Edit(at("panemorph/actions/open_selector.py", Some(4)))
+    );
+    for _ in 0..5 {
+        key(&mut app, KeyCode::Char('j'));
+    }
+    assert_eq!(
+        key(&mut app, KeyCode::Char('e')),
+        Action::Edit(at("panemorph/actions/open_selector.py", Some(7))),
+        "the first change at or below the top row"
+    );
+}
+
+#[test]
+fn only_the_git_popup_reads_the_status() {
+    let pm = status_repo();
+    for view in [View::Status, View::Changes, View::History] {
+        let app = app_for(&pm, view, true);
+        assert!(app.status.loaded, "{view:?}");
+        assert_eq!(app.status.len(), 8, "{view:?}");
+    }
+    for view in [View::Files, View::Custom] {
+        let app = app_for(&pm, view, true);
+        assert!(!app.status.loaded, "{view:?}");
+        assert!(app.status.is_empty(), "{view:?}");
+    }
+}
+
+#[test]
+fn status_loading_state() {
+    let pm = status_repo();
+    let mut app = App::new(Options {
+        path: Some(pm.root.clone()),
+        view: View::Status,
+        context: Some(agent_context()),
+        client: None,
+        store: pm.store.clone(),
+        theme: dracula(),
+    });
+    let t = text(&mut app);
+    assert!(t.contains(" status   review   history "), "{t}");
+    assert!(t.contains("reading git status…"), "{t}");
+    assert!(!t.contains("staged ·"), "{t}");
+    assert_eq!(key(&mut app, KeyCode::Char('j')), Action::Redraw);
+    assert_eq!(key(&mut app, KeyCode::Char('e')), Action::None);
+    app.load_blocking();
+    assert!(text(&mut app).contains(" staged · 4"));
+}
+
+#[test]
+fn status_not_a_git_repository_state() {
+    let plain = TempDir::new("status-plain");
+    let state = TempDir::new("status-plain-state");
+    write(plain.path(), "tool.py", "def run():\n    return 1\n");
+    let mut app = app_at(plain.path(), &state, View::Status);
+    let t = text(&mut app);
+    assert!(t.contains("not a git repository · "), "{t}");
+    assert!(!t.contains("staged ·"), "{t}");
+    assert_eq!(key(&mut app, KeyCode::Char('y')), Action::None);
+}
+
+#[test]
+fn status_clean_tree_state() {
+    let repo = repo_with(&[("a.py", "x = 1\n")]);
+    let state = TempDir::new("status-clean-state");
+    let mut app = app_at(repo.path(), &state, View::Status);
+    let t = text(&mut app);
+    for needle in [
+        " staged · 0",
+        " not staged · 0",
+        "nothing to commit, working tree clean",
+    ] {
+        assert!(t.contains(needle), "missing {needle:?}\n{t}");
+    }
+    assert_eq!(key(&mut app, KeyCode::Char('j')), Action::Redraw);
+    assert_eq!(key(&mut app, KeyCode::Char('e')), Action::None);
+    assert_eq!(key(&mut app, KeyCode::Tab), Action::Redraw);
+    assert_eq!(key(&mut app, KeyCode::Char('G')), Action::Redraw);
+    assert_eq!(app.status.scroll, 0);
+}
+
+#[test]
+fn status_read_error_state() {
+    let repo = repo_with(&[("a.py", "x = 1\n")]);
+    let state = TempDir::new("status-error-state");
+    write(repo.path(), "a.py", "x = 2\n");
+    let mut app = app_at(repo.path(), &state, View::Status);
+    assert!(text(&mut app).contains(" not staged · 1"));
+    app.status.load(Err("index file corrupt".into()));
+    let t = text(&mut app);
+    assert!(t.contains("git: index file corrupt"), "{t}");
+    assert!(!t.contains("staged ·"), "{t}");
+    assert_eq!(key(&mut app, KeyCode::Char('e')), Action::None);
+}
+
+#[test]
+fn status_of_a_repository_with_no_commits() {
+    let t = TempDir::new("status-unborn");
+    let state = TempDir::new("status-unborn-state");
+    git(t.path(), &["init", "-q"]);
+    write(t.path(), "first.py", "def hello():\n    print('hi')\n");
+    write(t.path(), "second.py", "x = 1\n");
+    git(t.path(), &["add", "first.py"]);
+    let mut app = app_at(t.path(), &state, View::Status);
+    let frame = text(&mut app);
+    for needle in [
+        "no commits yet",
+        " staged · 1",
+        "A first.py             +2",
+        " not staged · 1",
+        "? second.py            +1",
+        "first.py   +2    staged",
+        "   1+ def hello():",
+    ] {
+        assert!(frame.contains(needle), "missing {needle:?}\n{frame}");
+    }
+    key(&mut app, KeyCode::Char('j'));
+    assert!(text(&mut app).contains("second.py   +1    untracked"));
 }

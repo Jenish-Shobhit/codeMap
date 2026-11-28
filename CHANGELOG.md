@@ -19,19 +19,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   servers and memory; the same from `~/.claude`, with plugins; the
   configuration of herdr, yazi, neovim and other tools; and other agents'
   files. Secrets in those files are never shown.
+- **Status**: the first tab of the Git popup, opened with `dev.codemap.git`
+  or `--view status`. It lists the staged and the not staged files, untracked
+  ones with a `?`, and shows the selected file's diff: the index against
+  `HEAD` for a staged file, the working tree against the index for the
+  others. It is read-only: nothing is staged or committed from it yet.
 - `E` opens the file in VS Code, `b` in the browser and `B` on GitHub, from
-  Files, Customisations and Changes.
+  Files, Customisations, Status and Review.
 
 ### Changed
 
 - `e` opens the editor in a herdr split beside the agent's pane and closes
   the popup. Outside herdr it still takes over the terminal. With `$VISUAL`
   and `$EDITOR` unset the editor is `nvim` when installed, where it was `vi`.
-- Each popup shows only its own views: `1` and `2` switch between Changes
-  and History, and Files stands alone.
+- Each popup shows only its own views: `1`, `2` and `3` switch between
+  Status, Review and History, and Files stands alone.
+- The Changes tab is labelled `review`, beside `status` and `history`.
+  `--view changes`, `--view review` and the `dev.codemap.changes` action open
+  it as before.
 
-- `dev.codemap.open` opens Changes, where it opened the Map.
-- Hunks in Changes are named by the function line git prints in the hunk
+- `dev.codemap.open` opens Review, where it opened the Map.
+- Hunks in Review are named by the function line git prints in the hunk
   header, no longer by a parsed symbol.
 - Building from source no longer compiles C: the binary has no tree-sitter
   runtime or grammars.

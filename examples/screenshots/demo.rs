@@ -220,3 +220,20 @@ pub fn add_customisations(root: &Path, home: &Path) {
 pub fn apply_turn(fx: &Path, root: &Path) {
     copy_tree(&fx.join("panemorph"), root);
 }
+
+pub fn stage_part_of_the_turn(root: &Path) {
+    git(
+        root,
+        "2026-09-21T21:50:00Z",
+        &[
+            "add",
+            "panemorph/__init__.py",
+            "panemorph/actions/selector.py",
+        ],
+    );
+    write_new(
+        root,
+        "tests/test_selector.py",
+        "from panemorph.actions.open_selector import selector_command\n\n\ndef test_the_command_names_the_result_file():\n    command = selector_command(\"herdr\", \"dev.panemorph\", \"w1:p2\", \"send\", \"/tmp/result.json\")\n    assert \"PANEMORPH_RESULT_PATH=/tmp/result.json\" in command\n",
+    );
+}

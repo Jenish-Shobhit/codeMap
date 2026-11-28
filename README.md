@@ -26,14 +26,16 @@
 Coding agents change more code in a turn than anyone reads line by line.
 codeMap is a [herdr](https://herdr.dev) plugin that opens over the agent you are
 watching and shows its worktree as a file tree with what the last turn touched,
-the turn itself as a reviewable diff, and the repository's history as a graph,
-so you see what just changed and answer it without leaving the terminal.
+the turn itself as a reviewable diff, what is staged and what is not, and the
+repository's history as a graph, so you see what just changed and answer it
+without leaving the terminal.
 
 ## Features
 
 - **Popups over the agent you are watching.** One key opens the file tree,
-  another the review of the last turn with the history beside it, a third
-  the skills, hooks and settings the agent runs with.
+  another the Git popup with the working tree's status, the review of the
+  last turn and the history, a third the skills, hooks and settings the agent
+  runs with.
 - **Open anything where you work.** `e` opens the file in neovim in a split
   beside the agent, `E` in VS Code, `b` in the browser and `B` on GitHub.
 - **Turn-aware.** An event hook snapshots the worktree whenever an agent starts
@@ -75,7 +77,7 @@ skip the prompt. Then [bind a key](#keybindings) and check the plugin:
 
 ```sh
 herdr plugin list                               # dev.codemap, enabled
-herdr plugin action list --plugin dev.codemap   # open, files, customisations, changes, history
+herdr plugin action list --plugin dev.codemap   # open, files, customisations, git, changes, history
 ```
 
 To update, run the install command again; herdr replaces its checkout. To
@@ -113,7 +115,7 @@ herdr plugin link "$PWD/codemap-$v-$t"
 
 ## Keybindings
 
-codeMap declares five herdr actions. Bind the ones you want in
+codeMap declares six herdr actions. Bind the ones you want in
 `~/.config/herdr/config.toml`:
 
 ```toml
@@ -134,22 +136,29 @@ key = "ctrl+alt+k"
 type = "plugin_action"
 command = "dev.codemap.customisations"
 description = "codeMap: what the focused agent runs with"
+
+[[keys.command]]
+key = "ctrl+alt+g"
+type = "plugin_action"
+command = "dev.codemap.git"
+description = "codeMap: git status of the focused agent's worktree"
 ```
 
 Then run `herdr config check` and `herdr server reload-config`.
-`dev.codemap.open` and `dev.codemap.changes` open the review of the last turn,
-`dev.codemap.history` the commit graph beside it, `dev.codemap.files` the
-file tree, and `dev.codemap.customisations` the agent's setup.
+`dev.codemap.open` and `dev.codemap.changes` open the Git popup on the review
+of the last turn, `dev.codemap.git` on the working tree's status and
+`dev.codemap.history` on the commit graph. `dev.codemap.files` opens the file
+tree, and `dev.codemap.customisations` the agent's setup.
 
 Inside the popup:
 
 | Keys | Where | Action |
 | --- | --- | --- |
-| `e` / `E` | Files, Customisations, Changes | open the file at the line in the editor, in a split beside the agent / in VS Code |
-| `b` / `B` | Files, Customisations, Changes | open the file in the browser / on GitHub |
-| `y` | Files, Customisations, Changes | copy `path:line` |
-| `s` / `a` | Files, Changes | what counts as changed: last turn, the agent's session, since `HEAD` / next agent |
-| `tab` | Files, Changes | move between the list and the body |
+| `e` / `E` | Files, Customisations, Status, Review | open the file at the line in the editor, in a split beside the agent / in VS Code |
+| `b` / `B` | Files, Customisations, Status, Review | open the file in the browser / on GitHub |
+| `y` | Files, Customisations, Status, Review | copy `path:line` |
+| `s` / `a` | Files, Review | what counts as changed: last turn, the agent's session, since `HEAD` / next agent |
+| `tab` | Files, Status, Review | move between the list and the body |
 | `p` / `T` | inside herdr | pin codeMap as a split that follows the focused pane / open it in its own tab |
 | `?` | everywhere | show every key |
 | `q` or `⎋` | everywhere | close |
@@ -158,11 +167,12 @@ Inside the popup:
 | `/` | Files | find a file by name; `↑` `↓` pick, `⏎` go |
 | `1` `2` `3` `4` | Customisations | project, global, tools, other agents |
 | `j` `k`, `h` `l`, `⏎` | Customisations | move through the list, change scope, open the file in the editor |
-| `1` `2` | Changes, History | Changes, History |
-| `j` `k`, `]` `[`, `}` `{` | Changes | next or previous line, hunk, file |
-| `space` | Changes | mark the hunk reviewed (kept until the hunk changes) |
-| `v`, `c`, `x` | Changes | select lines, comment on them, delete a comment |
-| `P` / `S` | Changes | type the draft into the agent's prompt and close / submit it through herdr's `agent.prompt` |
+| `1` `2` `3` | Status, Review, History | Status, Review, History |
+| `j` `k`, `tab`, `⎋` | Status | move through the staged and not staged files, read the selected file's diff, go back to the files |
+| `j` `k`, `]` `[`, `}` `{` | Review | next or previous line, hunk, file |
+| `space` | Review | mark the hunk reviewed (kept until the hunk changes) |
+| `v`, `c`, `x` | Review | select lines, comment on them, delete a comment |
+| `P` / `S` | Review | type the draft into the agent's prompt and close / submit it through herdr's `agent.prompt` |
 | `j` `k`, `⏎`, `⌫` | History | move between commits, show the diff, go back |
 
 The editor is `$VISUAL`, then `$EDITOR`, then `nvim` when it is installed.
@@ -220,11 +230,26 @@ It shows names, descriptions and counts. It never shows the values of
 environment variables, the arguments or addresses of MCP servers beyond the
 host, or any line of a shell or tool configuration file.
 
-### Changes
+### Status
 
-<img src="docs/assets/changes.svg" width="100%" alt="The Changes view of open_selector.py: the first hunk marked reviewed, added lines on a green band, and a comment under line 45 in the draft.">
+<img src="docs/assets/status.svg" width="100%" alt="The Status tab: two files under staged and two under not staged, one of them untracked and marked with a question mark, and the staged diff of selector.py on the right with added lines on a green band and removed lines on a red band.">
 
-The agent's last turn, file by file and hunk by hunk. `s` widens the scope to
+The first tab of the Git popup: what `git status` reports, as two lists.
+**staged** is the index against `HEAD`, and **not staged** is the working tree
+against the index, with untracked files marked `?`. A file that is partly
+staged is in both lists, each time with its own diff. `j` and `k` move through
+both lists, `tab` steps into the selected file's diff and `⎋` comes back. `2`
+and `3` switch to Review and History.
+
+Status is read-only for now: it shows what is staged and what is not, and
+does not stage, unstage, discard or commit anything.
+
+### Review
+
+<img src="docs/assets/changes.svg" width="100%" alt="The Review tab on open_selector.py: the first hunk marked reviewed, added lines on a green band, and a comment under line 45 in the draft.">
+
+The agent's last turn, file by file and hunk by hunk, on the `review` tab
+(`dev.codemap.changes`, or `--view changes`). `s` widens the scope to
 the agent's whole session, then to everything since `HEAD`. `space` marks a
 hunk reviewed; the mark stays until the hunk changes. Select lines with `v`,
 press `c`, and write a comment. `P` types the draft into the agent's prompt as
@@ -259,7 +284,7 @@ codemap --help
 ```
 
 It is `target/release/codemap` in the plugin directory; link it onto your
-`PATH` to use it anywhere. Outside herdr there is no focused agent, so Changes
+`PATH` to use it anywhere. Outside herdr there is no focused agent, so Review
 starts at "since `HEAD`"; turns the hook recorded in that repository are still
 one `s` away. Pinning (`p`, `T`) and sending comments need herdr.
 
@@ -297,9 +322,10 @@ flowchart LR
 
 **Reading the repository.** The popup paints its frame first, then worker
 threads ask git for the files it tracks or does not ignore, the diff in scope,
-the commit log and the worktrees. The commit graph is laid out in lanes and
-drawn with box characters. A file's preview reads at most its first 512 KB. Hunks are
-named by the function line git prints in each hunk header.
+what is staged and what is not, the commit log and the worktrees. The commit
+graph is laid out in lanes and drawn with box characters. A file's preview
+reads at most its first 512 KB. Hunks are named by the function line git
+prints in each hunk header.
 
 **Recording turns.** herdr runs `codemap hook` on every
 `pane.agent_status_changed` event. A change to `working` starts a turn; a
@@ -326,7 +352,8 @@ changes, no objects.
 - Commands that write objects never see your object store, so git cannot
   "freshen" (touch) objects in it. Read-only diffs borrow it for one process
   through `GIT_ALTERNATE_OBJECT_DIRECTORIES`.
-- The "since `HEAD`" diff reads a private copy of your index.
+- The "since `HEAD`" diff and the Status tab read a private copy of your
+  index.
 - The test suite fingerprints every file under `.git` before and after each
   operation, and fails on any change.
 - codeMap makes no network requests. It talks only to the local herdr socket,
@@ -359,7 +386,7 @@ system checks it; later launches paint in milliseconds. If you downloaded a
 release archive with a browser and macOS refuses to run it, clear the
 quarantine flag: `xattr -dr com.apple.quarantine codemap-v0.1.0-*`.
 
-### Changes shows "since HEAD", not the last turn
+### Review shows "since HEAD", not the last turn
 
 No turn has been recorded for this agent yet: the hook starts recording once
 the plugin is installed, at the agent's next turn. Until then the scope is
@@ -385,7 +412,7 @@ on the `PATH` that herdr sees. Install them, or use a
 Ideas under consideration, not commitments:
 
 - Step through earlier turns, not only the last one and the session.
-- A Git popup that also stages, commits and switches branches.
+- Staging, committing and switching branches from the Git popup.
 - Follow the host's light or dark appearance when herdr's `auto_switch` is on.
 
 Suggestions are welcome in [issues](https://github.com/Jenish-Shobhit/codeMap/issues).

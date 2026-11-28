@@ -230,45 +230,78 @@ pub fn diff_trees(root: &Path, from: &str, to: &str) -> Result<Vec<FileDiff>, Gi
     Ok(diff::parse(&out))
 }
 
-pub fn diff_head(info: &RepoInfo, scratch: &Path) -> Result<Vec<FileDiff>, GitError> {
-    std::fs::create_dir_all(scratch).map_err(|e| GitError(e.to_string()))?;
-    let index_copy = scratch.join("index.head");
-    let theirs = info.git_dir.join("index");
-    let _ = std::fs::remove_file(&index_copy);
-    if theirs.is_file() {
-        std::fs::copy(&theirs, &index_copy).map_err(|e| GitError(e.to_string()))?;
-        let mtime = std::fs::metadata(&theirs)
-            .and_then(|m| m.modified())
-            .map_err(|e| GitError(e.to_string()))?;
-        std::fs::OpenOptions::new()
-            .write(true)
-            .open(&index_copy)
-            .and_then(|f| f.set_modified(mtime))
-            .map_err(|e| GitError(e.to_string()))?;
+const DIFF_FORMAT: [&str; 7] = [
+    "--no-color",
+    "--no-ext-diff",
+    "--no-textconv",
+    "-M",
+    "-U3",
+    "--src-prefix=a/",
+    "--dst-prefix=b/",
+];
+
+struct IndexCopy<'a> {
+    info: &'a RepoInfo,
+    path: PathBuf,
+}
+
+impl<'a> IndexCopy<'a> {
+    fn new(info: &'a RepoInfo, scratch: &Path, name: &str) -> Result<Self, GitError> {
+        std::fs::create_dir_all(scratch).map_err(|e| GitError(e.to_string()))?;
+        let copy = IndexCopy {
+            info,
+            path: scratch.join(name),
+        };
+        let theirs = info.git_dir.join("index");
+        let _ = std::fs::remove_file(&copy.path);
+        if theirs.is_file() {
+            std::fs::copy(&theirs, &copy.path).map_err(|e| GitError(e.to_string()))?;
+            let mtime = std::fs::metadata(&theirs)
+                .and_then(|m| m.modified())
+                .map_err(|e| GitError(e.to_string()))?;
+            std::fs::OpenOptions::new()
+                .write(true)
+                .open(&copy.path)
+                .and_then(|f| f.set_modified(mtime))
+                .map_err(|e| GitError(e.to_string()))?;
+        }
+        Ok(copy)
     }
-    let with_index = |args: &[&str]| -> Result<Vec<u8>, GitError> {
-        let mut cmd = git_cmd(&info.root);
-        cmd.env("GIT_INDEX_FILE", &index_copy).args(args);
+
+    fn git(&self, args: &[&str]) -> Result<Vec<u8>, GitError> {
+        let mut cmd = git_cmd(&self.info.root);
+        cmd.env("GIT_INDEX_FILE", &self.path).args(args);
         run_cmd(cmd)
-    };
+    }
+
+    fn diff(&self, against: &[&str]) -> Result<Vec<FileDiff>, GitError> {
+        let args = [&["diff"], &DIFF_FORMAT[..], against, &["--"]].concat();
+        let out = self.git(&args)?;
+        Ok(diff::parse(&String::from_utf8_lossy(&out)))
+    }
+
+    fn untracked(&self) -> Result<Vec<String>, GitError> {
+        let out = self.git(&["ls-files", "-z", "--others", "--exclude-standard"])?;
+        Ok(out
+            .split(|b| *b == 0)
+            .filter(|s| !s.is_empty())
+            .map(|s| String::from_utf8_lossy(s).into_owned())
+            .collect())
+    }
+}
+
+impl Drop for IndexCopy<'_> {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
+pub fn diff_head(info: &RepoInfo, scratch: &Path) -> Result<Vec<FileDiff>, GitError> {
+    let index = IndexCopy::new(info, scratch, "index.head")?;
     let mut files = Vec::new();
     if info.head.is_some() {
-        let out = with_index(&[
-            "diff",
-            "--no-color",
-            "--no-ext-diff",
-            "--no-textconv",
-            "-M",
-            "-U3",
-            "--src-prefix=a/",
-            "--dst-prefix=b/",
-            "HEAD",
-            "--",
-        ])?;
-        files = diff::parse(&String::from_utf8_lossy(&out));
-        let untracked = with_index(&["ls-files", "-z", "--others", "--exclude-standard"])?;
-        for rel in untracked.split(|b| *b == 0).filter(|s| !s.is_empty()) {
-            let rel = String::from_utf8_lossy(rel).into_owned();
+        files = index.diff(&["HEAD"])?;
+        for rel in index.untracked()? {
             files.push(diff::added_file(&info.root, &rel));
         }
     } else {
@@ -276,9 +309,29 @@ pub fn diff_head(info: &RepoInfo, scratch: &Path) -> Result<Vec<FileDiff>, GitEr
             files.push(diff::added_file(&info.root, &rel));
         }
     }
-    let _ = std::fs::remove_file(&index_copy);
     files.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(files)
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Status {
+    pub staged: Vec<FileDiff>,
+    pub unstaged: Vec<FileDiff>,
+}
+
+pub fn status(info: &RepoInfo, scratch: &Path) -> Result<Status, GitError> {
+    let index = IndexCopy::new(info, scratch, "index.status")?;
+    let mut staged = index.diff(&["--cached"])?;
+    let mut unstaged = index.diff(&["--ours"])?;
+    for rel in index.untracked()? {
+        unstaged.push(FileDiff {
+            status: FileStatus::Untracked,
+            ..diff::added_file(&info.root, &rel)
+        });
+    }
+    staged.sort_by(|a, b| a.path.cmp(&b.path));
+    unstaged.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(Status { staged, unstaged })
 }
 
 pub fn show_commit(root: &Path, sha: &str) -> Result<Vec<FileDiff>, GitError> {

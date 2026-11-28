@@ -43,8 +43,9 @@ fn keys_first_paint_and_escape() {
         .expect("changes content");
     press(&mut p, b"}", "open_selector.py");
     press(&mut p, b" ", "✓ reviewed");
-    press(&mut p, b"2", "tag: v0.1.0");
-    press(&mut p, b"1", "since HEAD");
+    press(&mut p, b"3", "tag: v0.1.0");
+    press(&mut p, b"1", "not staged · 3");
+    press(&mut p, b"2", "since HEAD");
     press(&mut p, b"?", "paste the draft");
     p.send(b"\x1b");
     std::thread::sleep(Duration::from_millis(150));
@@ -113,6 +114,60 @@ fn files_popup_finds_a_file_and_previews_it() {
 }
 
 #[test]
+fn status_tab_shows_what_is_staged_and_what_is_not() {
+    let repo = repo_with(&[
+        ("app.py", "def main():\n    return 1\n"),
+        ("util.py", "def helper():\n    pass\n"),
+        ("docs/guide.md", "# Guide\n"),
+    ]);
+    let root = repo.path();
+    write(root, "app.py", "def main():\n    return 2\n");
+    write(root, "docs/guide.md", "# Guide\n\nRun it.\n");
+    git(root, &["add", "app.py", "docs/guide.md"]);
+    write(root, "util.py", "def helper():\n    return 3\n");
+    let before = fingerprint(root);
+    let state = TempDir::new("pty-status-state");
+    let state_s = state.path().display().to_string();
+    let root_s = root.display().to_string();
+    let mut p = spawn(
+        &[&root_s, "--view", "status"],
+        &[("CODEMAP_STATE_DIR", &state_s)],
+        120,
+        30,
+    );
+    p.wait_for("not staged · 1", 0, Duration::from_secs(5))
+        .expect("the not staged group");
+    let screen = p.screen();
+    for needle in [
+        " status   review   history ",
+        " staged · 2",
+        "M app.py",
+        "M guide.md",
+        "M util.py",
+        "app.py   +1 −1    staged",
+    ] {
+        assert!(screen.contains(needle), "missing {needle:?}\n{screen}");
+    }
+    press(&mut p, b"G", "util.py   +1 −1    not staged");
+    press(&mut p, b"\t", "j k scroll");
+    p.send(b"\x1b");
+    std::thread::sleep(Duration::from_millis(150));
+    assert!(
+        p.child.try_wait().unwrap().is_none(),
+        "Esc in the diff goes back to the list"
+    );
+    press(&mut p, b"2", "since HEAD");
+    p.send(b"q");
+    assert!(p
+        .wait_exit(Duration::from_secs(5))
+        .expect("q quits")
+        .success());
+    let after = fingerprint(root);
+    assert_eq!(before.0, after.0, ".git changed while the popup was open");
+    assert_eq!(before.1, after.1, "git status changed");
+}
+
+#[test]
 fn q_quits_and_ctrl_c_quits() {
     let t = TempDir::new("pty-small");
     write(t.path(), "a.py", "def f():\n    return 1\n");
@@ -158,7 +213,7 @@ fn smoke_own_repo() {
         .expect("paint");
     std::thread::sleep(Duration::from_millis(1500));
     println!("{}\n", p.screen());
-    for (k, name) in [(b"2", "history"), (b"1", "changes")] {
+    for (k, name) in [(b"1", "status"), (b"3", "history"), (b"2", "review")] {
         p.send(k);
         std::thread::sleep(Duration::from_millis(700));
         println!("===== {name}\n{}\n", p.screen());
