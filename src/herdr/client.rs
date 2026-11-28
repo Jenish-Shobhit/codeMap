@@ -344,14 +344,14 @@ mod tests {
             height: Some("92%".into()),
             target_pane_id: Some("w1:p1".into()),
             cwd: None,
-            env: vec![("CODEMAP_VIEW".into(), "map".into())],
+            env: vec![("CODEMAP_VIEW".into(), "changes".into())],
             focus: true,
         };
         let p = open.params();
         assert_eq!(p["width"], "94%");
         assert_eq!(p["height"], "92%");
         assert!(p.get("target_pane_id").is_none());
-        assert_eq!(p["env"]["CODEMAP_VIEW"], "map");
+        assert_eq!(p["env"]["CODEMAP_VIEW"], "changes");
 
         let split = PaneOpen {
             placement: "split".into(),
