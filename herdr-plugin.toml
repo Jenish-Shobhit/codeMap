@@ -26,6 +26,12 @@ contexts = ["global", "workspace", "tab", "pane"]
 command = ["target/release/codemap", "open", "--view", "files"]
 
 [[actions]]
+id = "customisations"
+title = "codeMap: the skills, hooks and settings the focused agent runs with"
+contexts = ["global", "workspace", "tab", "pane"]
+command = ["target/release/codemap", "open", "--view", "customisations"]
+
+[[actions]]
 id = "changes"
 title = "codeMap: review the focused agent's last turn"
 contexts = ["global", "workspace", "tab", "pane"]

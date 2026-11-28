@@ -2,7 +2,7 @@
 
 # codeMap
 
-**Your agents' files, what they changed, and the history around it.**
+**Your agents' files, what they changed, and what they run with.**
 
 [![CI](https://github.com/Jenish-Shobhit/codeMap/actions/workflows/ci.yml/badge.svg)](https://github.com/Jenish-Shobhit/codeMap/actions/workflows/ci.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Jenish-Shobhit/codeMap/badge)](https://scorecard.dev/viewer/?uri=github.com/Jenish-Shobhit/codeMap)
@@ -32,7 +32,8 @@ so you see what just changed and answer it without leaving the terminal.
 ## Features
 
 - **Popups over the agent you are watching.** One key opens the file tree,
-  another the review of the last turn with the history beside it.
+  another the review of the last turn with the history beside it, a third
+  the skills, hooks and settings the agent runs with.
 - **Open anything where you work.** `e` opens the file in neovim in a split
   beside the agent, `E` in VS Code, `b` in the browser and `B` on GitHub.
 - **Turn-aware.** An event hook snapshots the worktree whenever an agent starts
@@ -74,7 +75,7 @@ skip the prompt. Then [bind a key](#keybindings) and check the plugin:
 
 ```sh
 herdr plugin list                               # dev.codemap, enabled
-herdr plugin action list --plugin dev.codemap   # open, files, changes, history
+herdr plugin action list --plugin dev.codemap   # open, files, customisations, changes, history
 ```
 
 To update, run the install command again; herdr replaces its checkout. To
@@ -112,7 +113,7 @@ herdr plugin link "$PWD/codemap-$v-$t"
 
 ## Keybindings
 
-codeMap declares four herdr actions. Bind the ones you want in
+codeMap declares five herdr actions. Bind the ones you want in
 `~/.config/herdr/config.toml`:
 
 ```toml
@@ -127,20 +128,26 @@ key = "ctrl+alt+f"
 type = "plugin_action"
 command = "dev.codemap.files"
 description = "codeMap: the focused agent's files"
+
+[[keys.command]]
+key = "ctrl+alt+k"
+type = "plugin_action"
+command = "dev.codemap.customisations"
+description = "codeMap: what the focused agent runs with"
 ```
 
 Then run `herdr config check` and `herdr server reload-config`.
 `dev.codemap.open` and `dev.codemap.changes` open the review of the last turn,
-`dev.codemap.history` the commit graph beside it, and `dev.codemap.files` the
-file tree.
+`dev.codemap.history` the commit graph beside it, `dev.codemap.files` the
+file tree, and `dev.codemap.customisations` the agent's setup.
 
 Inside the popup:
 
 | Keys | Where | Action |
 | --- | --- | --- |
-| `e` / `E` | Files, Changes | open the file at the line in the editor, in a split beside the agent / in VS Code |
-| `b` / `B` | Files, Changes | open the file in the browser / on GitHub |
-| `y` | Files, Changes | copy `path:line` |
+| `e` / `E` | Files, Customisations, Changes | open the file at the line in the editor, in a split beside the agent / in VS Code |
+| `b` / `B` | Files, Customisations, Changes | open the file in the browser / on GitHub |
+| `y` | Files, Customisations, Changes | copy `path:line` |
 | `s` / `a` | Files, Changes | what counts as changed: last turn, the agent's session, since `HEAD` / next agent |
 | `tab` | Files, Changes | move between the list and the body |
 | `p` / `T` | inside herdr | pin codeMap as a split that follows the focused pane / open it in its own tab |
@@ -149,6 +156,8 @@ Inside the popup:
 | `j` `k`, `l` `h` | Files | move through the tree, open or close a folder |
 | `⏎` | Files | open a folder, or a file in the editor |
 | `/` | Files | find a file by name; `↑` `↓` pick, `⏎` go |
+| `1` `2` `3` `4` | Customisations | project, global, tools, other agents |
+| `j` `k`, `h` `l`, `⏎` | Customisations | move through the list, change scope, open the file in the editor |
 | `1` `2` | Changes, History | Changes, History |
 | `j` `k`, `]` `[`, `}` `{` | Changes | next or previous line, hunk, file |
 | `space` | Changes | mark the hunk reviewed (kept until the hunk changes) |
@@ -187,6 +196,29 @@ last turn touched carry `M`, `A` or `R`, their folders a `●`, and the preview
 puts a `+` beside each line the turn added. The popup opens on the first
 changed file. `/` finds a file by name, and a folder shows what changed inside
 it. Ignored files stay out of the tree.
+
+### Customisations
+
+<img src="docs/assets/customisations.svg" width="100%" alt="The Customisations popup on its project scope: instructions, settings, two skills, an agent, a command, a hook and an MCP server listed with counts, and the selected skill's description, size and first lines on the right.">
+
+What the agent in front of you runs with, read from the files that define it.
+Four scopes, on `1` to `4`:
+
+| Scope | Shows |
+| --- | --- |
+| project | `CLAUDE.md`, settings, skills, agents, commands, hooks, MCP servers and memory of this repository |
+| global | the same from `~/.claude`, with plugins |
+| tools | the configuration of herdr, yazi, neovim, ghostty, kitty, tmux, your shell and git |
+| other agents | `AGENTS.md`, Cursor rules and Copilot instructions in the repository, and Codex, Cursor and Gemini in your home folder |
+
+A kind with nothing in it still shows, with a `0`, so you see what is not set
+up. The popup opens on the project when the repository has a `.claude` folder
+or a `CLAUDE.md`, and on global otherwise. Backup copies such as
+`config.toml.bak` are counted, not listed.
+
+It shows names, descriptions and counts. It never shows the values of
+environment variables, the arguments or addresses of MCP servers beyond the
+host, or any line of a shell or tool configuration file.
 
 ### Changes
 
@@ -354,7 +386,6 @@ Ideas under consideration, not commitments:
 
 - Step through earlier turns, not only the last one and the session.
 - A Git popup that also stages, commits and switches branches.
-- A Customisations popup: the skills, hooks and settings an agent runs with.
 - Follow the host's light or dark appearance when herdr's `auto_switch` is on.
 
 Suggestions are welcome in [issues](https://github.com/Jenish-Shobhit/codeMap/issues).

@@ -1,6 +1,7 @@
 mod common;
 
 use codemap::app::{App, Focus, InputKind, Location, Options, Scope, View};
+use codemap::custom::Scope as CustomScope;
 use codemap::keys::{self, Action};
 use codemap::open::Opener;
 use codemap::ui;
@@ -495,4 +496,120 @@ fn number_keys_stay_inside_a_popup() {
     assert_eq!(app.view, View::Files);
     assert_eq!(View::Files.tabs(), [View::Files]);
     assert_eq!(View::History.tabs(), [View::Changes, View::History]);
+}
+
+#[test]
+fn customisations_view_lists_what_the_agent_runs_with() {
+    let (tmp, roots) = custom_roots();
+    let state = TempDir::new("custom-state");
+    let mut app = custom_app(&roots, state.path());
+    assert_eq!(app.custom.scope, CustomScope::Project);
+    let t = text(&mut app);
+    let header = t.lines().next().unwrap();
+    for tab in [" project ", " global ", " tools ", " other agents "] {
+        assert!(header.contains(tab), "{header}");
+    }
+    for needle in [
+        "Instructions",
+        "CLAUDE.md",
+        "Skills",
+        "review",
+        "Agents",
+        "planner",
+        "/ship",
+        "PreToolUse",
+        "docs",
+        "Memory",
+        "A small service with a review workflow.",
+        "Sections  Rules · Releases",
+        "Size      11 lines",
+        "instructions · project",
+        "1-4 scope",
+    ] {
+        assert!(t.contains(needle), "missing {needle:?}\n{t}");
+    }
+    snapshot("custom_project", &normalize(&t, tmp.path()));
+
+    key(&mut app, KeyCode::Char('j'));
+    key(&mut app, KeyCode::Char('j'));
+    let t = text(&mut app);
+    assert!(t.contains("skill · project"), "{t}");
+    assert!(
+        t.contains("Review a diff for bugs before it is committed."),
+        "{t}"
+    );
+    assert!(t.contains("   6  # Review"), "{t}");
+    let skill = roots.repo.join(".claude/skills/review/SKILL.md");
+    assert_eq!(
+        key(&mut app, KeyCode::Enter),
+        Action::Edit(Location {
+            path: skill.display().to_string(),
+            line: None,
+            dir: false,
+        })
+    );
+    assert_eq!(
+        key(&mut app, KeyCode::Char('y')),
+        Action::Copy(skill.display().to_string())
+    );
+}
+
+#[test]
+fn customisations_scopes_switch_with_numbers_and_arrows() {
+    let (tmp, roots) = custom_roots();
+    let state = TempDir::new("custom-state");
+    let mut app = custom_app(&roots, state.path());
+    key(&mut app, KeyCode::Char('2'));
+    assert_eq!(app.custom.scope, CustomScope::Global);
+    let t = text(&mut app);
+    for needle in [
+        "CLAUDE.md              empty",
+        "Empty file. Nothing is loaded from it.",
+        "settings.json          opus",
+        "frontend-design        official",
+        "Hooks",
+    ] {
+        assert!(t.contains(needle), "missing {needle:?}\n{t}");
+    }
+    key(&mut app, KeyCode::Char('l'));
+    assert_eq!(app.custom.scope, CustomScope::Tools);
+    let t = text(&mut app);
+    for needle in [
+        "herdr",
+        "config.toml            theme gruvbox",
+        "Backups       1 hidden",
+        "yazi",
+        "neovim",
+    ] {
+        assert!(t.contains(needle), "missing {needle:?}\n{t}");
+    }
+    assert!(!t.contains("config.toml.bak"), "backups stay hidden\n{t}");
+    snapshot("custom_tools", &normalize(&t, tmp.path()));
+    key(&mut app, KeyCode::Char('4'));
+    let t = text(&mut app);
+    assert!(t.contains("In this repository"), "{t}");
+    assert!(t.contains("AGENTS.md"), "{t}");
+    assert!(t.contains("Codex"), "{t}");
+    key(&mut app, KeyCode::Char('h'));
+    assert_eq!(app.custom.scope, CustomScope::Tools);
+    assert_eq!(key(&mut app, KeyCode::Char('s')), Action::None);
+    assert_eq!(key(&mut app, KeyCode::Tab), Action::Redraw);
+    assert_eq!(key(&mut app, KeyCode::Esc), Action::Quit);
+}
+
+#[test]
+fn customisations_opens_on_global_when_the_project_has_none() {
+    let (_tmp, mut roots) = custom_roots();
+    let bare = TempDir::new("custom-bare");
+    roots.repo = bare.path().to_path_buf();
+    let state = TempDir::new("custom-state");
+    let mut app = custom_app(&roots, state.path());
+    assert_eq!(app.custom.scope, CustomScope::Global);
+    key(&mut app, KeyCode::Char('1'));
+    let t = text(&mut app);
+    assert!(
+        t.contains("nothing is set up for Claude in this repository"),
+        "{t}"
+    );
+    assert!(t.contains("Skills"), "empty kinds still show\n{t}");
 }

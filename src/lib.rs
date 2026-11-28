@@ -1,4 +1,5 @@
 pub mod app;
+pub mod custom;
 pub mod files;
 pub mod git;
 pub mod herdr;

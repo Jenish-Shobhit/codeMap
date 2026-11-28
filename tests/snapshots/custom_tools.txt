@@ -1,0 +1,50 @@
+  project   global   tools   other agents          <tmp>/demo
+
+ herdr                                        1   config.toml                                                                                       tool config
+   config.toml            theme gruvbox           <tmp>/home/.config/herdr/config.toml
+ yazi                                         1
+   yazi.toml              opens with nvim, vsco…  Theme         gruvbox
+ neovim                                       1   Prefix key    ctrl+b
+   init.lua                                       Key commands  1
+                                                  Size          6 lines
+                                                  Backups       1 hidden
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ j k move  h l scope                              1-4 scope  ⏎ open  E VS Code  b browser  y copy path  ? keys
